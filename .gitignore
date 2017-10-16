@@ -19,6 +19,12 @@ Thirdparty/g2o/config.h
 Thirdparty/g2o/lib/
 Vocabulary/ORBvoc.txt
 build/
+build2/
 *~
 lib/
 
+#added by zzh
+CameraTrajectory.txt
+*.pcd
+kinect2*.yaml
+*.kdev4
