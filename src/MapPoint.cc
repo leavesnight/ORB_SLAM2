@@ -50,9 +50,10 @@ MapPoint::MapPoint(const cv::Mat &Pos, Map* pMap, Frame* pFrame, const int &idxF
     mnFound(1), mbBad(false), mpReplaced(NULL), mpMap(pMap)
 {
     Pos.copyTo(mWorldPos);
+    //similar to part in the StereoInitialization(): Update Normal&Depth Compute Descriptor
     cv::Mat Ow = pFrame->GetCameraCenter();
     mNormalVector = mWorldPos - Ow;
-    mNormalVector = mNormalVector/cv::norm(mNormalVector);
+    mNormalVector = mNormalVector/cv::norm(mNormalVector);//normalized normal vector
 
     cv::Mat PC = Pos - Ow;
     const float dist = cv::norm(PC);
@@ -202,14 +203,14 @@ void MapPoint::Replace(MapPoint* pMP)
             pKF->ReplaceMapPointMatch(mit->second, pMP);
             pMP->AddObservation(pKF,mit->second);
         }
-        else
+        else//just erase pKF->mvpMapPoints[mit->second] for it already exists/matches in another pKF->mvpMapPoints[idx](idx!=mit->second)
         {
             pKF->EraseMapPointMatch(mit->second);
         }
     }
     pMP->IncreaseFound(nfound);
     pMP->IncreaseVisible(nvisible);
-    pMP->ComputeDistinctiveDescriptors();
+    pMP->ComputeDistinctiveDescriptors();//why don't calculate the normal?
 
     mpMap->EraseMapPoint(this);
 }
@@ -278,7 +279,7 @@ void MapPoint::ComputeDistinctiveDescriptors()
         Distances[i][i]=0;
         for(size_t j=i+1;j<N;j++)
         {
-            int distij = ORBmatcher::DescriptorDistance(vDescriptors[i],vDescriptors[j]);
+            int distij = ORBmatcher::DescriptorDistance(vDescriptors[i],vDescriptors[j]);//the hamming distance of the 256 bit descriptor(at the fastest way)
             Distances[i][j]=distij;
             Distances[j][i]=distij;
         }
@@ -357,16 +358,16 @@ void MapPoint::UpdateNormalAndDepth()
     }
 
     cv::Mat PC = Pos - pRefKF->GetCameraCenter();
-    const float dist = cv::norm(PC);
+    const float dist = cv::norm(PC);//why not dist*cos(theta)? then we have deltaPatch'/deltaPatch=dist/dist'(without rotation)
     const int level = pRefKF->mvKeysUn[observations[pRefKF]].octave;
     const float levelScaleFactor =  pRefKF->mvScaleFactors[level];
     const int nLevels = pRefKF->mnScaleLevels;
 
     {
         unique_lock<mutex> lock3(mMutexPos);
-        mfMaxDistance = dist*levelScaleFactor;
-        mfMinDistance = mfMaxDistance/pRefKF->mvScaleFactors[nLevels-1];
-        mNormalVector = normal/n;
+        mfMaxDistance = dist*levelScaleFactor;//dist*1.2^level
+        mfMinDistance = mfMaxDistance/pRefKF->mvScaleFactors[nLevels-1];//fMaxDis/1.2^7
+        mNormalVector = normal/n;//here maybe use normal/cv::norm(normal) better?
     }
 }
 
@@ -407,7 +408,7 @@ int MapPoint::PredictScale(const float &currentDist, Frame* pF)
         ratio = mfMaxDistance/currentDist;
     }
 
-    int nScale = ceil(log(ratio)/pF->mfLogScaleFactor);
+    int nScale = ceil(log(ratio)/pF->mfLogScaleFactor);//log(CurDist*1.2^level/CurDist)/log(1.2)=level, notice here use ceil, so nScale-1 is also ok
     if(nScale<0)
         nScale = 0;
     else if(nScale>=pF->mnScaleLevels)

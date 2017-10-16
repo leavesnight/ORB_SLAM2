@@ -61,7 +61,7 @@ public:
     void ExtractORB(int flag, const cv::Mat &im);
 
     // Compute Bag of Words representation.
-    void ComputeBoW();
+    void ComputeBoW();//compute mBowVec && mFeatVec
 
     // Set the camera pose.
     void SetPose(cv::Mat Tcw);
@@ -205,7 +205,7 @@ private:
     cv::Mat mRcw;
     cv::Mat mtcw;
     cv::Mat mRwc;
-    cv::Mat mOw; //==mtwc
+    cv::Mat mOw; //==mtwc, the center of the lefft camera in the world/cam0 frame
 };
 
 }// namespace ORB_SLAM

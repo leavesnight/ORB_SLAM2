@@ -85,7 +85,7 @@ namespace g2o {
      * @param level: is the level (in multilevel optimization)
      * @returns false if somethings goes wrong
      */
-    virtual bool initializeOptimization(int level=0);
+    virtual bool initializeOptimization(int level=0);//which level's edges are to be optimized (as _activeEdges)
 
     /**
      * HACK updating the internal structures for online processing

@@ -33,7 +33,7 @@ namespace ORB_SLAM2
 KeyFrameDatabase::KeyFrameDatabase (const ORBVocabulary &voc):
     mpVoc(&voc)
 {
-    mvInvertedFile.resize(voc.size());
+    mvInvertedFile.resize(voc.size());//every word corresponds to a list of KFs(a KF has lots of words, these KFs share the same word)
 }
 
 
@@ -42,7 +42,7 @@ void KeyFrameDatabase::add(KeyFrame *pKF)
     unique_lock<mutex> lock(mMutex);
 
     for(DBoW2::BowVector::const_iterator vit= pKF->mBowVec.begin(), vend=pKF->mBowVec.end(); vit!=vend; vit++)
-        mvInvertedFile[vit->first].push_back(pKF);
+        mvInvertedFile[vit->first].push_back(pKF);//similar KFs will be pushed into shared words' lists
 }
 
 void KeyFrameDatabase::erase(KeyFrame* pKF)
@@ -55,7 +55,7 @@ void KeyFrameDatabase::erase(KeyFrame* pKF)
         // List of keyframes that share the word
         list<KeyFrame*> &lKFs =   mvInvertedFile[vit->first];
 
-        for(list<KeyFrame*>::iterator lit=lKFs.begin(), lend= lKFs.end(); lit!=lend; lit++)
+        for(list<KeyFrame*>::iterator lit=lKFs.begin(), lend= lKFs.end(); lit!=lend; lit++)//find the pKF in the word's list and break, O(n)
         {
             if(pKF==*lit)
             {
@@ -90,22 +90,24 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
             for(list<KeyFrame*>::iterator lit=lKFs.begin(), lend= lKFs.end(); lit!=lend; lit++)
             {
                 KeyFrame* pKFi=*lit;
-                if(pKFi->mnLoopQuery!=pKF->mnId)
+                if(pKFi->mnLoopQuery!=pKF->mnId)//initial mnLoopQuery==0, pKF->mnId!=0(LoopClosing won't use fixed KF0) -> restart count for mnLoopWords when detecting a new KF's loop candidates
                 {
                     pKFi->mnLoopWords=0;
-                    if(!spConnectedKeyFrames.count(pKFi))
+                    if(!spConnectedKeyFrames.count(pKFi))//if not in 1st layer covisibility KFs, add pKFi into lKFsSharingWords
                     {
                         pKFi->mnLoopQuery=pKF->mnId;
                         lKFsSharingWords.push_back(pKFi);
                     }
                 }
-                pKFi->mnLoopWords++;
+                pKFi->mnLoopWords++;//for any pKFi in connected KFs in covisibility graph, mnLoopWords==1
             }
         }
     }
 
-    if(lKFsSharingWords.empty())
+    if(lKFsSharingWords.empty())//loop candidates(lKFsSharingWords,lAccScoreAndMatch,vpLoopCandidates) can only be KFs that isn't in 1st layer covisibility KFs(spConnectedKeyFrames)
         return vector<KeyFrame*>();
+    //it's because pMP->mObservations/covisibility graph only have local KFs' info(they are made from SBP/SBBoW matching method) and \
+    no loop KFs' info(made from score(CurrentKF.BowVector,KFi.BowVector))
 
     list<pair<float,KeyFrame*> > lScoreAndMatch;
 
@@ -117,7 +119,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
             maxCommonWords=(*lit)->mnLoopWords;
     }
 
-    int minCommonWords = maxCommonWords*0.8f;
+    int minCommonWords = maxCommonWords*0.8f;//same threshold in DetectRelocalizationCandidates()
 
     int nscores=0;
 
@@ -132,13 +134,13 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
 
             float si = mpVoc->score(pKF->mBowVec,pKFi->mBowVec);
 
-            pKFi->mLoopScore = si;
-            if(si>=minScore)
+            pKFi->mLoopScore = si;//notice here mLoopScore's updation condition is same as DetectRelocalizationCandidates()
+            if(si>=minScore)//different from DetectRelocalizationCandidates(), here DetectLoop() used score is at least the min score in score(pKF->mBowVec,spConnectedKeyFrames()[i]->mBowVec)
                 lScoreAndMatch.push_back(make_pair(si,pKFi));
         }
     }
 
-    if(lScoreAndMatch.empty())
+    if(lScoreAndMatch.empty())//always false under minCommonWords=0.8*maxCommonWords
         return vector<KeyFrame*>();
 
     list<pair<float,KeyFrame*> > lAccScoreAndMatch;
@@ -153,11 +155,12 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
         float bestScore = it->first;
         float accScore = it->first;
         KeyFrame* pBestKF = pKFi;
+	//accumulate the 10 best covisible KFs' mLoopScore as accScore and find the best mLoopScore of them as pBestKF
         for(vector<KeyFrame*>::iterator vit=vpNeighs.begin(), vend=vpNeighs.end(); vit!=vend; vit++)
         {
             KeyFrame* pKF2 = *vit;
-            if(pKF2->mnLoopQuery==pKF->mnId && pKF2->mnLoopWords>minCommonWords)
-            {
+            if(pKF2->mnLoopQuery==pKF->mnId && pKF2->mnLoopWords>minCommonWords)//different from DetectRelocalizationCandidates(), this neighbors only include the ones updating mLoopScore(better)
+            {//notice lScoreAndMatch is a subset of pKF2s(for a stricter condition)
                 accScore+=pKF2->mLoopScore;
                 if(pKF2->mLoopScore>bestScore)
                 {
@@ -173,7 +176,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
     }
 
     // Return all those keyframes with a score higher than 0.75*bestScore
-    float minScoreToRetain = 0.75f*bestAccScore;
+    float minScoreToRetain = 0.75f*bestAccScore;//same threshold in DetectRelocalizationCandidates()
 
     set<KeyFrame*> spAlreadyAddedKF;
     vector<KeyFrame*> vpLoopCandidates;
@@ -184,7 +187,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
         if(it->first>minScoreToRetain)
         {
             KeyFrame* pKFi = it->second;
-            if(!spAlreadyAddedKF.count(pKFi))
+            if(!spAlreadyAddedKF.count(pKFi))//using set to ask is faster then directly using vector, but we need to return vector<KF*>
             {
                 vpLoopCandidates.push_back(pKFi);
                 spAlreadyAddedKF.insert(pKFi);
@@ -208,10 +211,10 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         {
             list<KeyFrame*> &lKFs =   mvInvertedFile[vit->first];
 
-            for(list<KeyFrame*>::iterator lit=lKFs.begin(), lend= lKFs.end(); lit!=lend; lit++)
+            for(list<KeyFrame*>::iterator lit=lKFs.begin(), lend= lKFs.end(); lit!=lend; lit++)//rectify the (*lit)->... so cannot use const_iterator
             {
                 KeyFrame* pKFi=*lit;
-                if(pKFi->mnRelocQuery!=F->mnId)
+                if(pKFi->mnRelocQuery!=F->mnId)//initial mnRelocQuery=0 && F->mnId!=0, then it will restart count for mnRelocWords
                 {
                     pKFi->mnRelocWords=0;
                     pKFi->mnRelocQuery=F->mnId;
@@ -232,7 +235,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
             maxCommonWords=(*lit)->mnRelocWords;
     }
 
-    int minCommonWords = maxCommonWords*0.8f;
+    int minCommonWords = maxCommonWords*0.8f;//min threshold(0.8*maxNumOfSharingWords) for KFs candidates
 
     list<pair<float,KeyFrame*> > lScoreAndMatch;
 
@@ -246,13 +249,13 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         if(pKFi->mnRelocWords>minCommonWords)
         {
             nscores++;
-            float si = mpVoc->score(F->mBowVec,pKFi->mBowVec);
+            float si = mpVoc->score(F->mBowVec,pKFi->mBowVec);//1-1/2(2+sigma(|v1i-v2i|-|v1i|-|v2i|))=-1/2*sigma(|v1i-v2i|-|v1i|-|v2i|), use L1_norm with score=1-1/w*(||v1-v2||)
             pKFi->mRelocScore=si;
             lScoreAndMatch.push_back(make_pair(si,pKFi));
         }
     }
 
-    if(lScoreAndMatch.empty())
+    if(lScoreAndMatch.empty())//I think it's always false under min=max*0.8
         return vector<KeyFrame*>();
 
     list<pair<float,KeyFrame*> > lAccScoreAndMatch;
@@ -267,10 +270,11 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         float bestScore = it->first;
         float accScore = bestScore;
         KeyFrame* pBestKF = pKFi;
+	//accumulate the 10 best covisible KFs' mRelocScore as accScore and find the best mnRelocScore of them as pBestKF
         for(vector<KeyFrame*>::iterator vit=vpNeighs.begin(), vend=vpNeighs.end(); vit!=vend; vit++)
-        {
+	{
             KeyFrame* pKF2 = *vit;
-            if(pKF2->mnRelocQuery!=F->mnId)
+            if(pKF2->mnRelocQuery!=F->mnId)//is this a problem when pKF2->mnRelocQuery==F->mnId && pKF2->mnRelocWords<=minCommonWords/not in lAccScoreAndMatch (mRelocScore may not ==0)?
                 continue;
 
             accScore+=pKF2->mRelocScore;
@@ -284,9 +288,9 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         lAccScoreAndMatch.push_back(make_pair(accScore,pBestKF));
         if(accScore>bestAccScore)
             bestAccScore=accScore;
-    }
+    }//make the list of pairs<accScore,pBestKF>
 
-    // Return all those keyframes with a score higher than 0.75*bestScore
+    // Return all those keyframes with a score(accScore) higher than 0.75*bestAccScore(accumulate Score's Threshold), more robust than single score
     float minScoreToRetain = 0.75f*bestAccScore;
     set<KeyFrame*> spAlreadyAddedKF;
     vector<KeyFrame*> vpRelocCandidates;

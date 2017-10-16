@@ -59,51 +59,51 @@ public:
 
     // Covisibility graph functions
     void AddConnection(KeyFrame* pKF, const int &weight);
-    void EraseConnection(KeyFrame* pKF);
-    void UpdateConnections();
-    void UpdateBestCovisibles();
-    std::set<KeyFrame *> GetConnectedKeyFrames();
-    std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
-    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);
-    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);
-    int GetWeight(KeyFrame* pKF);
+    void EraseConnection(KeyFrame* pKF);//mConnectedKeyFrameWeights.erase(pKF) && UpdateBestCovisibles()
+    void UpdateConnections();//first connect other KFs to this, then connect this to other KFs/update this->mConnectedKeyFrameWeights...; an undirected graph(covisibility graph)
+    void UpdateBestCovisibles();//update mvpOrderedConnectedKeyFrames && mvOrderedWeights by sort()
+    std::set<KeyFrame *> GetConnectedKeyFrames();//set made from mConnectedKeyFrameWeights[i].first
+    std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();//mvpOrderedConnectedKeyFrames
+    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);//get N farthest KFs in covisibility graph(map<KF*,int>)
+    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);//get some farthest KFs in covisibility graph whose weight<=w
+    int GetWeight(KeyFrame* pKF);//mConnectedKeyFrameWeights[pKF](0 no found)
 
     // Spanning tree functions
-    void AddChild(KeyFrame* pKF);
+    void AddChild(KeyFrame* pKF);//mspChildrens.insert(pKF)
     void EraseChild(KeyFrame* pKF);
-    void ChangeParent(KeyFrame* pKF);
-    std::set<KeyFrame*> GetChilds();
+    void ChangeParent(KeyFrame* pKF);//mpParent = pKF,pKF->AddChild(this);
+    std::set<KeyFrame*> GetChilds();//mspChildrens
     KeyFrame* GetParent();
-    bool hasChild(KeyFrame* pKF);
+    bool hasChild(KeyFrame* pKF);//if pKF in mspChildrens
 
     // Loop Edges
-    void AddLoopEdge(KeyFrame* pKF);
-    std::set<KeyFrame*> GetLoopEdges();
+    void AddLoopEdge(KeyFrame* pKF);//mspLoopEdges.insert(pKF);mbNotErase=true;
+    std::set<KeyFrame*> GetLoopEdges();//mspLoopEdges
 
     // MapPoint observation functions
-    void AddMapPoint(MapPoint* pMP, const size_t &idx);
-    void EraseMapPointMatch(const size_t &idx);
-    void EraseMapPointMatch(MapPoint* pMP);
+    void AddMapPoint(MapPoint* pMP, const size_t &idx);//mvpMapPoints[idx]=pMP
+    void EraseMapPointMatch(const size_t &idx);//mvpMapPoints[idx]=nullptr
+    void EraseMapPointMatch(MapPoint* pMP);//mvpMapPoints[idx corresp. pMP]=nullptr
     void ReplaceMapPointMatch(const size_t &idx, MapPoint* pMP);
-    std::set<MapPoint*> GetMapPoints();
-    std::vector<MapPoint*> GetMapPointMatches();
+    std::set<MapPoint*> GetMapPoints();//make set from good mvpMapPoints
+    std::vector<MapPoint*> GetMapPointMatches();//mvpMapPoints
     int TrackedMapPoints(const int &minObs);
-    MapPoint* GetMapPoint(const size_t &idx);
+    MapPoint* GetMapPoint(const size_t &idx);//mvpMapPoints[idx]
 
     // KeyPoint functions
-    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r) const;
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r) const;//return vec<featureID>, a 2r*2r window search by Grids/Cells speed-up, here no min/maxlevel check unlike Frame.h
     cv::Mat UnprojectStereo(int i);
 
     // Image
     bool IsInImage(const float &x, const float &y) const;
 
     // Enable/Disable bad flag changes
-    void SetNotErase();
-    void SetErase();
+    void SetNotErase();//mbNotErase=true means it cannot be directly erased by SetBadFlag(), but can use SetErase()
+    void SetErase();//try to erase this(&KF) by SetBadFlag() when mbToBeErased==true(SetBadFlag() before)&&mspLoopEdges.empty()
 
     // Set/check bad flag
-    void SetBadFlag();
-    bool isBad();
+    void SetBadFlag();//Erase the relation with this(&KF), Update Spanning Tree&& mbBad+mTcp, erase this(&KF) in mpMap && mpKeyFrameDB
+    bool isBad();//mbBad
 
     // Compute Scene Depth (q=2 median). Used in monocular.
     float ComputeSceneMedianDepth(const int q);
@@ -119,6 +119,8 @@ public:
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
+    //PCL used image
+    cv::Mat Img[2];//0 is color,1 is depth
 
     static long unsigned int nNextId;
     long unsigned int mnId;
@@ -133,12 +135,12 @@ public:
     const float mfGridElementHeightInv;
 
     // Variables used by the tracking
-    long unsigned int mnTrackReferenceForFrame;
-    long unsigned int mnFuseTargetForKF;
+    long unsigned int mnTrackReferenceForFrame;//for local Map in tracking
+    long unsigned int mnFuseTargetForKF;//for LocalMapping
 
     // Variables used by the local mapping
-    long unsigned int mnBALocalForKF;
-    long unsigned int mnBAFixedForKF;
+    long unsigned int mnBALocalForKF;//for local BA in LocalMapping
+    long unsigned int mnBAFixedForKF;//for local BA in LocalMapping
 
     // Variables used by the keyframe database
     long unsigned int mnLoopQuery;
@@ -148,10 +150,10 @@ public:
     int mnRelocWords;
     float mRelocScore;
 
-    // Variables used by loop closing
-    cv::Mat mTcwGBA;
+    // Variables used by loop closing in GBA
+    cv::Mat mTcwGBA;//optimized Tcw in the end of GBA
     cv::Mat mTcwBefGBA;
-    long unsigned int mnBAGlobalForKF;
+    long unsigned int mnBAGlobalForKF;//mpCurrentKF used to correct loop and call GBA
 
     // Calibration parameters
     const float fx, fy, cx, cy, invfx, invfy, mbf, mb, mThDepth;
@@ -171,7 +173,7 @@ public:
     DBoW2::FeatureVector mFeatVec;
 
     // Pose relative to parent (this is computed when bad flag is activated)
-    cv::Mat mTcp;
+    cv::Mat mTcp;//used in SaveTrajectoryTUM() in System.cc
 
     // Scale
     const int mnScaleLevels;
@@ -209,9 +211,9 @@ protected:
     // Grid over the image to speed up feature matching
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
+    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;//covisibility graph need KFs >=15 covisible MapPoints or the KF with Max covisible MapPoints
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
-    std::vector<int> mvOrderedWeights;
+    std::vector<int> mvOrderedWeights;//covisible MPs' number
 
     // Spanning Tree and Loop Edges
     bool mbFirstConnection;

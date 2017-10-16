@@ -33,7 +33,7 @@ namespace g2o {
 
 using namespace std;
 
-
+//return normalized v(0:1)
 Vector2d project2d(const Vector3d& v)  {
   Vector2d res;
   res(0) = v(0)/v(2);
@@ -100,14 +100,14 @@ bool EdgeSE3ProjectXYZ::write(std::ostream& os) const {
 }
 
 
-void EdgeSE3ProjectXYZ::linearizeOplus() {
+void EdgeSE3ProjectXYZ::linearizeOplus() {//calculate the Jacobian i par(e)/par(P).t(), j par(e)/par(ksi).t()
   VertexSE3Expmap * vj = static_cast<VertexSE3Expmap *>(_vertices[1]);
   SE3Quat T(vj->estimate());
   VertexSBAPointXYZ* vi = static_cast<VertexSBAPointXYZ*>(_vertices[0]);
   Vector3d xyz = vi->estimate();
-  Vector3d xyz_trans = T.map(xyz);
+  Vector3d xyz_trans = T.map(xyz);//P'
 
-  double x = xyz_trans[0];
+  double x = xyz_trans[0];//here P' is noted by (x,y,z)
   double y = xyz_trans[1];
   double z = xyz_trans[2];
   double z_2 = z*z;
@@ -121,8 +121,9 @@ void EdgeSE3ProjectXYZ::linearizeOplus() {
   tmp(1,1) = fy;
   tmp(1,2) = -y/z*fy;
 
-  _jacobianOplusXi =  -1./z * tmp * T.rotation().toRotationMatrix();
-
+  _jacobianOplusXi =  -1./z * tmp * T.rotation().toRotationMatrix();//-[fx/z' 0 -fx*x'/z'^2; 0 fy/z' -fy*y'/z'^2]*R
+  
+  //ksi=(phi,p) for g2o, phi first
   _jacobianOplusXj(0,0) =  x*y/z_2 *fx;
   _jacobianOplusXj(0,1) = -(1+(x*x/z_2)) *fx;
   _jacobianOplusXj(0,2) = y/z *fx;
@@ -185,7 +186,7 @@ bool EdgeStereoSE3ProjectXYZ::write(std::ostream& os) const {
   return os.good();
 }
 
-void EdgeStereoSE3ProjectXYZ::linearizeOplus() {
+void EdgeStereoSE3ProjectXYZ::linearizeOplus() {//calculate the Jacobian i par(e)/par(P).t() 3*3, j par(e)/par(ksi).t() 3*6
   VertexSE3Expmap * vj = static_cast<VertexSE3Expmap *>(_vertices[1]);
   SE3Quat T(vj->estimate());
   VertexSBAPointXYZ* vi = static_cast<VertexSBAPointXYZ*>(_vertices[0]);
@@ -194,11 +195,12 @@ void EdgeStereoSE3ProjectXYZ::linearizeOplus() {
 
   const Matrix3d R =  T.rotation().toRotationMatrix();
 
-  double x = xyz_trans[0];
+  double x = xyz_trans[0];//P'
   double y = xyz_trans[1];
   double z = xyz_trans[2];
   double z_2 = z*z;
 
+  //par(e)/par(P).t()(0:1)= -[fx/z' 0 -fx*x'/z'^2; 0 fy/z' -fy*y'/z'^2]*R
   _jacobianOplusXi(0,0) = -fx*R(0,0)/z+fx*x*R(2,0)/z_2;
   _jacobianOplusXi(0,1) = -fx*R(0,1)/z+fx*x*R(2,1)/z_2;
   _jacobianOplusXi(0,2) = -fx*R(0,2)/z+fx*x*R(2,2)/z_2;
@@ -206,29 +208,34 @@ void EdgeStereoSE3ProjectXYZ::linearizeOplus() {
   _jacobianOplusXi(1,0) = -fy*R(1,0)/z+fy*y*R(2,0)/z_2;
   _jacobianOplusXi(1,1) = -fy*R(1,1)/z+fy*y*R(2,1)/z_2;
   _jacobianOplusXi(1,2) = -fy*R(1,2)/z+fy*y*R(2,2)/z_2;
-
+  
+  //partial(e(2))/partial(P).t()=partial(e(0))/partial(P).t()+partial(+bf/z)/partial(P).t()
+  //notice par(P')/par(P).t()=par(RP)/par(P).t()=d(RP)/dP.t().t()=d(RP)/d(P)=R;if par(RP)/par(P)=d(RP)/d(P.t())=d((RP).t())/d(P_t)=d(P_tR_t)/d(P_t)=R_t
+  //d(+bf/z)/d(P').t()*par(P')/par(P).t()=[0 0 -bf/z'^2]*R
   _jacobianOplusXi(2,0) = _jacobianOplusXi(0,0)-bf*R(2,0)/z_2;
   _jacobianOplusXi(2,1) = _jacobianOplusXi(0,1)-bf*R(2,1)/z_2;
   _jacobianOplusXi(2,2) = _jacobianOplusXi(0,2)-bf*R(2,2)/z_2;
 
-  _jacobianOplusXj(0,0) =  x*y/z_2 *fx;
+  _jacobianOplusXj(0,0) =  x*y/z_2 *fx;//phi
   _jacobianOplusXj(0,1) = -(1+(x*x/z_2)) *fx;
   _jacobianOplusXj(0,2) = y/z *fx;
-  _jacobianOplusXj(0,3) = -1./z *fx;
+  _jacobianOplusXj(0,3) = -1./z *fx;//p
   _jacobianOplusXj(0,4) = 0;
   _jacobianOplusXj(0,5) = x/z_2 *fx;
 
-  _jacobianOplusXj(1,0) = (1+y*y/z_2) *fy;
+  _jacobianOplusXj(1,0) = (1+y*y/z_2) *fy;//phi
   _jacobianOplusXj(1,1) = -x*y/z_2 *fy;
   _jacobianOplusXj(1,2) = -x/z *fy;
-  _jacobianOplusXj(1,3) = 0;
+  _jacobianOplusXj(1,3) = 0;//p
   _jacobianOplusXj(1,4) = -1./z *fy;
   _jacobianOplusXj(1,5) = y/z_2 *fy;
 
-  _jacobianOplusXj(2,0) = _jacobianOplusXj(0,0)-bf*y/z_2;
+  //partial(e(2))/partial(ksi).t()=partial(e(0))/partial(ksi).t()+partial(+bf/z)/partial(ksi).t()
+  //d(+bf/z)/d(P').t()*par(P')/par(ksi).t()=[0 0 -bf/z'^2]*[-P'^ | I(3*3)]=(here P'(x y z))=[0 0 -bf/z^2]*[-[0 -z y;z 0 -x;-y x 0] | I]
+  _jacobianOplusXj(2,0) = _jacobianOplusXj(0,0)-bf*y/z_2;//phi
   _jacobianOplusXj(2,1) = _jacobianOplusXj(0,1)+bf*x/z_2;
   _jacobianOplusXj(2,2) = _jacobianOplusXj(0,2);
-  _jacobianOplusXj(2,3) = _jacobianOplusXj(0,3);
+  _jacobianOplusXj(2,3) = _jacobianOplusXj(0,3);//p
   _jacobianOplusXj(2,4) = 0;
   _jacobianOplusXj(2,5) = _jacobianOplusXj(0,5)-bf/z_2;
 }
@@ -263,7 +270,7 @@ bool EdgeSE3ProjectXYZOnlyPose::write(std::ostream& os) const {
 }
 
 
-void EdgeSE3ProjectXYZOnlyPose::linearizeOplus() {
+void EdgeSE3ProjectXYZOnlyPose::linearizeOplus() {//calculate Jacobian i par(e)/par(ksi).t()
   VertexSE3Expmap * vi = static_cast<VertexSE3Expmap *>(_vertices[0]);
   Vector3d xyz_trans = vi->estimate().map(Xw);
 
@@ -272,6 +279,7 @@ void EdgeSE3ProjectXYZOnlyPose::linearizeOplus() {
   double invz = 1.0/xyz_trans[2];
   double invz_2 = invz*invz;
 
+  //g2o is ksi=(phi,p), rotation first
   _jacobianOplusXi(0,0) =  x*y*invz_2 *fx;
   _jacobianOplusXi(0,1) = -(1+(x*x*invz_2)) *fx;
   _jacobianOplusXi(0,2) = y*invz *fx;
@@ -301,7 +309,7 @@ Vector3d EdgeStereoSE3ProjectXYZOnlyPose::cam_project(const Vector3d & trans_xyz
   Vector3d res;
   res[0] = trans_xyz[0]*invz*fx + cx;
   res[1] = trans_xyz[1]*invz*fy + cy;
-  res[2] = res[0] - bf*invz;
+  res[2] = res[0] - bf*invz;//ur=ul-b*fx/dl or u in right image
   return res;
 }
 
@@ -355,6 +363,8 @@ void EdgeStereoSE3ProjectXYZOnlyPose::linearizeOplus() {
   _jacobianOplusXi(1,4) = -invz *fy;
   _jacobianOplusXi(1,5) = y*invz_2 *fy;
 
+  //partial(e(2))/partial(ksi).t()=partial(e(0))/partial(ksi).t()+partial(+bf/z)/partial(ksi).t()
+  //d(+bf/z)/d(P').t()*par(P')/par(ksi).t()=[0 0 -bf/z'^2]*[-P'^ | I(3*3)]=(here P'(x y z))=[0 0 -bf/z^2]*[-[0 -z y;z 0 -x;-y x 0] | I]
   _jacobianOplusXi(2,0) = _jacobianOplusXi(0,0)-bf*y*invz_2;
   _jacobianOplusXi(2,1) = _jacobianOplusXi(0,1)+bf*x*invz_2;
   _jacobianOplusXi(2,2) = _jacobianOplusXi(0,2);

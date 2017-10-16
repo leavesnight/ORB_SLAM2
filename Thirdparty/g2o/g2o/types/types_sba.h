@@ -46,13 +46,13 @@ namespace g2o {
     virtual bool write(std::ostream& os) const;
 
     virtual void setToOriginImpl() {
-      _estimate.fill(0.);
+      _estimate.fill(0.);//sets all coefficients in this expression to val.
     }
 
     virtual void oplusImpl(const double* update)
     {
       Eigen::Map<const Vector3d> v(update);
-      _estimate += v;
+      _estimate += v;//v_updated=v_old+delta_v
     }
 };
 

@@ -172,7 +172,7 @@ cv::Mat PnPsolver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInlie
 
     if(N<mRansacMinInliers)
     {
-        bNoMore = true;
+        bNoMore = true;//don't need to calculate, for even max Inliers=N<threshold
         return cv::Mat();
     }
 

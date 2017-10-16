@@ -32,6 +32,7 @@
 namespace ORB_SLAM2
 {
 
+//3D-2D solver, similar to PnPSolver
 class Sim3Solver
 {
 public:
@@ -58,28 +59,30 @@ protected:
     void CheckInliers();
 
     void Project(const std::vector<cv::Mat> &vP3Dw, std::vector<cv::Mat> &vP2D, cv::Mat Tcw, cv::Mat K);
-    void FromCameraToImage(const std::vector<cv::Mat> &vP3Dc, std::vector<cv::Mat> &vP2D, cv::Mat K);
+    void FromCameraToImage(const std::vector<cv::Mat> &vP3Dc, std::vector<cv::Mat> &vP2D, cv::Mat K);//Project vP3Dc(vector<cv::Mat(3,1,CV_32F)>) camera (3D) coordinate to \
+    vP2D(vector<cv::Mat_<float>(2,1)>) image (2D) coordinate through camera intrinsic matrix K
 
 
 protected:
 
     // KeyFrames and matches
-    KeyFrame* mpKF1;
-    KeyFrame* mpKF2;
+    KeyFrame* mpKF1;//mpCurrentKF
+    KeyFrame* mpKF2;//loop candidate KFs
 
-    std::vector<cv::Mat> mvX3Dc1;
-    std::vector<cv::Mat> mvX3Dc2;
-    std::vector<MapPoint*> mvpMapPoints1;
-    std::vector<MapPoint*> mvpMapPoints2;
-    std::vector<MapPoint*> mvpMatches12;
-    std::vector<size_t> mvnIndices1;
-    std::vector<size_t> mvSigmaSquare1;
-    std::vector<size_t> mvSigmaSquare2;
-    std::vector<size_t> mvnMaxError1;
-    std::vector<size_t> mvnMaxError2;
+    //all the following vec has the same size<=mN1
+    std::vector<cv::Mat> mvX3Dc1;//matched MPs' Xc1
+    std::vector<cv::Mat> mvX3Dc2;//matched MPs' Xc2
+    std::vector<MapPoint*> mvpMapPoints1;//matched MPs in pKF1->mvpMapPoints
+    std::vector<MapPoint*> mvpMapPoints2;//matched MPs in pKF2->mvpMapPoints, notice the matched MPs mean 2 temporary (may)different MPs
+    std::vector<MapPoint*> mvpMatches12;//mvpMatches12[i] matched to mpKF1->mvpMapPoints[i]
+    std::vector<size_t> mvnIndices1;//matched MPs' index in pKF1
+    //std::vector<size_t> mvSigmaSquare1;//unused
+    //std::vector<size_t> mvSigmaSquare2;//unused
+    std::vector<size_t> mvnMaxError1;//element is chi2(0.01,2)*sigma2 for pKF1->mvpMapPoints[i](matched ones have MaxError1)
+    std::vector<size_t> mvnMaxError2;//for pKF2->mvpMapPoints[j]/mvpMatches12[i](matched ones have MaxError2)
 
     int N;
-    int mN1;
+    int mN1;//number/size of the mvpMatches12/mpKF1->mvpMapPoints
 
     // Current Estimation
     cv::Mat mR12i;
@@ -103,11 +106,11 @@ protected:
     bool mbFixScale;
 
     // Indices for random selection
-    std::vector<size_t> mvAllIndices;
+    std::vector<size_t> mvAllIndices;//size is the number of matched 2 MPs <=mN1, recording the index of entering vector(mvX3Dc1...)
 
-    // Projections
-    std::vector<cv::Mat> mvP1im1;
-    std::vector<cv::Mat> mvP2im2;
+    // Projections, size is the same as mvX3Dc1.../mvAllIndices
+    std::vector<cv::Mat> mvP1im1;//image coordinate of matched MPs in pKF1
+    std::vector<cv::Mat> mvP2im2;//vec<matched MPs' image coordinate in pKF2>
 
     // RANSAC probability
     double mRansacProb;
@@ -123,8 +126,8 @@ protected:
     float mSigma2;
 
     // Calibration
-    cv::Mat mK1;
-    cv::Mat mK2;
+    cv::Mat mK1;//for pKF1
+    cv::Mat mK2;//for pKF2
 
 };
 

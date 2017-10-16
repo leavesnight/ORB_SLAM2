@@ -35,12 +35,12 @@ namespace ORB_SLAM2
 
 
 Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> &vpMatched12, const bool bFixScale):
-    mnIterations(0), mnBestInliers(0), mbFixScale(bFixScale)
+    mnIterations(0), mnBestInliers(0), mbFixScale(bFixScale)//pKF1 is mpCurrentKF, pKF2 is loop candidate KFs, vpMatched12[i] matched to pKF1->mvpMapPoints[i], bFixScale=true for RGBD
 {
     mpKF1 = pKF1;
     mpKF2 = pKF2;
 
-    vector<MapPoint*> vpKeyFrameMP1 = pKF1->GetMapPointMatches();
+    vector<MapPoint*> vpKeyFrameMP1 = pKF1->GetMapPointMatches();//maybe can use vec<MP*>&
 
     mN1 = vpMatched12.size();
 
@@ -52,7 +52,7 @@ Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> 
     mvX3Dc2.reserve(mN1);
 
     cv::Mat Rcw1 = pKF1->GetRotation();
-    cv::Mat tcw1 = pKF1->GetTranslation();
+    cv::Mat tcw1 = pKF1->GetTranslation();//cv::Mat(3,1,float)
     cv::Mat Rcw2 = pKF2->GetRotation();
     cv::Mat tcw2 = pKF2->GetTranslation();
 
@@ -64,9 +64,9 @@ Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> 
         if(vpMatched12[i1])
         {
             MapPoint* pMP1 = vpKeyFrameMP1[i1];
-            MapPoint* pMP2 = vpMatched12[i1];
+            MapPoint* pMP2 = vpMatched12[i1];//matched MP from pMP1
 
-            if(!pMP1)
+            if(!pMP1)//here pMP1=nullptr means pMP2=nullptr too before last SBP() in ComputeSIm3()
                 continue;
 
             if(pMP1->isBad() || pMP2->isBad())
@@ -75,7 +75,7 @@ Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> 
             int indexKF1 = pMP1->GetIndexInKeyFrame(pKF1);
             int indexKF2 = pMP2->GetIndexInKeyFrame(pKF2);
 
-            if(indexKF1<0 || indexKF2<0)
+            if(indexKF1<0 || indexKF2<0)//it's for safe
                 continue;
 
             const cv::KeyPoint &kp1 = pKF1->mvKeysUn[indexKF1];
@@ -84,18 +84,18 @@ Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> 
             const float sigmaSquare1 = pKF1->mvLevelSigma2[kp1.octave];
             const float sigmaSquare2 = pKF2->mvLevelSigma2[kp2.octave];
 
-            mvnMaxError1.push_back(9.210*sigmaSquare1);
-            mvnMaxError2.push_back(9.210*sigmaSquare2);
+            mvnMaxError1.push_back(9.210*sigmaSquare1);//to use chi2 distribution for e^2 with sigma^2, we need expand its standard table like chi2(0.01,2)*sigma2
+            mvnMaxError2.push_back(9.210*sigmaSquare2);//chi2(0.01,2)=9.21
 
             mvpMapPoints1.push_back(pMP1);
             mvpMapPoints2.push_back(pMP2);
             mvnIndices1.push_back(i1);
 
-            cv::Mat X3D1w = pMP1->GetWorldPos();
-            mvX3Dc1.push_back(Rcw1*X3D1w+tcw1);
+            cv::Mat X3D1w = pMP1->GetWorldPos();//cv::Mat(3,1,float)
+            mvX3Dc1.push_back(Rcw1*X3D1w+tcw1);//Xc1=(Tc1w*[Xw|1])(0:2)
 
             cv::Mat X3D2w = pMP2->GetWorldPos();
-            mvX3Dc2.push_back(Rcw2*X3D2w+tcw2);
+            mvX3Dc2.push_back(Rcw2*X3D2w+tcw2);//Xc2
 
             mvAllIndices.push_back(idx);
             idx++;
@@ -108,7 +108,7 @@ Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> 
     FromCameraToImage(mvX3Dc1,mvP1im1,mK1);
     FromCameraToImage(mvX3Dc2,mvP2im2,mK2);
 
-    SetRansacParameters();
+    SetRansacParameters();//use default settings for safe
 }
 
 void Sim3Solver::SetRansacParameters(double probability, int minInliers, int maxIterations)
@@ -410,15 +410,15 @@ void Sim3Solver::FromCameraToImage(const vector<cv::Mat> &vP3Dc, vector<cv::Mat>
     const float &cy = K.at<float>(1,2);
 
     vP2D.clear();
-    vP2D.reserve(vP3Dc.size());
+    vP2D.reserve(vP3Dc.size());//the same size
 
     for(size_t i=0, iend=vP3Dc.size(); i<iend; i++)
     {
         const float invz = 1/(vP3Dc[i].at<float>(2));
-        const float x = vP3Dc[i].at<float>(0)*invz;
-        const float y = vP3Dc[i].at<float>(1)*invz;
+        const float x = vP3Dc[i].at<float>(0)*invz;//x'
+        const float y = vP3Dc[i].at<float>(1)*invz;//y'
 
-        vP2D.push_back((cv::Mat_<float>(2,1) << fx*x+cx, fy*y+cy));
+        vP2D.push_back((cv::Mat_<float>(2,1) << fx*x+cx, fy*y+cy));//<<u, v
     }
 }
 

@@ -84,7 +84,7 @@ public:
 
     // Returns true if there have been a big map change (loop closure, global BA)
     // since last call to this function
-    bool MapChanged();
+    bool MapChanged();//used by user, need try
 
     // Reset the system (clear map)
     void Reset();
@@ -92,7 +92,7 @@ public:
     // All threads will be requested to finish.
     // It waits until all threads have finished.
     // This function must be called before saving the trajectory.
-    void Shutdown();
+    void Shutdown();//used by user, like rgbd_tum.cc
 
     // Save camera trajectory in the TUM RGB-D dataset format.
     // Only for stereo and RGB-D. This method does not work for monocular.
@@ -113,8 +113,10 @@ public:
     void SaveTrajectoryKITTI(const string &filename);
 
     // TODO: Save/Load functions
-    // SaveMap(const string &filename);
+    void SaveMap(const string &filename);
     // LoadMap(const string &filename);
+    void SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp);
+    int mkdir_p(string foldername,int mode);
 
     // Information from most recent processed frame
     // You can call this right after TrackMonocular (or stereo or RGBD)
@@ -123,7 +125,9 @@ public:
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
 
 private:
-
+    //used to make pcl
+    cv::FileStorage fsSettings;
+  
     // Input sensor
     eSensor mSensor;
 
@@ -177,5 +181,12 @@ private:
 };
 
 }// namespace ORB_SLAM
+
+//zzh defined color cout
+#define red "\033[31m"
+#define green "\e[32m"
+#define blue "\e[34m"
+#define yellow "\e[33m"
+#define white "\e[40;37m"
 
 #endif // SYSTEM_H

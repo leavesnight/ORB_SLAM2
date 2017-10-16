@@ -55,7 +55,7 @@ namespace g2o {
         _t.setZero();
       }
 
-      SE3Quat(const Matrix3d& R, const Vector3d& t):_r(Quaterniond(R)),_t(t){ 
+      SE3Quat(const Matrix3d& R, const Vector3d& t):_r(Quaterniond(R)),_t(t){//use const Eigen::class& instead of Eigen::class as function's parameter for memory alignment
         normalizeRotation();
       }
 
@@ -186,12 +186,12 @@ namespace g2o {
         Vector3d dR = deltaR(_R);
         Matrix3d V_inv;
 
-        if (d>0.99999)
+        if (d>0.99999)//theta<<1
         {
 
-          omega=0.5*dR;
+          omega=0.5*dR;//limit(theta->0)(theta/sin(theta))=1
           Matrix3d Omega = skew(omega);
-          V_inv = Matrix3d::Identity()- 0.5*Omega + (1./12.)*(Omega*Omega);
+          V_inv = Matrix3d::Identity()- 0.5*Omega + (1./12.)*(Omega*Omega);//limit(theta->0)((1-theta/(2*tan(theta/2)))/theta^2)~=(omit theta^5&&less)=1/12
         }
         else
         {
@@ -199,7 +199,7 @@ namespace g2o {
           omega = theta/(2*sqrt(1-d*d))*dR;
           Matrix3d Omega = skew(omega);
           V_inv = ( Matrix3d::Identity() - 0.5*Omega
-              + ( 1-theta/(2*tan(theta/2)))/(theta*theta)*(Omega*Omega) );
+              + ( 1-theta/(2*tan(theta/2)))/(theta*theta)*(Omega*Omega) );//J^(-1)=I-1/2*phi^+(1-theta/(2*tan(theta/2)))/theta^2*phi^phi^, we can prove it by J^(-1)*J=I
         }
 
         upsilon = V_inv*_t;
@@ -237,7 +237,7 @@ namespace g2o {
         if (theta<0.00001)
         {
           //TODO: CHECK WHETHER THIS IS CORRECT!!!
-          R = (Matrix3d::Identity() + Omega + Omega*Omega);
+          R = (Matrix3d::Identity() + Omega + Omega*Omega/2);//R=I+(1-cos(theta))*a^a^+sin(theta)*a^~=(omit theta^3&&less)=I+theta^2/2*a^a^+theta*a^, /2 rectified by zzh
 
           V = R;
         }
@@ -245,13 +245,15 @@ namespace g2o {
         {
           Matrix3d Omega2 = Omega*Omega;
 
+	  ////R=exp(phi^)=I+(1-cos(theta))*a^a^+sin(theta)*a^
           R = (Matrix3d::Identity()
               + sin(theta)/theta *Omega
               + (1-cos(theta))/(theta*theta)*Omega2);
 
+	  //A=(1-cos(theta))/theta/theta,B=[1-(sin(theta)/theta)]/theta^2
           V = (Matrix3d::Identity()
               + (1-cos(theta))/(theta*theta)*Omega
-              + (theta-sin(theta))/(pow(theta,3))*Omega2);
+              + (theta-sin(theta))/(pow(theta,3))*Omega2);//J=I+A*(theta*a^)+B*(theta^2*a^a^)
         }
         return SE3Quat(Quaterniond(R),V*upsilon);
       }
@@ -271,7 +273,7 @@ namespace g2o {
       {
         Matrix<double,4,4> homogeneous_matrix;
         homogeneous_matrix.setIdentity();
-        homogeneous_matrix.block(0,0,3,3) = _r.toRotationMatrix();
+        homogeneous_matrix.block(0,0,3,3) = _r.toRotationMatrix();//startRow,startCol,blockRows,blockCols
         homogeneous_matrix.col(3).head(3) = translation();
 
         return homogeneous_matrix;

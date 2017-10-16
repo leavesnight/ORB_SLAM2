@@ -49,14 +49,14 @@ public:
   /**
    * Returns a string version of the descriptor
    * @param a descriptor
-   * @return string version
+   * @return string version ((int)8bits (int)8bits ...)
    */
   static std::string toString(const TDescriptor &a);
 
   /**
    * Returns a descriptor from a string
    * @param a descriptor
-   * @param s string version
+   * @param s string version (8bits 8bits ...) can be shorter than 32*8U
    */
   static void fromString(TDescriptor &a, const std::string &s);
 
@@ -66,7 +66,7 @@ public:
    * @param mat (out) NxL 32F matrix
    */
   static void toMat32F(const std::vector<TDescriptor> &descriptors,
-    cv::Mat &mat);
+    cv::Mat &mat);//allow descriptors be empty
 
   static void toMat8U(const std::vector<TDescriptor> &descriptors,
     cv::Mat &mat);

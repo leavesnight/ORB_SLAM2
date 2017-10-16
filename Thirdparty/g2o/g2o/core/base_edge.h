@@ -57,7 +57,7 @@ namespace g2o {
 
       virtual double chi2() const 
       {
-        return _error.dot(information()*_error);
+        return _error.dot(information()*_error);//e_block=chi2=|e'*Omiga*e|=e'*Omiga*e
       }
 
       virtual const double* errorData() const { return _error.data();}

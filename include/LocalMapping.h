@@ -25,7 +25,7 @@
 #include "Map.h"
 #include "LoopClosing.h"
 #include "Tracking.h"
-#include "KeyFrameDatabase.h"
+//#include "KeyFrameDatabase.h"//unused
 
 #include <mutex>
 
@@ -40,7 +40,7 @@ class Map;
 class LocalMapping
 {
 public:
-    LocalMapping(Map* pMap, const float bMonocular);
+    LocalMapping(Map* pMap, const float bMonocular);//should use bool here
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -52,15 +52,15 @@ public:
     void InsertKeyFrame(KeyFrame* pKF);
 
     // Thread Synch
-    void RequestStop();
-    void RequestReset();
-    bool Stop();
-    void Release();
-    bool isStopped();
+    void RequestStop();//non-blocking request stop, it will finally be stopped when it's idle, used in localization mode/CorrectLoop() in LoopClosing thread
+    void RequestReset();//blocking(3ms refreshing) mode
+    bool Stop();//try to stop when requested && allowed to be stopped
+    void Release();//used in mbDeactivateLocalizationMode/CorrectLoop() in LoopClosing
+    bool isStopped();//mbStopped
     bool stopRequested();
-    bool AcceptKeyFrames();
-    void SetAcceptKeyFrames(bool flag);
-    bool SetNotStop(bool flag);
+    bool AcceptKeyFrames();//if accept KFs, mbAcceptKeyFrames
+    void SetAcceptKeyFrames(bool flag);//mbAcceptKeyFrames=flag
+    bool SetNotStop(bool flag);//true means it cannot be stopped by others
 
     void InterruptBA();
 
@@ -74,18 +74,21 @@ public:
 
 protected:
 
-    bool CheckNewKeyFrames();
-    void ProcessNewKeyFrame();
-    void CreateNewMapPoints();
+    bool CheckNewKeyFrames();//check if New KFs exit (!mlNewKeyFrames.empty())
+    void ProcessNewKeyFrame();//calculate BoW,update mlNewKeyFrames&&mlpRecentAddedMapPoints(RGBD)&&MapPoints' normal&&descriptor, update connections in covisibility graph&& spanning tree, insert KF in mpMap
+    void CreateNewMapPoints();//match CurrentKF with neighbors by BoW && validated by epipolar constraint,\
+    triangulate the far/too close points by Linear Triangulation Method/depth data, then check it through positive depth, projection error(chi2 distri.) && scale consistency,\
+    finally update pMP infomation(like mObservations,normal,descriptor,insert in mpMap,KFs,mlpRecentAddedMapPoints)
 
-    void MapPointCulling();
-    void SearchInNeighbors();
+    void MapPointCulling();//delete some bad && too long ago MapPoints in mlpRecentAddedMapPoints
+    void SearchInNeighbors();//find 2 layers(10,5) of neighbor KFs in covisibility graph, bijection serach matches in neighbors and mpCurrentKeyFrame then fuse them,\
+    update pMP's normal&&descriptor and CurrentKF's connections in covisibility graph
 
-    void KeyFrameCulling();
+    void KeyFrameCulling();//erase redundant localKFs(all 1st layer covisibility KFs), redundant means 90% close stereo MPs seen by other >=3 KFs in same/finer scale
 
-    cv::Mat ComputeF12(KeyFrame* &pKF1, KeyFrame* &pKF2);
+    cv::Mat ComputeF12(KeyFrame* &pKF1, KeyFrame* &pKF2);//calculate Fundamental Matrix F12=K1^(-T)*t12^R12*K2^(-1)
 
-    cv::Mat SkewSymmetricMatrix(const cv::Mat &v);
+    cv::Mat SkewSymmetricMatrix(const cv::Mat &v);//calculate the v^=[0 -c b;c 0 -a;-b a 0]
 
     bool mbMonocular;
 
@@ -93,7 +96,7 @@ protected:
     bool mbResetRequested;
     std::mutex mMutexReset;
 
-    bool CheckFinish();
+    bool CheckFinish();//mbFinishRequested
     void SetFinish();
     bool mbFinishRequested;
     bool mbFinished;
@@ -102,8 +105,9 @@ protected:
     Map* mpMap;
 
     LoopClosing* mpLoopCloser;
-    Tracking* mpTracker;
+    Tracking* mpTracker;//unused
 
+    
     std::list<KeyFrame*> mlNewKeyFrames;
 
     KeyFrame* mpCurrentKeyFrame;
@@ -113,6 +117,7 @@ protected:
     std::mutex mMutexNewKFs;
 
     bool mbAbortBA;
+    
 
     bool mbStopped;
     bool mbStopRequested;

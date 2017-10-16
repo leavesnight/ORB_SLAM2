@@ -43,28 +43,29 @@ public:
     void AddKeyFrame(KeyFrame* pKF);
     void AddMapPoint(MapPoint* pMP);
     void EraseMapPoint(MapPoint* pMP);
-    void EraseKeyFrame(KeyFrame* pKF);
+    void EraseKeyFrame(KeyFrame* pKF);//mspKeyFrames.erase(pKF)
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
-    void InformNewBigChange();
-    int GetLastBigChangeIdx();
+    void InformNewBigChange();//mnBigChangeIdx++, for System::MapChanged(), notice map is changed even just CorrectLoop() is run though GBA may be cancelled by a new loop
+    int GetLastBigChangeIdx();//used for System::MapChanged()
 
-    std::vector<KeyFrame*> GetAllKeyFrames();
-    std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<KeyFrame*> GetAllKeyFrames();//vec(mspKeyFrames)
+    std::vector<MapPoint*> GetAllMapPoints();//vec(mspMapPoints)
     std::vector<MapPoint*> GetReferenceMapPoints();
 
     long unsigned int MapPointsInMap();
     long unsigned  KeyFramesInMap();
 
-    long unsigned int GetMaxKFid();
+    long unsigned int GetMaxKFid();//mnMaxKFid
 
     void clear();
 
-    vector<KeyFrame*> mvpKeyFrameOrigins;
+    vector<KeyFrame*> mvpKeyFrameOrigins;//pushed pKFini in StereoInitialization() in Tracking for RGBD
 
-    std::mutex mMutexMapUpdate;
+    std::mutex mMutexMapUpdate;//update KFs' Pose and their mvpMapPoints' Pos and KF&&MP's relation(KF.mvpMapPoints&&MP.mObservations), \
+    used in LocalBA in LocalMapping && CorrectLoop()(&& SearchAndFuse()&&PoseGraphBA) in LoopClosing && GBA thread
 
     // This avoid that two points are created simultaneously in separate threads (id conflict)
-    std::mutex mMutexPointCreation;
+    std::mutex mMutexPointCreation;//used in new MapPoint() in Tracking/LocalMapping thread
 
 protected:
     std::set<MapPoint*> mspMapPoints;

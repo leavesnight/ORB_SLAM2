@@ -144,7 +144,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
 
     ComputeStereoFromRGBD(imDepth);
 
-    mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
+    mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));//for directly associated vector type mvpMapPoints,used in KF::AddMapPiont()
     mvbOutlier = vector<bool>(N,false);
 
     // This is done only for the first Frame (or after a change in the calibration)
@@ -152,6 +152,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     {
         ComputeImageBounds(imGray);
 
+	//divide the img into 64*48(rows) grids for features matching!
         mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/static_cast<float>(mnMaxX-mnMinX);
         mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/static_cast<float>(mnMaxY-mnMinY);
 
@@ -165,7 +166,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
         mbInitialComputations=false;
     }
 
-    mb = mbf/fx;
+    mb = mbf/fx;//metre
 
     AssignFeaturesToGrid();
 }
@@ -285,7 +286,7 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 
     // Project in image and check it is not outside
     const float invz = 1.0f/PcZ;
-    const float u=fx*PcX*invz+cx;
+    const float u=fx*PcX*invz+cx;//K*Xc
     const float v=fy*PcY*invz+cy;
 
     if(u<mnMinX || u>mnMaxX)
@@ -299,15 +300,15 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     const cv::Mat PO = P-mOw;
     const float dist = cv::norm(PO);
 
-    if(dist<minDistance || dist>maxDistance)
+    if(dist<minDistance || dist>maxDistance)//if it's out of the frustum, image pyramid is not effective
         return false;
 
    // Check viewing angle
     cv::Mat Pn = pMP->GetNormal();
 
-    const float viewCos = PO.dot(Pn)/dist;
+    const float viewCos = PO.dot(Pn)/dist;//use nbar(P) instead of n(Frame) because the SBP() use the best descriptor of MapPoint
 
-    if(viewCos<viewingCosLimit)
+    if(viewCos<viewingCosLimit)//if viewing angle(vec OP && vec nbar(P)) > arccos(viewingCosLimit)(here is 60 degrees), it's not in Frustum
         return false;
 
     // Predict scale in the image
@@ -316,7 +317,7 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     // Data used by the tracking
     pMP->mbTrackInView = true;
     pMP->mTrackProjX = u;
-    pMP->mTrackProjXR = u - mbf*invz;
+    pMP->mTrackProjXR = u - mbf*invz;//ur=ul-b*fx/dl
     pMP->mTrackProjY = v;
     pMP->mnTrackScaleLevel= nPredictedLevel;
     pMP->mTrackViewCos = viewCos;
@@ -345,7 +346,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
     if(nMaxCellY<0)
         return vIndices;
 
-    const bool bCheckLevels = (minLevel>0) || (maxLevel>=0);
+    const bool bCheckLevels = (minLevel>0) || (maxLevel>=0);//minLevel==0 don't need to judge
 
     for(int ix = nMinCellX; ix<=nMaxCellX; ix++)
     {
@@ -358,11 +359,11 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
             for(size_t j=0, jend=vCell.size(); j<jend; j++)
             {
                 const cv::KeyPoint &kpUn = mvKeysUn[vCell[j]];
-                if(bCheckLevels)
+                if(bCheckLevels)//if the octave is out of level range
                 {
-                    if(kpUn.octave<minLevel)
+                    if(kpUn.octave<minLevel)//-1 is also ok,0 cannot be true
                         continue;
-                    if(maxLevel>=0)
+                    if(maxLevel>=0)//avoid for -1
                         if(kpUn.octave>maxLevel)
                             continue;
                 }
@@ -370,7 +371,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
                 const float distx = kpUn.pt.x-x;
                 const float disty = kpUn.pt.y-y;
 
-                if(fabs(distx)<r && fabs(disty)<r)
+                if(fabs(distx)<r && fabs(disty)<r)//find the features in a rectangle window whose centre is (x,y)
                     vIndices.push_back(vCell[j]);
             }
         }
@@ -396,8 +397,8 @@ void Frame::ComputeBoW()
 {
     if(mBowVec.empty())
     {
-        vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
-        mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);
+        vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);//transform Mat(N*32*8U) to vec<Mat>(N*1*32*8U)
+        mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);//compute mBowVec && mFeatVec(at level (d-levelsup)6-4) of this Frame
     }
 }
 
@@ -658,7 +659,7 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
         if(d>0)
         {
             mvDepth[i] = d;
-            mvuRight[i] = kpU.pt.x-mbf/d;
+            mvuRight[i] = kpU.pt.x-mbf/d;//here maybe <0 and >=mnMaxX, suppose [mnMinX,mnMaxX), is there some problem?
         }
     }
 }

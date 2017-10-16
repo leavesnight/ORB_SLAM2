@@ -119,7 +119,7 @@ public:
    * Returns the number of words in the vocabulary
    * @return number of words
    */
-  virtual inline unsigned int size() const;
+  virtual inline unsigned int size() const;//k^d 
   
   /**
    * Returns whether the vocabulary is empty (i.e. it has not been trained)
@@ -424,7 +424,7 @@ protected:
   
   /// Words of the vocabulary (tree leaves)
   /// this condition holds: m_words[wid]->word_id == wid
-  std::vector<Node*> m_words;
+  std::vector<Node*> m_words;//maybe recording world_id instead of &m_nodes[leafid]/leafid in BowVector is to make id small
   
 };
 
@@ -1131,14 +1131,14 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
   v.clear();
   fv.clear();
   
-  if(empty()) // safe for subclasses
+  if(empty()) // safe for subclasses, if m_words.empty()
   {
     return;
   }
   
   // normalize 
   LNorm norm;
-  bool must = m_scoring_object->mustNormalize(norm);
+  bool must = m_scoring_object->mustNormalize(norm);//here use L1,L1_NORM,TF_IDF, so return true && norm=L1
   
   typename vector<TDescriptor>::const_iterator fit;
   
@@ -1147,17 +1147,16 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
     unsigned int i_feature = 0;
     for(fit = features.begin(); fit < features.end(); ++fit, ++i_feature)
     {
-      WordId id;
-      NodeId nid;
+      WordId id;//leaf node number, 0,1,2,...,<=k^d-1
+      NodeId nid;//node number 0,1,2,...,<=(k^(d+1)-1)/(k-1)-1
       WordValue w; 
       // w is the idf value if TF_IDF, 1 if TF
-      
-      transform(*fit, id, w, &nid, levelsup);
+      transform(*fit, id, w, &nid, levelsup);//rectify id,w by searching the leaf node infomation && nid(&nid!=NULL) by recording the leaf's parent id at the level (d-levelsup)
       
       if(w > 0) // not stopped
       { 
-        v.addWeight(id, w);
-        fv.addFeature(nid, i_feature);
+        v.addWeight(id, w);//get v[id]=ni*IDF
+        fv.addFeature(nid, i_feature);//recording some words' level(d-levelsup) parent node id's corresponding feature indices of a certain Frame
       }
     }
     
@@ -1166,7 +1165,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
       // unnecessary when normalizing
       const double nd = v.size();
       for(BowVector::iterator vit = v.begin(); vit != v.end(); vit++) 
-        vit->second /= nd;
+        vit->second /= nd;//(ni*IDF)/=n, calculate the TF*IDF
     }
   
   }
@@ -1223,7 +1222,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
   typename vector<NodeId>::const_iterator nit;
 
   // level at which the node must be stored in nid, if given
-  const int nid_level = m_L - levelsup;
+  const int nid_level = m_L - levelsup;//here use 6-4
   if(nid_level <= 0 && nid != NULL) *nid = 0; // root
 
   NodeId final_id = 0; // root
@@ -1235,9 +1234,9 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
     nodes = m_nodes[final_id].children;
     final_id = nodes[0];
  
-    double best_d = F::distance(feature, m_nodes[final_id].descriptor);
+    double best_d = F::distance(feature, m_nodes[final_id].descriptor);//calculate the hamming distance by the fastest way
 
-    for(nit = nodes.begin() + 1; nit != nodes.end(); ++nit)
+    for(nit = nodes.begin() + 1; nit != nodes.end(); ++nit)//find the min distance in its children; for nodes[0] has already been calculated in best_d
     {
       NodeId id = *nit;
       double d = F::distance(feature, m_nodes[id].descriptor);
@@ -1249,7 +1248,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
     }
     
     if(nid != NULL && current_level == nid_level)
-      *nid = final_id;
+      *nid = final_id;//record the nid at the level (d-levelsup) / levelsup levels from the leaf level
     
   } while( !m_nodes[final_id].isLeaf() );
 
@@ -1368,13 +1367,14 @@ bool TemplatedVocabulary<TDescriptor,F>::loadFromTextFile(const std::string &fil
 
     // nodes
     int expected_nodes =
-    (int)((pow((double)m_k, (double)m_L + 1) - 1)/(m_k - 1));
+    (int)((pow((double)m_k, (double)m_L + 1) - 1)/(m_k - 1));//1+k+k^2+k^3+...+k^d d==L
     m_nodes.reserve(expected_nodes);
 
-    m_words.reserve(pow((double)m_k, (double)m_L + 1));
+    m_words.reserve(pow((double)m_k, (double)m_L + 1));//i think m_k^m_L is enough
 
     m_nodes.resize(1);
     m_nodes[0].id = 0;
+    //now use L1,L1_NORM,TF_IDF; parent_node_id isleaf 32*8Udescriptor weight
     while(!f.eof())
     {
         string snode;
@@ -1407,7 +1407,7 @@ bool TemplatedVocabulary<TDescriptor,F>::loadFromTextFile(const std::string &fil
 
         if(nIsLeaf>0)
         {
-            int wid = m_words.size();
+            int wid = m_words.size();//start from 0
             m_words.resize(wid+1);
 
             m_nodes[nid].word_id = wid;
@@ -1415,7 +1415,7 @@ bool TemplatedVocabulary<TDescriptor,F>::loadFromTextFile(const std::string &fil
         }
         else
         {
-            m_nodes[nid].children.reserve(m_k);
+            m_nodes[nid].children.reserve(m_k);//for m_nodes[pid].children.push_back(nid);
         }
     }
 

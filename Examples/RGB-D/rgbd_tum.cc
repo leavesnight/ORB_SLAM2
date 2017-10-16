@@ -97,6 +97,9 @@ int main(int argc, char **argv)
         // Pass the image to the SLAM system
         SLAM.TrackRGBD(imRGB,imD,tframe);
 
+	//double data[9]={0.5,0.4};
+	//SLAM.SaveFrame("./test_save/",imRGB,imD,tframe);
+
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
 #else
@@ -134,7 +137,8 @@ int main(int argc, char **argv)
 
     // Save camera trajectory
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt"); 
+    SLAM.SaveMap("Map.pcd");
 
     return 0;
 }
@@ -152,16 +156,18 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
         {
             stringstream ss;
             ss << s;
-            double t;
+            double t,t2;
             string sRGB, sD;
             ss >> t;
             vTimestamps.push_back(t);
             ss >> sRGB;
             vstrImageFilenamesRGB.push_back(sRGB);
-            ss >> t;
+            ss >> t2;
             ss >> sD;
             vstrImageFilenamesD.push_back(sD);
-
+	    /*char ch[30];//at least 22+6=28
+	    sprintf(ch,"depth/%.6f.png",t);
+	    vstrImageFilenamesD.push_back(ch);*/
         }
     }
 }

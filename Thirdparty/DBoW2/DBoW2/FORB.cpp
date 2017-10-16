@@ -46,7 +46,7 @@ void FORB::meanValue(const std::vector<FORB::pDescriptor> &descriptors,
       const cv::Mat &d = *descriptors[i];
       const unsigned char *p = d.ptr<unsigned char>();
       
-      for(int j = 0; j < d.cols; ++j, ++p)
+      for(int j = 0; j < d.cols; ++j, ++p)//add all the same position bits into vector[i]
       {
         if(*p & (1 << 7)) ++sum[ j*8     ];
         if(*p & (1 << 6)) ++sum[ j*8 + 1 ];
@@ -65,7 +65,7 @@ void FORB::meanValue(const std::vector<FORB::pDescriptor> &descriptors,
     const int N2 = (int)descriptors.size() / 2 + descriptors.size() % 2;
     for(size_t i = 0; i < sum.size(); ++i)
     {
-      if(sum[i] >= N2)
+      if(sum[i] >= N2)//the same as cvRound(sum[i]/descriptors.size())
       {
         // set bit
         *p |= 1 << (7 - (i % 8));

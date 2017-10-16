@@ -104,7 +104,7 @@ cv::Mat Converter::toCvSE3(const Eigen::Matrix<double,3,3> &R, const Eigen::Matr
         cvMat.at<float>(i,3)=t(i);
     }
 
-    return cvMat.clone();
+    return cvMat.clone();//I think it's useless to use clone()!
 }
 
 Eigen::Matrix<double,3,1> Converter::toVector3d(const cv::Mat &cvVector)

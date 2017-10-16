@@ -76,7 +76,7 @@ namespace g2o {
   class  RobustKernelHuber : public RobustKernel
   {
     public:
-      virtual void setDelta(double delta);
+      virtual void setDelta(double delta);//optimization target=KernelHuber(block)=H(e)={1/2*e sqrt(e)<=delta;delta(sqrt(e)-1/2*delta) others}
       virtual void setDeltaSqr(const double &delta, const double &deltaSqr);
       virtual void robustify(double e2, Eigen::Vector3d& rho) const;
 

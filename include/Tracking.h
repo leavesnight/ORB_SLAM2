@@ -69,7 +69,7 @@ public:
     // Load new settings
     // The focal lenght should be similar or scale prediction will fail when projecting points
     // TODO: Modify MapPoint::PredictScale to take into account focal lenght
-    void ChangeCalibration(const string &strSettingPath);
+    void ChangeCalibration(const string &strSettingPath);//unused here
 
     // Use this function if you have deactivated local mapping and you only want to localize the camera.
     void InformOnlyTracking(const bool &flag);
@@ -79,7 +79,7 @@ public:
 
     // Tracking states
     enum eTrackingState{
-        SYSTEM_NOT_READY=-1,
+        SYSTEM_NOT_READY=-1,//used by FrameDrawer, not Tracking
         NO_IMAGES_YET=0,
         NOT_INITIALIZED=1,
         OK=2,
@@ -90,11 +90,11 @@ public:
     eTrackingState mLastProcessedState;
 
     // Input sensor
-    int mSensor;
+    int mSensor;//ORB_SLAM2::System::eSensor
 
     // Current Frame
     Frame mCurrentFrame;
-    cv::Mat mImGray;
+    cv::Mat mImGray;//used by FrameDrawer
 
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
@@ -108,7 +108,7 @@ public:
     list<cv::Mat> mlRelativeFramePoses;
     list<KeyFrame*> mlpReferences;
     list<double> mlFrameTimes;
-    list<bool> mlbLost;
+    list<bool> mlbLost;//true for lost!
 
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
@@ -118,10 +118,10 @@ public:
 protected:
 
     // Main tracking function. It is independent of the input sensor.
-    void Track();
+    void Track(cv::Mat img[2]=nullptr);//img[2] recorded by KFs
 
     // Map initialization for stereo and RGB-D
-    void StereoInitialization();
+    void StereoInitialization(cv::Mat img[2]=nullptr);
 
     // Map initialization for monocular
     void MonocularInitialization();
@@ -142,7 +142,7 @@ protected:
     void SearchLocalPoints();
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame();
+    void CreateNewKeyFrame(cv::Mat img[2]=nullptr);
 
     // In case of performing only localization, this flag is true when there are no matches to
     // points in the map. Still tracking will continue if there are enough matches with temporal points.
@@ -166,7 +166,7 @@ protected:
     Initializer* mpInitializer;
 
     //Local Map
-    KeyFrame* mpReferenceKF;
+    KeyFrame* mpReferenceKF;//corresponding to mCurrentFrame(most of time ==mCurrentFrame.mpReferenceKF)
     std::vector<KeyFrame*> mvpLocalKeyFrames;
     std::vector<MapPoint*> mvpLocalMapPoints;
     
@@ -193,13 +193,13 @@ protected:
     // Threshold close/far points
     // Points seen as close by the stereo/RGBD sensor are considered reliable
     // and inserted from just one frame. Far points requiere a match in two keyframes.
-    float mThDepth;
+    float mThDepth;//40b, here TUM use 3.2(m)
 
     // For RGB-D inputs only. For some datasets (e.g. TUM) the depthmap values are scaled.
     float mDepthMapFactor;
 
     //Current matches in frame
-    int mnMatchesInliers;
+    int mnMatchesInliers;//rectified in TrackLocalMap()
 
     //Last Frame, KeyFrame and Relocalisation Info
     KeyFrame* mpLastKeyFrame;

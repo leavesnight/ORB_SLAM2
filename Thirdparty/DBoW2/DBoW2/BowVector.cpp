@@ -33,9 +33,9 @@ BowVector::~BowVector(void)
 
 void BowVector::addWeight(WordId id, WordValue v)
 {
-  BowVector::iterator vit = this->lower_bound(id);
+  BowVector::iterator vit = this->lower_bound(id);//vit->first>=id
   
-  if(vit != this->end() && !(this->key_comp()(id, vit->first)))
+  if(vit != this->end() && !(this->key_comp()(id, vit->first)))//judge if id exists in map, if (vit->first==id)
   {
     vit->second += v;
   }
@@ -64,7 +64,7 @@ void BowVector::normalize(LNorm norm_type)
   double norm = 0.0; 
   BowVector::iterator it;
 
-  if(norm_type == DBoW2::L1)
+  if(norm_type == DBoW2::L1)//normalize: bowvec[i]=bowvec[i]/(sigma{|bowvec[i]|})
   {
     for(it = begin(); it != end(); ++it)
       norm += fabs(it->second);

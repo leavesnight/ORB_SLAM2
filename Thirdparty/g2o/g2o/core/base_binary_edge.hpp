@@ -133,18 +133,19 @@ void BaseBinaryEdge<D, E, VertexXiType, VertexXjType>::linearizeOplus()
   VertexXiType* vi = static_cast<VertexXiType*>(_vertices[0]);
   VertexXjType* vj = static_cast<VertexXjType*>(_vertices[1]);
 
-  bool iNotFixed = !(vi->fixed());
-  bool jNotFixed = !(vj->fixed());
+  bool iNotFixed = !(vi->fixed());//0 false in EdgeSim3ProjectXYZ
+  bool jNotFixed = !(vj->fixed());//1 true/not fixed in EdgeSim3ProjectXYZ/OptimizeSim3() in LoopClosing
 
   if (!iNotFixed && !jNotFixed)
     return;
+  //at least one is unfixed
 
 #ifdef G2O_OPENMP
   vi->lockQuadraticForm();
   vj->lockQuadraticForm();
 #endif
 
-  const double delta = 1e-9;
+  const double delta = 1e-9;//<<1
   const double scalar = 1.0 / (2*delta);
   ErrorVector errorBak;
   ErrorVector errorBeforeNumeric = _error;
@@ -173,27 +174,27 @@ void BaseBinaryEdge<D, E, VertexXiType, VertexXjType>::linearizeOplus()
     } // end dimension
   }
 
-  if (jNotFixed) {
-    //Xj - estimate the jacobian numerically
-    double add_vj[VertexXjType::Dimension];
+  if (jNotFixed) {//true in EdgeSim3ProjectXYZ
+    //Xj - estimate the jacobian numerically, Jj=par(e)/par(zeta).t()=2*7 in EdgeSim3ProjectXYZ
+    double add_vj[VertexXjType::Dimension];//7 in EdgeSim3ProjectXYZ
     std::fill(add_vj, add_vj + VertexXjType::Dimension, 0.0);
     // add small step along the unit vector in each dimension
     for (int d = 0; d < VertexXjType::Dimension; ++d) {
       vj->push();
       add_vj[d] = delta;
-      vj->oplus(add_vj);
-      computeError();
+      vj->oplus(add_vj);//vj will use oplusImpl(add_vj) to update itself
+      computeError();//compute the member data _error(2*1 in EdgeSim3ProjectXYZ)
       errorBak = _error;
       vj->pop();
       vj->push();
       add_vj[d] = -delta;
       vj->oplus(add_vj);
       computeError();
-      errorBak -= _error;
+      errorBak -= _error;//errorBak=delta(e)(only changing vj[d])=e(vj[d]+delta)-e(vj[d]-delta) (so scalar uses 2*delta)
       vj->pop();
       add_vj[d] = 0.0;
 
-      _jacobianOplusXj.col(d) = scalar * errorBak;
+      _jacobianOplusXj.col(d) = scalar * errorBak;//D*1, [par(e)/par(vj).t()].col(d)=delta(e)/delta(vj[d])=errorBack/(2*delta), (2*1 in EdgeSim3ProjectXYZ)
     }
   } // end dimension
 

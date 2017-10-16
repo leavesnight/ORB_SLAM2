@@ -40,27 +40,27 @@ class MapPoint
 {
 public:
     MapPoint(const cv::Mat &Pos, KeyFrame* pRefKF, Map* pMap);
-    MapPoint(const cv::Mat &Pos,  Map* pMap, Frame* pFrame, const int &idxF);
+    MapPoint(const cv::Mat &Pos,  Map* pMap, Frame* pFrame, const int &idxF);//used in localization mode tracking
 
-    void SetWorldPos(const cv::Mat &Pos);
+    void SetWorldPos(const cv::Mat &Pos);//Pos.copyTo(mWorldPos)
     cv::Mat GetWorldPos();
 
-    cv::Mat GetNormal();
-    KeyFrame* GetReferenceKeyFrame();
+    cv::Mat GetNormal();//mNormalVector
+    KeyFrame* GetReferenceKeyFrame();//mpRefKF, mpRefKF->mvpMapPoints should has this MP
 
-    std::map<KeyFrame*,size_t> GetObservations();
+    std::map<KeyFrame*,size_t> GetObservations();//mObservations
     int Observations();
 
-    void AddObservation(KeyFrame* pKF,size_t idx);
-    void EraseObservation(KeyFrame* pKF);
+    void AddObservation(KeyFrame* pKF,size_t idx);//mObservations[pKF]=idx;nObs+=2/1;
+    void EraseObservation(KeyFrame* pKF);//mObservations.erase(pKF), update nObs and when nObs<=2 ->SetBadFlag()
 
-    int GetIndexInKeyFrame(KeyFrame* pKF);
+    int GetIndexInKeyFrame(KeyFrame* pKF);//mObservations[pKF](-1 unfound)
     bool IsInKeyFrame(KeyFrame* pKF);
 
-    void SetBadFlag();
-    bool isBad();
+    void SetBadFlag();//mbBad=true && delete this MP/matches in this->mObservations.first(KFs) && mObservations.clear() && delete this MP in mpMap
+    bool isBad();//mbBad
 
-    void Replace(MapPoint* pMP);    
+    void Replace(MapPoint* pMP);//SetBadFlag() && replace this MP by pMP in this->mObservations.first(KFs)
     MapPoint* GetReplaced();
 
     void IncreaseVisible(int n=1);
@@ -70,14 +70,14 @@ public:
         return mnFound;
     }
 
-    void ComputeDistinctiveDescriptors();
+    void ComputeDistinctiveDescriptors();//Take the descriptor with least median distance to the rest
 
     cv::Mat GetDescriptor();
 
     void UpdateNormalAndDepth();
 
-    float GetMinDistanceInvariance();
-    float GetMaxDistanceInvariance();
+    float GetMinDistanceInvariance();//0.8*mfMinDistance
+    float GetMaxDistanceInvariance();//1.2*mfMaxDistance
     int PredictScale(const float &currentDist, KeyFrame*pKF);
     int PredictScale(const float &currentDist, Frame* pF);
 
@@ -99,15 +99,15 @@ public:
     long unsigned int mnLastFrameSeen;
 
     // Variables used by local mapping
-    long unsigned int mnBALocalForKF;
-    long unsigned int mnFuseCandidateForKF;
+    long unsigned int mnBALocalForKF;//local BA in LocalMapping
+    long unsigned int mnFuseCandidateForKF;//fuse in LocalMapping
 
     // Variables used by loop closing
-    long unsigned int mnLoopPointForKF;
-    long unsigned int mnCorrectedByKF;
-    long unsigned int mnCorrectedReference;    
-    cv::Mat mPosGBA;
-    long unsigned int mnBAGlobalForKF;
+    long unsigned int mnLoopPointForKF;//used in ComputeSim3() in LoopClosing
+    long unsigned int mnCorrectedByKF;//avoid duplications, used in CorrectLoop()(&& PoseGraphBA) in LoopClosing 
+    long unsigned int mnCorrectedReference;//ID of the KF which has corrected this MP's mWordPos, used in CorrectLoop() && PoseGraphBA in Optimizer.cc
+    cv::Mat mPosGBA;//optimized Pos in the end of GBA
+    long unsigned int mnBAGlobalForKF;//mpCurrentKF calling GBA
 
 
     static std::mutex mGlobalMutex;
@@ -120,18 +120,18 @@ protected:
      // Keyframes observing the point and associated index in keyframe
      std::map<KeyFrame*,size_t> mObservations;
 
-     // Mean viewing direction
+     // Mean viewing direction (not definitely normalized)
      cv::Mat mNormalVector;
 
      // Best descriptor to fast matching
      cv::Mat mDescriptor;
 
-     // Reference KeyFrame
+     // Reference KeyFrame (the first KF in mObservations)
      KeyFrame* mpRefKF;
 
      // Tracking counters
-     int mnVisible;
-     int mnFound;
+     int mnVisible;//number of KFs with visible matches
+     int mnFound;//number of inliers in mnVisible
 
      // Bad flag (we do not currently erase MapPoint from memory)
      bool mbBad;

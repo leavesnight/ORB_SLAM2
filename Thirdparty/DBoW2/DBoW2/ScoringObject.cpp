@@ -33,7 +33,7 @@ double L1Scoring::score(const BowVector &v1, const BowVector &v2) const
   
   while(v1_it != v1_end && v2_it != v2_end)
   {
-    const WordValue& vi = v1_it->second;
+    const WordValue& vi = v1_it->second;//here use TF_IDF (with L1 norm, more robust when use norm)
     const WordValue& wi = v2_it->second;
     
     if(v1_it->first == v2_it->first)
@@ -46,13 +46,13 @@ double L1Scoring::score(const BowVector &v1, const BowVector &v2) const
     }
     else if(v1_it->first < v2_it->first)
     {
-      // move v1 forward
-      v1_it = v1.lower_bound(v2_it->first);
+      // move v1 forward for score+=0
+      v1_it = v1.lower_bound(v2_it->first);//jump lots of ++v1_it
       // v1_it = (first element >= v2_it.id)
     }
     else
     {
-      // move v2 forward
+      // move v2 forward for score+=0
       v2_it = v2.lower_bound(v1_it->first);
       // v2_it = (first element >= v1_it.id)
     }

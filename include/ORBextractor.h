@@ -37,8 +37,8 @@ public:
     void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
 
     std::vector<cv::KeyPoint> vKeys;
-    cv::Point2i UL, UR, BL, BR;
-    std::list<ExtractorNode>::iterator lit;
+    cv::Point2i UL, UR, BL, BR;//up left, up right, bottom left, bottom right
+    std::list<ExtractorNode>::iterator lit;//record pair<int,ExtractorNode*>.second as ExtractorNode::Iterator, for lNodes.erase(Iter)
     bool bNoMore;
 };
 
@@ -58,7 +58,7 @@ public:
     // Mask is ignored in the current implementation.
     void operator()( cv::InputArray image, cv::InputArray mask,
       std::vector<cv::KeyPoint>& keypoints,
-      cv::OutputArray descriptors);
+      cv::OutputArray descriptors);//all keypoints position is in level==0
 
     int inline GetLevels(){
         return nlevels;}
@@ -91,7 +91,7 @@ protected:
     std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                            const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
 
-    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);//finally unused function!
     std::vector<cv::Point> pattern;
 
     int nfeatures;
