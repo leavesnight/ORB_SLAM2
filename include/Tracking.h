@@ -83,7 +83,8 @@ public:
         NO_IMAGES_YET=0,
         NOT_INITIALIZED=1,
         OK=2,
-        LOST=3
+        LOST=3,
+        ODOMOK=4
     };
 
     eTrackingState mState;
@@ -128,18 +129,24 @@ protected:
     void CreateInitialMapMonocular();
 
     void CheckReplacedInLastFrame();
-    bool TrackReferenceKeyFrame();
-    void UpdateLastFrame();
-    bool TrackWithMotionModel();
+    bool TrackReferenceKeyFrame();//track mCurrentFrame with mpReferenceKF by SBB and motion-only BA(if nmatches is enough), then \
+    discard outliers, return nInliers>=10
+    void UpdateLastFrame();//update last Frame's Pose by reference KeyFrame&&mlRelativeFramePoses for nonlocalization mode
+    bool TrackWithMotionModel();//UpdateLastFrame, use SBP to get mCurrentFrame.mvpMapPoints, then motion-only BA(if nmatches is enough), \
+    discard outliers, return nInliers>=10 for nonlocalization mode
 
     bool Relocalization();
 
-    void UpdateLocalMap();
-    void UpdateLocalPoints();
-    void UpdateLocalKeyFrames();
+    void UpdateLocalMap();//mpMap->SetReferenceMapPoints(mvpLocalMapPoints), UpdateLocalKeyFrames&&UpdateLocalPoints
+    void UpdateLocalPoints();//use mvpLocalKeyFrames[i]->mvpMapPoints to fill mvpLocalMapPoints(avoid duplications by pMP->mnTrackReferenceForFrame)
+    void UpdateLocalKeyFrames();//use mCurrentFrame&&its covisible KFs(>=1 covisible MP)&&the KFs' neighbors(10 best covisibility KFs&&parent&&children) \
+    to make mvpLocalKeyFrames, update (mCurrentFrame.)mpReferenceKF to max covisible KF
 
-    bool TrackLocalMap();
-    void SearchLocalPoints();
+    bool TrackLocalMap();//use UpdateLocalMap&&SearchLocalPoints(mvpLocalMapPoints) to add new matched \
+    mvpMapPoints in mCurrentFrame, then motion-only BA to add Pose's accuracy and update mnMatchesInliers&&pMP->mnFound, \
+    finally may judge mnMatchesInliers to one ballot veto the mState to make it Lost
+    void SearchLocalPoints();//update mCurrentFrame->mvpMapPoints(also discard bad ones)+mvpLocalMapPoints' pMP->mnVisible&&mnLastFrameSeen and \
+    call mCurrentFrame.isInFrustum(pMP,0.5), then try to match mvpLocalMapPoints to mCurrentFrame by SBP()(add some mvpMapPoints)
 
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame(cv::Mat img[2]=nullptr);
@@ -214,6 +221,9 @@ protected:
     bool mbRGB;
 
     list<MapPoint*> mlpTemporalPoints;
+    
+    //last pose by Odom data
+    cv::Mat mLastTwcOdom;
 };
 
 } //namespace ORB_SLAM

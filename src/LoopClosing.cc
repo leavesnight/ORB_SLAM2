@@ -221,6 +221,7 @@ bool LoopClosing::DetectLoop()
     }
     else//if any candidate group is enough(counter >=3) consistent with any previous group
     {//first some detection()s won't go here
+        cout<<"DetectLoop!"<<endl;
         return true;//keep mpCurrentKF->mbNotErase==true until ComputeSim3() or even CorrectLoop()
     }
 
@@ -264,9 +265,11 @@ bool LoopClosing::ComputeSim3()
             continue;
         }
 
-        int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);
+        int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);//rectify vpMatches12 by using pKF->mFeatVec to quickly match, \
+	corresponding to pKF1/mpCurrentKF in LoopClosing
 
-        if(nmatches<20)//same threshold in TrackWithMotionModel()
+	cout<<red<<i<<": "<<nmatches<<endl;
+        if(nmatches<10)//same threshold in TrackWithMotionModel(), old 20
         {
             vbDiscarded[i] = true;
             continue;
@@ -274,7 +277,7 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);//how?
-            pSolver->SetRansacParameters(0.99,20,300);//20 is stricter than Relocalization()
+            pSolver->SetRansacParameters(0.99,10,300);//20 is stricter than Relocalization()s
             vpSim3Solvers[i] = pSolver;
         }
 
@@ -285,6 +288,7 @@ bool LoopClosing::ComputeSim3()
 
     // Perform alternatively RANSAC iterations for each candidate
     // until one is succesful or all fail
+    cout<<red<<nCandidates<<white<<endl;
     while(nCandidates>0 && !bMatch)
     {
         for(int i=0; i<nInitialCandidates; i++)
@@ -305,6 +309,7 @@ bool LoopClosing::ComputeSim3()
             // If Ransac reachs max. iterations discard keyframe
             if(bNoMore)
             {
+	        cout<<red<<"NoMore"<<white<<endl;
                 vbDiscarded[i]=true;
                 nCandidates--;
             }
@@ -332,6 +337,7 @@ bool LoopClosing::ComputeSim3()
 		BA outliers in vpMapPointMatches are erased
 
                 // If optimization is succesful stop ransacs and continue
+                cout<<red<<nInliers<<white<<endl;
                 if(nInliers>=20)//looser than Relocalization() inliers' demand
                 {
                     bMatch = true;
@@ -388,8 +394,10 @@ bool LoopClosing::ComputeSim3()
             nTotalMatches++;
     }
 
+    cout<<red<<nTotalMatches<<white<<endl;
     if(nTotalMatches>=40)//similar to Relocalization() inliers' threshold
     {
+        cout<<"ComputeSim3 clear!"<<endl;
         for(int i=0; i<nInitialCandidates; i++)
             if(mvpEnoughConsistentCandidates[i]!=mpMatchedKF)
                 mvpEnoughConsistentCandidates[i]->SetErase();//allow all other loop candidate KFs to be erased

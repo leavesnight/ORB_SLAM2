@@ -302,7 +302,7 @@ void Tracking::Track(cv::Mat img[2])
             // Local Mapping is activated. This is the normal behaviour, unless
             // you explicitly activate the "only tracking" mode.
 
-            if(mState==OK)
+            if(mState==OK||mState==ODOMOK)
             {
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();//so use the replaced ones
@@ -310,7 +310,8 @@ void Tracking::Track(cv::Mat img[2])
                 if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)//if last frame relocalizes, there's no motion could be calculated
                 {
                     bOK = TrackReferenceKeyFrame();//match with rKF, use lF as initial & m-o BA
-		    cout<<red"TrackRefKF()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<endl;
+		    cout<<fixed<<setprecision(6);
+		    cout<<red"TrackRefKF()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
                 }
                 else
                 {
@@ -322,7 +323,7 @@ void Tracking::Track(cv::Mat img[2])
             else
             {
                 bOK = Relocalization();
-		cout<<green"Relocalization()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<endl;
+		cout<<green"Relocalization()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
             }
         }
         else
@@ -402,8 +403,11 @@ void Tracking::Track(cv::Mat img[2])
         // If we have an initial estimation of the camera pose and matching. Track the local map.
         if(!mbOnlyTracking)
         {
-            if(bOK)
+            if(bOK){
                 bOK = TrackLocalMap();
+		if (!bOK)
+		  cout<<red"TrackLocalMap() failed!"white<<endl;
+	    }
         }
         else
         {
@@ -416,8 +420,20 @@ void Tracking::Track(cv::Mat img[2])
 
         if(bOK)
             mState = OK;
-        else
-            mState=LOST;
+        else{//we shouldn't make it LOST for robustness
+            //mState=LOST;
+	    //use Odom data to get mCurrentFrame.mTcw
+	    if (!mLastTwcOdom.empty()){//when odom data comes we suppose it cannot be empty() again
+	      unique_lock<std::mutex> lock(mpSystem->mMutexPose);
+	      mVelocity=mpSystem->mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
+	      cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
+	      
+	      mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
+	      //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
+	      mState=ODOMOK;
+	      if (mLastFrame.mTcw.empty()) cerr<<red"Wrong "<<mLastFrame.mnId<<white<<endl;
+	    }else mState=LOST;
+	}
 
         // Update drawer
         mpFrameDrawer->Update(this);
@@ -431,7 +447,13 @@ void Tracking::Track(cv::Mat img[2])
                 cv::Mat LastTwc = cv::Mat::eye(4,4,CV_32F);
                 mLastFrame.GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
                 mLastFrame.GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
-                mVelocity = mCurrentFrame.mTcw*LastTwc;
+                mVelocity = mCurrentFrame.mTcw*LastTwc;//Tc2c1/Tcl
+		/*if (!mLastTwcOdom.empty()){
+		  unique_lock<std::mutex> lock(mpSystem->mMutexPose);
+		  mVelocity=mpSystem->mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
+		  cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
+		}else
+		  mVelocity=cv::Mat();*/
             }
             else
                 mVelocity = cv::Mat();//can use odometry data here!
@@ -467,11 +489,22 @@ void Tracking::Track(cv::Mat img[2])
             // if they are outliers or not. We don't want next frame to estimate its position
             // with those points so we discard them in the frame.
             for(int i=0; i<mCurrentFrame.N;i++)
-            {
+            {//new created MPs' mvbOutlier[j] is default false
                 if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
                     mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
             }
-        }
+        }else if (mState==ODOMOK){//if it's lost in Camera mode we use Odom mode
+	    // not necessary to update motion model for mVelocity is already got through odom data
+	    
+	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
+	    if(NeedNewKeyFrame())
+                CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+	    for(int i=0; i<mCurrentFrame.N;i++)
+            {//new created MPs' mvbOutlier[j] is default false
+                if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
+                    mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
+            }
+	}
 
         // Reset if the camera get lost soon after initialization
         if(mState==LOST)
@@ -498,6 +531,11 @@ void Tracking::Track(cv::Mat img[2])
         mlpReferences.push_back(mpReferenceKF);
         mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
         mlbLost.push_back(mState==LOST);//false if it isn't lost, when it has Tcw, it stll can be LOST for not enough inlier MapPoints
+	
+	if (!mpSystem->mTwcOdom.empty()){
+	  unique_lock<std::mutex> lock(mpSystem->mMutexPose);
+	  mLastTwcOdom=mpSystem->mTwcOdom.clone();
+	}
     }
     else
     {
@@ -999,7 +1037,7 @@ bool Tracking::NeedNewKeyFrame()
 
     // Tracked MapPoints in the reference keyframe
     int nMinObs = 3;
-    if(nKFs<=2)//just check for one KF demand for RGBD
+    if(nKFs<=2)//just check for one(with ur>=0) KF demand for RGBD
         nMinObs=2;
     int nRefMatches = mpReferenceKF->TrackedMapPoints(nMinObs);//the number of good MinObs(for Monocular) KFs tracked MapPoints in the RefKF
 
@@ -1041,8 +1079,11 @@ bool Tracking::NeedNewKeyFrame()
     const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;//rgbd/stereo tracking weak outside(large part are far points)
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);//not too close && not too far
+    
+    //Condition 3: odom && time conditon && min new close points' demand
+    const bool c3=(mState==ODOMOK)&&(c1a||c1b||c1c)&&(nNonTrackedClose>70);
 
-    if((c1a||c1b||c1c)&&c2)
+    if((c1a||c1b||c1c)&&c2||c3)
     {
         // If the mapping accepts keyframes, insert keyframe.
         // Otherwise send a signal to interrupt BA
@@ -1153,7 +1194,9 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
 
 void Tracking::SearchLocalPoints()
 {
-    // Do not search map points already matched (in TrackWithMotionModel()/...), all of (these) map points created by CreateNewKeyFrame()/StereoInitialization()/{UpdateLastFrame()in Localization mode}
+    // Do not search map points already matched (in TrackWithMotionModel()/...), \
+    all of (these) map points created by CreateNewKeyFrame()/StereoInitialization()/{UpdateLastFrame()in Localization mode/\
+    CreateNewMapPoints() in LocalMapping}
     for(vector<MapPoint*>::iterator vit=mCurrentFrame.mvpMapPoints.begin(), vend=mCurrentFrame.mvpMapPoints.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;

@@ -47,7 +47,7 @@ public:
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
-    cv::Mat GetPose();
+    cv::Mat GetPose();//Tcw
     cv::Mat GetPoseInverse();
     cv::Mat GetCameraCenter();
     cv::Mat GetStereoCenter();
@@ -60,13 +60,13 @@ public:
     // Covisibility graph functions
     void AddConnection(KeyFrame* pKF, const int &weight);
     void EraseConnection(KeyFrame* pKF);//mConnectedKeyFrameWeights.erase(pKF) && UpdateBestCovisibles()
-    void UpdateConnections();//first connect other KFs to this, then connect this to other KFs/update this->mConnectedKeyFrameWeights...; an undirected graph(covisibility graph)
+    void UpdateConnections(KeyFrame* pLastKF=nullptr);//first connect other KFs to this, then connect this to other KFs/update this->mConnectedKeyFrameWeights...; an undirected graph(covisibility graph)
     void UpdateBestCovisibles();//update mvpOrderedConnectedKeyFrames && mvOrderedWeights by sort()
     std::set<KeyFrame *> GetConnectedKeyFrames();//set made from mConnectedKeyFrameWeights[i].first
     std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();//mvpOrderedConnectedKeyFrames
-    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);//get N farthest KFs in covisibility graph(map<KF*,int>)
-    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);//get some farthest KFs in covisibility graph whose weight<=w
-    int GetWeight(KeyFrame* pKF);//mConnectedKeyFrameWeights[pKF](0 no found)
+    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);//get N closest KFs in covisibility graph(map<KF*,int>)
+    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);//get some closest KFs in covisibility graph whose weight>=w
+    int GetWeight(KeyFrame* pKF);//mConnectedKeyFrameWeights[pKF](0 no found), now 0 maybe found rectified by zzhs
 
     // Spanning tree functions
     void AddChild(KeyFrame* pKF);//mspChildrens.insert(pKF)
@@ -87,7 +87,7 @@ public:
     void ReplaceMapPointMatch(const size_t &idx, MapPoint* pMP);
     std::set<MapPoint*> GetMapPoints();//make set from good mvpMapPoints
     std::vector<MapPoint*> GetMapPointMatches();//mvpMapPoints
-    int TrackedMapPoints(const int &minObs);
+    int TrackedMapPoints(const int &minObs);//return the number of good mvpMapPoints whose nObs>=minObs
     MapPoint* GetMapPoint(const size_t &idx);//mvpMapPoints[idx]
 
     // KeyPoint functions

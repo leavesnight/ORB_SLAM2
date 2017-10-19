@@ -49,13 +49,13 @@ public:
     KeyFrame* GetReferenceKeyFrame();//mpRefKF, mpRefKF->mvpMapPoints should has this MP
 
     std::map<KeyFrame*,size_t> GetObservations();//mObservations
-    int Observations();
+    int Observations();//nObs
 
     void AddObservation(KeyFrame* pKF,size_t idx);//mObservations[pKF]=idx;nObs+=2/1;
     void EraseObservation(KeyFrame* pKF);//mObservations.erase(pKF), update nObs and when nObs<=2 ->SetBadFlag()
 
     int GetIndexInKeyFrame(KeyFrame* pKF);//mObservations[pKF](-1 unfound)
-    bool IsInKeyFrame(KeyFrame* pKF);
+    bool IsInKeyFrame(KeyFrame* pKF);//mObservations.count(pKF)
 
     void SetBadFlag();//mbBad=true && delete this MP/matches in this->mObservations.first(KFs) && mObservations.clear() && delete this MP in mpMap
     bool isBad();//mbBad
@@ -130,8 +130,8 @@ protected:
      KeyFrame* mpRefKF;
 
      // Tracking counters
-     int mnVisible;//number of KFs with visible matches
-     int mnFound;//number of inliers in mnVisible
+     int mnVisible;//number of Frames with visible matches in SearchLocalPoints() in Tracking
+     int mnFound;//number of inliers in mnVisible in TrackLocalMap()/Track(for localization mode) in Tracking
 
      // Bad flag (we do not currently erase MapPoint from memory)
      bool mbBad;

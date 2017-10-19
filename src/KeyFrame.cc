@@ -188,13 +188,13 @@ vector<KeyFrame*> KeyFrame::GetCovisiblesByWeight(const int &w)
     if(mvpOrderedConnectedKeyFrames.empty())
         return vector<KeyFrame*>();
 
-    vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(),mvOrderedWeights.end(),w,KeyFrame::weightComp);//last >= w, here is last <= w for weightComp is >
+    vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(),mvOrderedWeights.end(),w,KeyFrame::weightComp);//first > w, here is first < w for weightComp is >
     if(it==mvOrderedWeights.end())
         return vector<KeyFrame*>();
     else
     {
         int n = it-mvOrderedWeights.begin();
-        return vector<KeyFrame*>(mvpOrderedConnectedKeyFrames.begin(), mvpOrderedConnectedKeyFrames.begin()+n);//maybe n+1 is better
+        return vector<KeyFrame*>(mvpOrderedConnectedKeyFrames.begin(), mvpOrderedConnectedKeyFrames.begin()+n);//n is right for the number of element whose value>=w
     }
 }
 
@@ -286,7 +286,7 @@ MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
     return mvpMapPoints[idx];
 }
 
-void KeyFrame::UpdateConnections()
+void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 {
     map<KeyFrame*,int> KFcounter;
 
@@ -320,8 +320,30 @@ void KeyFrame::UpdateConnections()
     }
 
     // This should not happen
-    if(KFcounter.empty())
+    if(KFcounter.empty()){
+        cout<<"Failed to update spanning tree! "<<mnId<<endl;
+	if (pLastKF==nullptr){
+	  cout<<"Error in parameter in UpdateConnections()"<<endl;
+	}else{
+	  pLastKF->AddConnection(this,0);//add the link from pLastKF to this
+	  //add the link from this to pLastKF
+	  KFcounter[pLastKF]=0;
+	  unique_lock<mutex> lockCon(mMutexConnections);
+	  mConnectedKeyFrameWeights=KFcounter;
+	  mvpOrderedConnectedKeyFrames.clear();
+	  mvOrderedWeights.clear();
+	  mvpOrderedConnectedKeyFrames.push_back(pLastKF);
+	  mvOrderedWeights.push_back(0);//0 means it's an Odom link
+	  
+	  //if first connected then update spanning tree
+	  if (mbFirstConnection&&mnId!=0){
+	    mbFirstConnection=false;
+	    mpParent=mvpOrderedConnectedKeyFrames.front();//the closer, the first connection is better
+	    mpParent->AddChild(this);
+	  }
+	}
         return;
+    }
 
     //If the counter is greater than threshold add connection
     //In case no keyframe counter is over threshold add the one with maximum counter
@@ -356,7 +378,7 @@ void KeyFrame::UpdateConnections()
     list<int> lWs;
     for(size_t i=0; i<vPairs.size();i++)
     {
-        lKFs.push_front(vPairs[i].second);
+        lKFs.push_front(vPairs[i].second);//notice here push_front not push_back!!!
         lWs.push_front(vPairs[i].first);
     }
 
@@ -370,7 +392,7 @@ void KeyFrame::UpdateConnections()
 
         if(mbFirstConnection && mnId!=0)
         {
-            mpParent = mvpOrderedConnectedKeyFrames.front();//the farther, the first connection is better
+            mpParent = mvpOrderedConnectedKeyFrames.front();//the closer, the first connection is better
             mpParent->AddChild(this);
             mbFirstConnection = false;
         }
@@ -518,7 +540,7 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
                 }
             }
 
-            if(bContinue)//this updation(connecting culled KF's children with the KF's parent/children) is on the opposite of mbFirstConnection(the farthest covisibility KF)
+            if(bContinue)//this updation(connecting culled KF's children with the KF's parent/children) is same as mbFirstConnection(the closest covisibility KF)
             {
                 pC->ChangeParent(pP);//connect pC to its new parent pP(max covisibility in sParentCandidates)
                 sParentCandidates.insert(pC);//put pC(max covisibility child correspoding to sParentCandidates) into sParentCandidates

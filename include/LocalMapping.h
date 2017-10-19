@@ -49,7 +49,7 @@ public:
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame* pKF);
+    void InsertKeyFrame(KeyFrame* pKF);//mlNewKeyFrames.push_back(pKF) and mbAbortBA=true(stop localBA)
 
     // Thread Synch
     void RequestStop();//non-blocking request stop, it will finally be stopped when it's idle, used in localization mode/CorrectLoop() in LoopClosing thread
@@ -126,6 +126,8 @@ protected:
 
     bool mbAcceptKeyFrames;
     std::mutex mMutexAccept;
+    
+    KeyFrame* mpLastKF;
 };
 
 } //namespace ORB_SLAM

@@ -44,7 +44,7 @@ public:
     void AddMapPoint(MapPoint* pMP);
     void EraseMapPoint(MapPoint* pMP);
     void EraseKeyFrame(KeyFrame* pKF);//mspKeyFrames.erase(pKF)
-    void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
+    void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);//mvpReferenceMapPoints = vpMPs
     void InformNewBigChange();//mnBigChangeIdx++, for System::MapChanged(), notice map is changed even just CorrectLoop() is run though GBA may be cancelled by a new loop
     int GetLastBigChangeIdx();//used for System::MapChanged()
 
@@ -52,7 +52,7 @@ public:
     std::vector<MapPoint*> GetAllMapPoints();//vec(mspMapPoints)
     std::vector<MapPoint*> GetReferenceMapPoints();
 
-    long unsigned int MapPointsInMap();
+    long unsigned int MapPointsInMap();//mspMapPoints.size()
     long unsigned  KeyFramesInMap();
 
     long unsigned int GetMaxKFid();//mnMaxKFid

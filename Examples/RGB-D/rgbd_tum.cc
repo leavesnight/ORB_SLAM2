@@ -33,11 +33,72 @@ using namespace std;
 void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageFilenamesRGB,
                 vector<string> &vstrImageFilenamesD, vector<double> &vTimestamps);
 
+ORB_SLAM2::System* g_pSLAM;
+double g_simulateTimestamp=-1;
+bool g_brgbdFinished=false;
+mutex g_mutex;
+
+void odomRun(ifstream &finOdomdata,int totalNum){//must use &
+  //read until reading over
+  int nTotalNum=2+4+3*3;
+  if (totalNum!=0) nTotalNum=totalNum;
+  double* odomdata=new double[nTotalNum];
+  double timestamp;
+  
+  while (!g_pSLAM){//if it's nullptr
+    sleep(0.1);//wait 0.1s
+  }
+  while (!finOdomdata.eof()){
+    string strTmp;
+    finOdomdata>>timestamp;
+    if (finOdomdata.eof())
+      break;
+    while (1){//until the image reading time is reached
+      {
+      unique_lock<mutex> lock(g_mutex);
+      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+	break;
+      }
+      usleep(15000);//allow 15ms delay
+    }
+    for (int i=0;i<nTotalNum;++i){
+      finOdomdata>>odomdata[i];
+    }
+    g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::BOTH);
+    //cout<<green<<timestamp<<white<<endl;
+  }
+  delete []odomdata;
+  finOdomdata.close();
+  cout<<green"Simulation of Odom Data Reading is over."<<white<<endl;
+}
+
 int main(int argc, char **argv)
 {
-    if(argc != 5)
-    {
+    thread* pOdomThread=nullptr;
+    ifstream finOdomdata;
+    int totalNum=0;
+    cout<<fixed<<setprecision(6)<<endl;
+  
+    switch (argc){
+      case 5:
+	break;
+      case 7:
+	totalNum=atoi(argv[6]);
+      case 6:
+	{
+	finOdomdata.open(argv[5]);
+	if (!finOdomdata.is_open()){
+	  cerr<< red"Please check the last path_to_odometryData"<<endl;
+	  return -1;
+	}
+        string strTmp;
+	getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);
+        pOdomThread=new thread(&odomRun,ref(finOdomdata),totalNum);//must use ref()
+	}
+	break;
+      default:
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
+	cerr << red"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData)"<<endl;
         return 1;
     }
 
@@ -63,6 +124,7 @@ int main(int argc, char **argv)
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);
+    g_pSLAM=&SLAM;
 
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
@@ -80,6 +142,10 @@ int main(int argc, char **argv)
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
+	{
+	unique_lock<mutex> lock(g_mutex);
+	g_simulateTimestamp=tframe;//update g_simulateTimestamp
+	}
 
         if(imRGB.empty())
         {
@@ -120,8 +186,16 @@ int main(int argc, char **argv)
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
     }
+    {
+    unique_lock<mutex> lock(g_mutex);
+    g_brgbdFinished=true;
+    }
 
     // Stop all threads
+    if (SLAM.MapChanged()){
+      cout<<"Map is changing!Please enter s to stop!"<<endl;
+      while (cin.get()!='s') {sleep(1);}
+    }
     SLAM.Shutdown();
 
     // Tracking time statistics
@@ -139,6 +213,10 @@ int main(int argc, char **argv)
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt"); 
     SLAM.SaveMap("Map.pcd");
+    
+    //wait for pOdomThread finished
+    if (pOdomThread!=nullptr)
+      pOdomThread->join();
 
     return 0;
 }

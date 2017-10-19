@@ -36,6 +36,10 @@
 #include "ORBVocabulary.h"
 #include "Viewer.h"
 
+//for Odomdata
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
 namespace ORB_SLAM2
 {
 
@@ -55,8 +59,15 @@ public:
         STEREO=1,
         RGBD=2
     };
+    enum eOdom{
+      ENCODER=0,
+      BOTH,
+      IMU
+    };
 
 public:
+    cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
+    std::mutex mMutexPose;
 
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
     System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true);
@@ -71,6 +82,9 @@ public:
     // Input depthmap: Float (CV_32F).
     // Returns the camera pose (empty if tracking fails).
     cv::Mat TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
+    
+    // Process the given (IMU/encoder)odometry data.
+    bool TrackOdom(const double &timestamp, const double* odomdata, const char mode);
 
     // Proccess the given monocular frame
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
@@ -187,6 +201,6 @@ private:
 #define green "\e[32m"
 #define blue "\e[34m"
 #define yellow "\e[33m"
-#define white "\e[40;37m"
+#define white "\e[37m"
 
 #endif // SYSTEM_H

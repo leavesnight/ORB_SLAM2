@@ -30,7 +30,8 @@ namespace ORB_SLAM2
 
 LocalMapping::LocalMapping(Map *pMap, const float bMonocular):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
-    mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true)
+    mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
+    mpLastKF(nullptr)
 {
 }
 
@@ -161,7 +162,8 @@ void LocalMapping::ProcessNewKeyFrame()
     }    
 
     // Update links in the Covisibility Graph
-    mpCurrentKeyFrame->UpdateConnections();
+    mpCurrentKeyFrame->UpdateConnections(mpLastKF);
+    mpLastKF=mpCurrentKeyFrame;
 
     // Insert Keyframe in Map
     mpMap->AddKeyFrame(mpCurrentKeyFrame);
@@ -537,7 +539,7 @@ void LocalMapping::SearchInNeighbors()
     }
 
     // Update connections in covisibility graph, for possible changed MapPoints in fuse by projection from target KFs incurrent KF
-    mpCurrentKeyFrame->UpdateConnections();
+    mpCurrentKeyFrame->UpdateConnections(mpLastKF);
 }
 
 cv::Mat LocalMapping::ComputeF12(KeyFrame *&pKF1, KeyFrame *&pKF2)
