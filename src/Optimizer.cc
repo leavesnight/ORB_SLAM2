@@ -961,7 +961,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             }
         }
 
-        // Covisibility graph edges, a smaller(farther) part whose weight<=100 here
+        // Covisibility graph edges, a smaller(closer) part whose weight>=100
         const vector<KeyFrame*> vpConnectedKFs = pKF->GetCovisiblesByWeight(minFeat);
         for(vector<KeyFrame*>::const_iterator vit=vpConnectedKFs.begin(); vit!=vpConnectedKFs.end(); vit++)
         {
