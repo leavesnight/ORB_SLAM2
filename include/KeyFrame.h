@@ -64,8 +64,8 @@ public:
     void UpdateBestCovisibles();//update mvpOrderedConnectedKeyFrames && mvOrderedWeights by sort()
     std::set<KeyFrame *> GetConnectedKeyFrames();//set made from mConnectedKeyFrameWeights[i].first
     std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();//mvpOrderedConnectedKeyFrames
-    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);//get N farthest KFs in covisibility graph(map<KF*,int>)
-    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);//get some farthest KFs in covisibility graph whose weight<=w
+    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);//get N closest KFs in covisibility graph(map<KF*,int>)
+    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);//get some closest KFs in covisibility graph whose weight>=w
     int GetWeight(KeyFrame* pKF);//mConnectedKeyFrameWeights[pKF](0 no found)
 
     // Spanning tree functions

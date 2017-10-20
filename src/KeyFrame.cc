@@ -370,7 +370,7 @@ void KeyFrame::UpdateConnections()
 
         if(mbFirstConnection && mnId!=0)
         {
-            mpParent = mvpOrderedConnectedKeyFrames.front();//the farther, the first connection is better
+            mpParent = mvpOrderedConnectedKeyFrames.front();//the closer, the first connection is better
             mpParent->AddChild(this);
             mbFirstConnection = false;
         }
@@ -518,7 +518,7 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
                 }
             }
 
-            if(bContinue)//this updation(connecting culled KF's children with the KF's parent/children) is on the opposite of mbFirstConnection(the farthest covisibility KF)
+            if(bContinue)//this updation(connecting culled KF's children with the KF's parent/children) is the same as mbFirstConnection(the closest covisibility KF)
             {
                 pC->ChangeParent(pP);//connect pC to its new parent pP(max covisibility in sParentCandidates)
                 sParentCandidates.insert(pC);//put pC(max covisibility child correspoding to sParentCandidates) into sParentCandidates
