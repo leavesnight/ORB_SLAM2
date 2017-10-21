@@ -49,7 +49,8 @@ public:
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame* pKF);//mlNewKeyFrames.push_back(pKF) and mbAbortBA=true(stop localBA)
+    void InsertKeyFrame(KeyFrame* pKF,const char state=2);//mlNewKeyFrames.push_back(pKF) and mbAbortBA=true(stop localBA), \
+    we cannot use Traking::OK/eTrackingState here for Tracking.h and LocalMapping.h include each other
 
     // Thread Synch
     void RequestStop();//non-blocking request stop, it will finally be stopped when it's idle, used in localization mode/CorrectLoop() in LoopClosing thread
@@ -109,6 +110,7 @@ protected:
 
     
     std::list<KeyFrame*> mlNewKeyFrames;
+    //std::list<Tracking::eTrackingState> mlNewKFStates;
 
     KeyFrame* mpCurrentKeyFrame;
 
@@ -128,6 +130,7 @@ protected:
     std::mutex mMutexAccept;
     
     KeyFrame* mpLastKF;
+    unsigned long mnLastOdomKFId;
 };
 
 } //namespace ORB_SLAM

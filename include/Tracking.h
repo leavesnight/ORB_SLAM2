@@ -149,7 +149,7 @@ protected:
     call mCurrentFrame.isInFrustum(pMP,0.5), then try to match mvpLocalMapPoints to mCurrentFrame by SBP()(add some mvpMapPoints)
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame(cv::Mat img[2]=nullptr);
+    void CreateNewKeyFrame(cv::Mat img[2]=nullptr,eTrackingState state=OK);
 
     // In case of performing only localization, this flag is true when there are no matches to
     // points in the map. Still tracking will continue if there are enough matches with temporal points.

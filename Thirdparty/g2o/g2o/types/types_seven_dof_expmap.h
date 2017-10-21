@@ -57,7 +57,7 @@ namespace g2o {
       _estimate = Sim3();//Sim3: r(I),t(0),s(1)
     }
 
-    virtual void oplusImpl(const double* update_)//input 7*1; update little value(here use left disturbance model Snew=deltaS*Sold)
+    virtual void oplusImpl(const double* update_)//input 7*1(phi rho sigma); update little value(here use left disturbance model Snew=deltaS*Sold)
     {
       Eigen::Map<Vector7d> update(const_cast<double*>(update_));//we will rectify update_ then it's different from Map<const Vector7d>,\
       here use const_cast to remove the "const" to behave like oplusImpl(double* update_) && it's essential that the input update_'s original variable is not const(double* _x; in Solver.h),\

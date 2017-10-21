@@ -43,7 +43,7 @@ class KeyFrameDatabase;
 class KeyFrame
 {
 public:
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB,const char state=2);//2 is OK
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -73,7 +73,7 @@ public:
     void EraseChild(KeyFrame* pKF);
     void ChangeParent(KeyFrame* pKF);//mpParent = pKF,pKF->AddChild(this);
     std::set<KeyFrame*> GetChilds();//mspChildrens
-    KeyFrame* GetParent();
+    KeyFrame* GetParent();//mpParent
     bool hasChild(KeyFrame* pKF);//if pKF in mspChildrens
 
     // Loop Edges
@@ -115,7 +115,10 @@ public:
     static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
         return pKF1->mnId<pKF2->mnId;
     }
-
+    
+    inline char getState(){
+      return mState;
+    }
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
@@ -233,6 +236,8 @@ protected:
     std::mutex mMutexPose;
     std::mutex mMutexConnections;
     std::mutex mMutexFeatures;
+    
+    char mState;
 };
 
 } //namespace ORB_SLAM

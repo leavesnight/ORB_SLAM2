@@ -431,7 +431,7 @@ void Tracking::Track(cv::Mat img[2])
 	      mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
 	      //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
 	      mState=ODOMOK;
-	      if (mLastFrame.mTcw.empty()) cerr<<red"Wrong "<<mLastFrame.mnId<<white<<endl;
+	      cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
 	    }else mState=LOST;
 	}
 
@@ -481,8 +481,9 @@ void Tracking::Track(cv::Mat img[2])
             mlpTemporalPoints.clear();
 
             // Check if we need to insert a new keyframe!!
-            if(NeedNewKeyFrame())
+            if(NeedNewKeyFrame()){
                 CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+	    }
 
             // We allow points with high innovation (considererd outliers by the Huber Function)
             // pass to the new keyframe, so that bundle adjustment will finally decide
@@ -497,8 +498,9 @@ void Tracking::Track(cv::Mat img[2])
 	    // not necessary to update motion model for mVelocity is already got through odom data
 	    
 	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
-	    if(NeedNewKeyFrame())
-                CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+	    if(NeedNewKeyFrame()){
+                CreateNewKeyFrame(img,mState);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+	    }
 	    for(int i=0; i<mCurrentFrame.N;i++)
             {//new created MPs' mvbOutlier[j] is default false
                 if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
@@ -1109,12 +1111,12 @@ bool Tracking::NeedNewKeyFrame()
         return false;
 }
 
-void Tracking::CreateNewKeyFrame(cv::Mat img[2])
+void Tracking::CreateNewKeyFrame(cv::Mat img[2],eTrackingState state)
 {
     if(!mpLocalMapper->SetNotStop(true))//if localMapper is stopped by loop closing thread/GUI, cannot add KFs; during adding process, it cannot be stopped by others
         return;
 
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,state);
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
@@ -1163,7 +1165,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
                 if(bCreateNew)
                 {
                     cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
-                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap);
+                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap,state);
                     pNewMP->AddObservation(pKF,i);
                     pKF->AddMapPoint(pNewMP,i);
                     pNewMP->ComputeDistinctiveDescriptors();
@@ -1184,7 +1186,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
         }
     }
 
-    mpLocalMapper->InsertKeyFrame(pKF);
+    mpLocalMapper->InsertKeyFrame(pKF,state);
 
     mpLocalMapper->SetNotStop(false);
 

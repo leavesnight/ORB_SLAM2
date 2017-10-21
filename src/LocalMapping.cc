@@ -31,7 +31,7 @@ namespace ORB_SLAM2
 LocalMapping::LocalMapping(Map *pMap, const float bMonocular):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-    mpLastKF(nullptr)
+    mpLastKF(nullptr),mnLastOdomKFId(0)
 {
 }
 
@@ -78,7 +78,7 @@ void LocalMapping::Run()
             if(!CheckNewKeyFrames() && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2)//at least 3 KFs in mpMap
+                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4)//at least 3 KFs in mpMap, should add Odom condition here!
                     Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);//local BA
 
                 // Check redundant local Keyframes
@@ -112,11 +112,15 @@ void LocalMapping::Run()
     SetFinish();
 }
 
-void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
+void LocalMapping::InsertKeyFrame(KeyFrame *pKF,const char state)
 {
     unique_lock<mutex> lock(mMutexNewKFs);
     mlNewKeyFrames.push_back(pKF);
     mbAbortBA=true;//stop localBA
+    
+    if (state==(char)Tracking::ODOMOK){
+      mnLastOdomKFId=pKF->mnId;
+    }
 }
 
 
@@ -162,7 +166,14 @@ void LocalMapping::ProcessNewKeyFrame()
     }    
 
     // Update links in the Covisibility Graph
+    if (mpLastKF!=nullptr&&mpLastKF->getState()==Tracking::ODOMOK
+      &&mpCurrentKeyFrame->getState()==Tracking::ODOMOK){//not a good start then delete the last Odom KF and its Odom MPs
+      KeyFrame* pKFTmp=mpLastKF;
+      mpLastKF=mpLastKF->GetParent();
+      pKFTmp->SetBadFlag();
+    }
     mpCurrentKeyFrame->UpdateConnections(mpLastKF);
+    //if (mpCurrentKeyFrame->getState()==(char)Tracking::OK)
     mpLastKF=mpCurrentKeyFrame;
 
     // Insert Keyframe in Map
@@ -539,7 +550,7 @@ void LocalMapping::SearchInNeighbors()
     }
 
     // Update connections in covisibility graph, for possible changed MapPoints in fuse by projection from target KFs incurrent KF
-    mpCurrentKeyFrame->UpdateConnections(mpLastKF);
+    mpCurrentKeyFrame->UpdateConnections();
 }
 
 cv::Mat LocalMapping::ComputeF12(KeyFrame *&pKF1, KeyFrame *&pKF2)
@@ -700,8 +711,12 @@ void LocalMapping::KeyFrameCulling()
             }
         }  
 
-        if(nRedundantObservations>0.9*nMPs)
+        if(nRedundantObservations>0.9*nMPs){
+	    if (mpLastKF==pKF){
+	      mpLastKF=pKF->GetParent();
+	    }
             pKF->SetBadFlag();
+	}
     }
 }
 
