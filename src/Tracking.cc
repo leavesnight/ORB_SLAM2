@@ -424,14 +424,34 @@ void Tracking::Track(cv::Mat img[2])
             //mState=LOST;
 	    //use Odom data to get mCurrentFrame.mTcw
 	    if (!mLastTwcOdom.empty()){//when odom data comes we suppose it cannot be empty() again
-	      unique_lock<std::mutex> lock(mpSystem->mMutexPose);
-	      mVelocity=mpSystem->mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
-	      cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
-	      
-	      mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
-	      //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
-	      mState=ODOMOK;
-	      cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
+	      {
+		unique_lock<std::mutex> lock(mpSystem->mMutexPose);
+		if (mpSystem->mtimestampOdom>mLastTimestamp){
+		  mVelocity=mpSystem->mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
+		  mVtmspan=mpSystem->mtimestampOdom-mLastTimestamp;//update deltat
+		}else{//==0 then keep the old mVelocity and deltat
+		}
+	      }
+	      if (!mVelocity.empty()){
+		cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
+		
+		if (mVtmspan==0){
+		  mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
+		  cout<<red<<"mVtmspan == 0!"<<white<<endl;
+		}else{
+		  Eigen::AngleAxisd angAxis(Converter::toMatrix3d(mVelocity.rowRange(0,3).colRange(0,3)));
+		  Eigen::AngleAxisd angAxisToUse(angAxis.angle()*(mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp)/mVtmspan,angAxis.axis());
+		  Eigen::Vector3d trans(mVelocity.at<float>(0,3),mVelocity.at<float>(1,3),mVelocity.at<float>(2,3));
+		  mCurrentFrame.SetPose(Converter::toCvSE3(angAxisToUse.matrix(),trans*(mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp)/mVtmspan)
+		  *mLastFrame.mTcw);
+		}
+		//it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
+		mState=ODOMOK;
+		cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
+	      }else{
+		mState=LOST;
+		cout<<red"Error when mVelocity.empty()"<<white<<endl;
+	      }
 	    }else mState=LOST;
 	}
 
@@ -448,6 +468,7 @@ void Tracking::Track(cv::Mat img[2])
                 mLastFrame.GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
                 mLastFrame.GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
                 mVelocity = mCurrentFrame.mTcw*LastTwc;//Tc2c1/Tcl
+                mVtmspan=mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp;
 		/*if (!mLastTwcOdom.empty()){
 		  unique_lock<std::mutex> lock(mpSystem->mMutexPose);
 		  mVelocity=mpSystem->mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
@@ -455,8 +476,10 @@ void Tracking::Track(cv::Mat img[2])
 		}else
 		  mVelocity=cv::Mat();*/
             }
-            else
+            else{
                 mVelocity = cv::Mat();//can use odometry data here!
+		cout<<red"Error in mVelocity=cv::Mat()"<<white<<endl;
+	    }
 
             mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
 
@@ -537,6 +560,7 @@ void Tracking::Track(cv::Mat img[2])
 	if (!mpSystem->mTwcOdom.empty()){
 	  unique_lock<std::mutex> lock(mpSystem->mMutexPose);
 	  mLastTwcOdom=mpSystem->mTwcOdom.clone();
+	  mLastTimestamp=mpSystem->mtimestampOdom;
 	}
     }
     else

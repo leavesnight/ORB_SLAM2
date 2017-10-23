@@ -43,7 +43,8 @@ namespace ORB_SLAM2
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer):mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false),mbActivateLocalizationMode(false),
-        mbDeactivateLocalizationMode(false)
+        mbDeactivateLocalizationMode(false),
+        mtimestampOdom(-1)
 { 
     // Output welcome message
     cout << endl <<
@@ -668,7 +669,7 @@ bool System::TrackOdom(const double &timestamp, const double* odomdata, const ch
   static const double xo_base[3]={0,0,0};//the translational difference from the centre of two driving wheels to base_link frame(the same)
   static const double xoi_o[3]={0.024,0.324,-0.461};
   static int estimate_mode=0;
-  static double lasttime=-1,st_vtmpt,st_wtmpt;
+  static double st_vtmpt,st_wtmpt;//lasttime is replaced by mtimestampOdom
   double vtmpt,wtmpt;
   double deltat=0;
   double vtmp,wtmp,v[2]={odomdata[0],odomdata[1]},arrq[4]={odomdata[2],odomdata[3],odomdata[4],odomdata[5]};
@@ -681,7 +682,7 @@ bool System::TrackOdom(const double &timestamp, const double* odomdata, const ch
   To_base.pretranslate(Eigen::Vector3d(xo_base));Tbase_o=To_base.inverse();
   
   //get the Tw_base/Todom_baselink
-  if (lasttime<0){
+  if (mtimestampOdom<0){
     //xt[2]=xt[1]=xt[0]=0;
     if (mode==1){//if you may use mode==1, this must be true at first time
       //get initial Tbase_c
@@ -716,7 +717,7 @@ bool System::TrackOdom(const double &timestamp, const double* odomdata, const ch
       //std::cout<<theta_tmp*180/M_PI<<" degrees"<<std::endl<<setprecision(nTmp);
     }
     ///hall sensor data(counts during 10s)/400*pi*2*radius(mm)/1000/10=velocity
-    deltat=timestamp-lasttime;
+    deltat=timestamp-mtimestampOdom;
     vtmpt=(v[0]+v[1])/2*vscaleforhall;wtmpt=(v[1]-v[0])/2*wscaleforhall;
     vtmp=(vtmpt+st_vtmpt)/2;//v1=v-vw;v2=v+vw => v=(v1+v2)/2
     wtmp=(wtmpt+st_wtmpt)/2;// => w=(v2-v1)/2/r
@@ -763,16 +764,17 @@ bool System::TrackOdom(const double &timestamp, const double* odomdata, const ch
   Two.pretranslate(Eigen::Vector3d(xt[0],xt[1],0));
   Tb0_base=Tbase_o*Two*To_base;//though Tocr.inverse() is independent of the shape of the trajectory!
   Tw_camera=Tbase_c.inverse()*Tb0_base*Tbase_c;//Tcamera0_camera
-  //first lasttime initialization must be mode==1
-  if (mode==1||mode<2&&lasttime>=0){//2 just publish, don't update st_xt
+  
+  unique_lock<std::mutex> lock(mMutexPose);
+  //first lasttime(mtimestampOdom) initialization must be mode==1
+  if (mode==1||mode<2&&mtimestampOdom>=0){//2 just publish, don't update st_xt
     for (int i=0;i<3;++i)
       st_xt[i]=xt[i];
-    lasttime=timestamp;
+    mtimestampOdom=timestamp;
     st_wtmpt=wtmpt;st_vtmpt=vtmpt;
   }
-  streamsize nTmp=cout.precision(9);
+  //streamsize nTmp=cout.precision(9);
   //cout<<blue<<Tw_camera(0,3)<<" "<<Tw_camera(1,3)<<" "<<Tw_camera(2,3)<<" "<<st_xt[2]*180/M_PI<<setprecision(nTmp)<<white<<endl;
-  unique_lock<std::mutex> lock(mMutexPose);
   mTwcOdom=Converter::toCvMat(Tw_camera.matrix());
   mTcwOdom=Converter::toCvMat(Tw_camera.inverse().matrix());
   

@@ -41,8 +41,8 @@ public:
     static cv::Mat toCvMat(const g2o::SE3Quat &SE3);//transform to cv::Mat(4,4,float)
     static cv::Mat toCvMat(const g2o::Sim3 &Sim3);//get R,t,s from g2o::Sim3 and transform them to cv::Mat(4,4,CV_32F)(S)
     static cv::Mat toCvMat(const Eigen::Matrix<double,4,4> &m);//transform to cv::Mat(4,4,CV_32F)(T/S)
-    static cv::Mat toCvMat(const Eigen::Matrix3d &m);//transform to cv::Mat(3,1,CV_32F)(P/X)
-    static cv::Mat toCvMat(const Eigen::Matrix<double,3,1> &m);//transform Eigen::Matrix<double,3,1> to cv::Mat(3,1,CV_32F)
+    static cv::Mat toCvMat(const Eigen::Matrix3d &m);//transform to cv::Mat(3,3,CV_32F)
+    static cv::Mat toCvMat(const Eigen::Matrix<double,3,1> &m);//transform Eigen::Matrix<double,3,1> to cv::Mat(3,1,CV_32F)(P/X)
     static cv::Mat toCvSE3(const Eigen::Matrix<double,3,3> &R, const Eigen::Matrix<double,3,1> &t);//transform Eigen::Matrix3d(R) && Eigen::Vector3d(t) to cv::Mat(4,4,float)(T/S(here R=sR'))
 
     static Eigen::Matrix<double,3,1> toVector3d(const cv::Mat &cvVector);//transform cv::Mat(3,1,CV_32F) to Eigen::Matrix<double,3,1>

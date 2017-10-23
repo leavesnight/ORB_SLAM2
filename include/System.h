@@ -67,6 +67,7 @@ public:
 
 public:
     cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
+    double mtimestampOdom;//the odom data's timestamp now
     std::mutex mMutexPose;
 
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.

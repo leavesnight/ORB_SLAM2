@@ -224,6 +224,7 @@ protected:
     
     //last pose by Odom data
     cv::Mat mLastTwcOdom;
+    double mLastTimestamp,mVtmspan;
 };
 
 } //namespace ORB_SLAM
