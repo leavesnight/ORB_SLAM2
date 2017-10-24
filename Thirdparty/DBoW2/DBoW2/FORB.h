@@ -59,6 +59,7 @@ public:
    * @param s string version (8bits 8bits ...) can be shorter than 32*8U
    */
   static void fromString(TDescriptor &a, const std::string &s);
+  static void fromArray(TDescriptor &a,const char* arr);
 
   /**
    * Returns a mat with the descriptors in float format

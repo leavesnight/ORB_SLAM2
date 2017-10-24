@@ -133,6 +133,10 @@ void FORB::fromString(FORB::TDescriptor &a, const std::string &s)
   }
   
 }
+void FORB::fromArray(FORB::TDescriptor &a,const char* arr){
+  a.create(1,FORB::L,CV_8U);
+  memcpy(a.data,arr,FORB::L);
+}
 
 // --------------------------------------------------------------------------
 

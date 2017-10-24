@@ -82,7 +82,7 @@ protected:
     finally update pMP infomation(like mObservations,normal,descriptor,insert in mpMap,KFs,mlpRecentAddedMapPoints)
 
     void MapPointCulling();//delete some bad && too long ago MapPoints in mlpRecentAddedMapPoints
-    void SearchInNeighbors();//find 2 layers(10,5) of neighbor KFs in covisibility graph, bijection serach matches in neighbors and mpCurrentKeyFrame then fuse them,\
+    void SearchInNeighbors();//find 2 layers(10,5) of neighbor KFs in covisibility graph, bijection search matches in neighbors and mpCurrentKeyFrame then fuse them,\
     update pMP's normal&&descriptor and CurrentKF's connections in covisibility graph
 
     void KeyFrameCulling();//erase redundant localKFs(all 1st layer covisibility KFs), redundant means 90% close stereo MPs seen by other >=3 KFs in same/finer scale

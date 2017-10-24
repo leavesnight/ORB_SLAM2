@@ -322,9 +322,12 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 
     // This should not happen
     if(KFcounter.empty()){
-        cout<<"Failed to update spanning tree! "<<mnId<<endl;
+        cout<<"Failed to update spanning tree! "<<mnId<<" "<<mnFrameId<<endl;
 	if (pLastKF==nullptr){
-	  cout<<"Error in parameter in UpdateConnections()"<<endl;
+	  if (mpParent==nullptr)
+	    cout<<"Error in parameter in UpdateConnections()"<<endl;
+	  else
+	    cout<<"but has 1 parent and "<<mConnectedKeyFrameWeights.size()<<" covisibility KFs"<<endl;
 	}else{
 	  pLastKF->AddConnection(this,0);//add the link from pLastKF to this
 	  //add the link from this to pLastKF

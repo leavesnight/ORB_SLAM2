@@ -432,7 +432,7 @@ void LoopClosing::CorrectLoop()
         if(mpThreadGBA)
         {
             mpThreadGBA->detach();//detach()(nonblocking)/join()(blocking) must be called before ~thread()
-            delete mpThreadGBA;
+            delete mpThreadGBA;//notice mpThreadGBA!=NULL here
         }
     }
 

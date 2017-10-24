@@ -235,16 +235,18 @@ public:
   void setScoringType(ScoringType type);
 
   /**
-   * Loads the vocabulary from a text file
+   * Loads the vocabulary from a text/bin file
    * @param filename
    */
   bool loadFromTextFile(const std::string &filename);
+  bool loadFromBinaryFile(const std::string &filename);
 
   /**
-   * Saves the vocabulary into a text file
+   * Saves the vocabulary into a text/bin file
    * @param filename
    */
   void saveToTextFile(const std::string &filename) const;  
+  void saveToBinaryFile(const std::string &filename) const;  
 
   /**
    * Saves the vocabulary into a file
@@ -1422,6 +1424,71 @@ bool TemplatedVocabulary<TDescriptor,F>::loadFromTextFile(const std::string &fil
     return true;
 
 }
+template<class TDescriptor, class F>
+bool TemplatedVocabulary<TDescriptor,F>::loadFromBinaryFile(const std::string &filename)
+{
+    ifstream f;
+    f.open(filename.c_str(),ios_base::in|ios_base::binary);
+    if(f.eof())
+	return false;
+
+    m_words.clear();
+    m_nodes.clear();
+    unsigned int nb_nodes, size_node;
+    f.read((char*)&nb_nodes, sizeof(nb_nodes));
+    f.read((char*)&size_node, sizeof(size_node));
+    
+    f.read((char*)&m_k,sizeof(m_k));//10
+    f.read((char*)&m_L,sizeof(m_L));//6,10^6+...+1 nodes
+    int n1, n2;
+    f.read((char*)&n1,sizeof(n1));//0,TF_IDF
+    f.read((char*)&n2,sizeof(n2));//0,L1_NORM
+    if(m_k<0 || m_k>20 || m_L<1 || m_L>10 || n1<0 || n1>5 || n2<0 || n2>3
+      ||size_node!=F::L+9//should be 4(int)+32+4(float)+1(bool)
+      ||nb_nodes>(pow((double)m_k, (double)m_L + 1) - 1)/(m_k - 1))//1+k+k^2+k^3+...+k^d d==L, it should be>= nb_nodes+1
+    {
+        std::cerr << "Vocabulary loading failure: This is not a correct binary file!" << endl;
+	return false;
+    }
+    m_scoring = (ScoringType)n1;
+    m_weighting = (WeightingType)n2;
+    createScoringObject();
+    // nodes
+    m_nodes.reserve(nb_nodes);
+    m_words.reserve(pow((double)m_k, (double)m_L));//i think m_k^m_L is enough, old number is m_L+1
+    
+    m_nodes.resize(1);
+    m_nodes[0].id = 0;
+    //now use L1,L1_NORM,TF_IDF; parent_node_id isleaf 32*8Udescriptor weight
+    char buf[size_node];
+    while(!f.eof())
+    {
+	f.read(buf,size_node);
+        int nid = m_nodes.size();
+        m_nodes.resize(m_nodes.size()+1);
+	m_nodes[nid].id = nid;
+        int pid=*((int*)buf);
+        m_nodes[nid].parent = pid;
+        m_nodes[pid].children.push_back(nid);
+	
+	F::fromArray(m_nodes[nid].descriptor,(const char*)(buf+4));
+
+        m_nodes[nid].weight=(WordValue)(*(float*)(buf+4+F::L));//float to double
+        if(buf[8+F::L])//nIsLeaf
+        {
+            int wid = m_words.size();//start from 0
+            m_nodes[nid].word_id = wid;
+            m_words.push_back(&m_nodes[nid]);//&m_nodes[nid] will lead to discontinuous memory, it's not efficient
+        }
+        else
+        {
+            m_nodes[nid].children.reserve(m_k);//for m_nodes[pid].children.push_back(nid);
+        }
+    }
+    f.close();
+
+    return true;
+}
 
 // --------------------------------------------------------------------------
 
@@ -1446,6 +1513,29 @@ void TemplatedVocabulary<TDescriptor,F>::saveToTextFile(const std::string &filen
     }
 
     f.close();
+}
+template<class TDescriptor, class F>
+void TemplatedVocabulary<TDescriptor,F>::saveToBinaryFile(const std::string &filename) const {
+  fstream f;
+  f.open(filename.c_str(), ios_base::out|ios::binary);
+  unsigned int nb_nodes = m_nodes.size();
+  float _weight;
+  unsigned int size_node = sizeof(m_nodes[0].parent) + F::L*sizeof(char) + sizeof(_weight) + sizeof(bool);
+  f.write((char*)&nb_nodes, sizeof(nb_nodes));
+  f.write((char*)&size_node, sizeof(size_node));
+  f.write((char*)&m_k, sizeof(m_k));
+  f.write((char*)&m_L, sizeof(m_L));
+  f.write((char*)&m_scoring, sizeof(m_scoring));
+  f.write((char*)&m_weighting, sizeof(m_weighting));
+  for(size_t i=1; i<nb_nodes;i++) {
+    const Node& node = m_nodes[i];
+    f.write((char*)&node.parent, sizeof(node.parent));
+    f.write((char*)node.descriptor.data, F::L);
+    _weight = node.weight; f.write((char*)&_weight, sizeof(_weight));//double to float
+    bool is_leaf = node.isLeaf();
+    f.write((char*)&is_leaf, sizeof(is_leaf)); // the writer wj put this one at the end for alignement....
+  }
+  f.close();
 }
 
 // --------------------------------------------------------------------------

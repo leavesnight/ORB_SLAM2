@@ -930,6 +930,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
             e->information() = matLambda;//I
 	    if (pKF->GetWeight(pParentKF)<minFeat){
+	      //if (pKF->GetWeight(pParentKF)==0)  e->information() = matLambda*50;
 	      cout<<"Weight0/Odom link: "<<pParentKF->mnId<<" "<<pKF->mnId<<" "<<pKF->GetWeight(pParentKF)<<endl;
 	    }
             optimizer.addEdge(e);

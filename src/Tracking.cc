@@ -316,8 +316,10 @@ void Tracking::Track(cv::Mat img[2])
                 else
                 {
                     bOK = TrackWithMotionModel();//match with lF, use v*lF(velocityMM) as initial & m-o BA
-                    if(!bOK)
+                    if(!bOK){
                         bOK = TrackReferenceKeyFrame();
+			cout<<red"TrackRefKF()2"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+		    }
                 }
             }
             else
@@ -433,7 +435,7 @@ void Tracking::Track(cv::Mat img[2])
 		}
 	      }
 	      if (!mVelocity.empty()){
-		cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
+		cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
 		
 		if (mVtmspan==0){
 		  mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
