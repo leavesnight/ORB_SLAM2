@@ -113,8 +113,8 @@ public:
 
     // Variables used by loop closing
     long unsigned int mnLoopPointForKF;//used in ComputeSim3() in LoopClosing
-    long unsigned int mnCorrectedByKF;//avoid duplications, used in CorrectLoop()(&& PoseGraphBA) in LoopClosing 
-    long unsigned int mnCorrectedReference;//ID of the KF which has corrected this MP's mWordPos, used in CorrectLoop() && PoseGraphBA in Optimizer.cc
+    long unsigned int mnCorrectedByKF;//avoid duplications, used in CorrectLoop()(&& PoseGraphOpt.) in LoopClosing 
+    long unsigned int mnCorrectedReference;//ID of the KF which has corrected this MP's mWordPos, used in CorrectLoop() && PoseGraphOpt. in Optimizer.cc
     cv::Mat mPosGBA;//optimized Pos in the end of GBA
     long unsigned int mnBAGlobalForKF;//mpCurrentKF calling GBA
 

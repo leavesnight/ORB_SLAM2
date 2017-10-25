@@ -54,7 +54,7 @@ public:
                                        const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections,
-                                       const bool &bFixScale);//PoseGraph BA, update all KFs' (in pMap) Pose && all MPs' Pos to optimized one and pLoopKF's Pose is fixed(so id0 KF's Pose may be changed a bit); \
+                                       const bool &bFixScale);//PoseGraph Opt., update all KFs' (in pMap) Pose && all MPs' Pos to optimized one and pLoopKF's Pose is fixed(so id0 KF's Pose may be changed a bit); \
     add new loop edges(including pCurKF-pLoopKF as previous loop edges next time entering this function) && normal far edges(spanning tree edges/previous loop edges/far part of covisibility graph edges); \
     notice there is validation adding LoopConnections as new loop edges and optimization gives more believe on new loop edges if its number is more
 

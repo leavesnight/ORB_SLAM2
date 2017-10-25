@@ -104,7 +104,7 @@ protected:
     void CorrectLoop();//kill previous GlobalBA(GBA) && stop LocalMapping thread, update mvpCurrentConnectedKFs as mpCurrentKF && its all 1st layer covisibility KFs, \
     use corrected mg2oScw to correct mvpCurrentConnectedKFs' Pose and their observed MPs/mvpMapPoints' Pos, then firstly fuse(replace/add) mvpCurrentMatchedPoints[i] with mpCurrentKF->mvpMapPoints[i], \
     secondly call SearchAndFuse(), then make LoopConnections(new links from mvpCurrentConnectedKFs to loop KFs through CurrentConnectedKFs' covisibility graph updation) and \
-    call PoseGraphBA by these LoopConnections, finally add loop edge to mpCurrentKF && mpMatchedKF, start GBA thread, recover LocalMapping thread and update mLastLoopKFid
+    call PoseGraphOpt. by these LoopConnections, finally add loop edge to mpCurrentKF && mpMatchedKF, start GBA thread, recover LocalMapping thread and update mLastLoopKFid
 
     void ResetIfRequested();//blocking(5ms refreshing) mode
     bool mbResetRequested;

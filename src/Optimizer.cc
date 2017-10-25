@@ -870,7 +870,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             if((nIDi!=pCurKF->mnId || nIDj!=pLoopKF->mnId) && pKF->GetWeight(*sit)<minFeat)
                 continue;
 	    //if i is pCurKF && j is pLoopKF or pKF,*sit's covisible MPs' number>=100 here(notice 15 can have covisible connections, \
-	    meaning Essential graph is a smaller(closer) part of Covisibility graph, here use stricter condition for it's new loop edges(validation in PoseGraphBA))
+	    meaning Essential graph is a smaller(closer) part of Covisibility graph, here use stricter condition for it's new loop edges(validation in PoseGraphOpt.))
 
             const g2o::Sim3 Sjw = vScw[nIDj];//noncorrected but relatively accurate Sjw
             const g2o::Sim3 Sji = Sjw * Swi;//relatively accurate Sji
@@ -938,7 +938,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         // Loop edges, previous ones added by the order of el->vertex(0)->id() < el->vertex(1)->id()
         const set<KeyFrame*> sLoopEdges = pKF->GetLoopEdges();//loop edges before this CorrectLoop()/previous mspLoopEdges of pKF, \
-	notice only one(pCurKF-pLoopKF) of new loop edges will be mspLoopEdges, the reason why PoseGraphBA need lots of new loop edges for a better believe on this loop close and \
+	notice only one(pCurKF-pLoopKF) of new loop edges will be mspLoopEdges, the reason why PoseGraphOpt. need lots of new loop edges for a better believe on this loop close and \
 	optimize all KFs' Poses basing on this loop close
         for(set<KeyFrame*>::const_iterator sit=sLoopEdges.begin(), send=sLoopEdges.end(); sit!=send; sit++)
         {
@@ -1025,7 +1025,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         cv::Mat Tiw = Converter::toCvSE3(eigR,eigt);
 
-        pKFi->SetPose(Tiw);//update KF's Pose to PoseGraphBA optimized Tiw
+        pKFi->SetPose(Tiw);//update KF's Pose to PoseGraphOpt. optimized Tiw
     }
 
     // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose

@@ -62,7 +62,7 @@ public:
     vector<KeyFrame*> mvpKeyFrameOrigins;//pushed pKFini in StereoInitialization() in Tracking for RGBD
 
     std::mutex mMutexMapUpdate;//update KFs' Pose and their mvpMapPoints' Pos and KF&&MP's relation(KF.mvpMapPoints&&MP.mObservations), \
-    used in LocalBA in LocalMapping && CorrectLoop()(&& SearchAndFuse()&&PoseGraphBA) in LoopClosing && GBA thread
+    used in LocalBA in LocalMapping && CorrectLoop()(&& SearchAndFuse()&&PoseGraphOpt.) in LoopClosing && GBA thread
 
     // This avoid that two points are created simultaneously in separate threads (id conflict)
     std::mutex mMutexPointCreation;//used in new MapPoint() in Tracking/LocalMapping thread
