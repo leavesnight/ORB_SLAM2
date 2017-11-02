@@ -34,7 +34,7 @@ namespace g2o {
   using namespace Eigen;
 
   inline Matrix3d skew(const Vector3d&v);
-  inline Vector3d deltaR(const Matrix3d& R);//return (2a,2b,2c)/R(anti^)*2, notice R=(a,b,c)^
+  inline Vector3d deltaR(const Matrix3d& R);//return (a,b,c)/(R-R.t())(vee/anti^), notice R-R.t()=(a,b,c)^
   inline Vector2d project(const Vector3d&);//return normalized X3d'/X3d/z, input X3d
   inline Vector3d project(const Vector4d&);
   inline Vector3d unproject(const Vector2d&);

@@ -39,10 +39,10 @@
 
   Vector3d deltaR(const Matrix3d& R)
   {
-    Vector3d v;//(2a,2b,2c),R=(a,b,c)^
-    v(0)=R(2,1)-R(1,2);//2a
-    v(1)=R(0,2)-R(2,0);//2b
-    v(2)=R(1,0)-R(0,1);//2c
+    Vector3d v;//(a,b,c),R-R.t()=(a,b,c)^
+    v(0)=R(2,1)-R(1,2);//a
+    v(1)=R(0,2)-R(2,0);//b
+    v(2)=R(1,0)-R(0,1);//c
     return v;
   }
 
