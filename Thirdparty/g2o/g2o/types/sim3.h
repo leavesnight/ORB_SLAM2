@@ -204,8 +204,8 @@ public:
         else
         {
           double theta = acos(d);
-          omega = theta/(2*sqrt(1-d*d))*deltaR(R);//R*a=a;R(anti^)=(I(anti^)+sin(theta)/theta*phi+(1-cos(theta))/theta^2*(phi^phi^)(anti^))=sin(theta)/theta*phi \
-	  => phi=theta*a=(notice theta>=0)=theta/(2*sin(theta))*R(anti^)*2
+          omega = theta/(2*sqrt(1-d*d))*deltaR(R);//R*a=a;(R-R.t())(vee/anti^)=(I-I)(vee)+sin(theta)/theta*(phi-(-phi))+(1-cos(theta))/theta^2*(phi^phi^-phi^phi^)(vee)=phi*2*sin(theta)/theta \
+	  => phi=theta*a=(notice theta>=0)=theta/(2*sin(theta))*(R-R.t())(vee)
           Omega = skew(omega);
           double theta2 = theta*theta;
           double a=s*sin(theta);
