@@ -43,7 +43,7 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
   int nTotalNum=2+4+3*3;
   if (totalNum!=0) nTotalNum=totalNum;
   double* odomdata=new double[nTotalNum];
-  double timestamp;
+  double timestamp,tmstpLast=-1;
   
   while (!g_pSLAM){//if it's nullptr
     sleep(0.1);//wait 0.1s
@@ -64,8 +64,10 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
     for (int i=0;i<nTotalNum;++i){
       finOdomdata>>odomdata[i];
     }
-    g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::BOTH);
+    if (timestamp>tmstpLast)//avoid == condition
+      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::BOTH);
     //cout<<green<<timestamp<<white<<endl;
+    tmstpLast=timestamp;
   }
   delete []odomdata;
   finOdomdata.close();
