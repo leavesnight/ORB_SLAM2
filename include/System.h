@@ -61,15 +61,12 @@ public:
     };
     enum eOdom{
       ENCODER=0,
+      IMU,
       BOTH,
-      IMU
+      RESERVEDODOM
     };
 
 public:
-    cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
-    double mtimestampOdom;//the odom data's timestamp now
-    std::mutex mMutexPose;
-
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
     System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true);
 
@@ -84,8 +81,10 @@ public:
     // Returns the camera pose (empty if tracking fails).
     cv::Mat TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
     
-    // Process the given (IMU/encoder)odometry data.
-    bool TrackOdom(const double &timestamp, const double* odomdata, const char mode);
+    // Process the given (IMU/encoder)odometry data. \
+    mode==0:Encoder data 2 vl,vr; 1:qIMU data 4 qxyzw; \
+    2:Both 6 vl,vr,qxyzw; 3:Pure-IMU data 6 ax~z,wx~z(opposite of the order of EuRoc)
+    cv::Mat TrackOdom(const double &timestamp, const double* odomdata, const char mode);
 
     // Proccess the given monocular frame
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.

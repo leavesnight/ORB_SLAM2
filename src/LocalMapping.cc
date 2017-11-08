@@ -28,11 +28,19 @@
 namespace ORB_SLAM2
 {
 
-LocalMapping::LocalMapping(Map *pMap, const float bMonocular):
+LocalMapping::LocalMapping(Map *pMap, const float bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
     mpLastKF(nullptr),mnLastOdomKFId(0)
 {
+  cv::FileStorage fsettings(strSettingPath,cv::FileStorage::READ);
+  cv::FileNode fnSize=fsettings["LocalMapping.LocalWindowSize"];
+  if (fnSize.empty()){
+    mnWinSize=-1;
+    cout<<"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<endl;
+  }else{
+    mnWinSize=fnSize;
+  }
 }
 
 void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)

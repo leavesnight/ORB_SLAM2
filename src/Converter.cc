@@ -148,4 +148,26 @@ std::vector<float> Converter::toQuaternion(const cv::Mat &M)
     return v;
 }
 
+std::vector<float> Converter::toQuat(const Eigen::Quaterniond &q){
+  std::vector<float> v(4);
+  v[0] = q.x();v[1] = q.y();v[2] = q.z();v[3] = q.w();
+  return v;
+}
+Eigen::Matrix<double,2,2> Converter::toMatrix2d(const cv::Mat &cvMat2)
+{
+    Eigen::Matrix<double,2,2> M;
+
+    M << cvMat2.at<float>(0,0), cvMat2.at<float>(0,1),
+         cvMat2.at<float>(1,0), cvMat2.at<float>(1,1);
+
+    return M;
+}
+Eigen::Isometry3d Converter::toIsometry3d(const cv::Mat &cvMat4){//by zzh
+  Eigen::Isometry3d T;
+  for (int i=0;i<4;++i)
+    for (int j=0;j<4;++j)
+      T(i,j)=cvMat4.at<float>(i,j);
+  return T;
+}
+
 } //namespace ORB_SLAM

@@ -74,6 +74,8 @@ src/KeyFrameDatabase.cc
 src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
+src/OdomData.cpp
+src/OdomPreIntegrator.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

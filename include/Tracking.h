@@ -25,6 +25,8 @@
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
 
+#include "OdomData.h" //zzh
+
 #include"Viewer.h"
 #include"FrameDrawer.h"
 #include"Map.h"
@@ -39,6 +41,9 @@
 #include "System.h"
 
 #include <mutex>
+
+//for delay control
+#include<chrono>
 
 namespace ORB_SLAM2
 {
@@ -56,6 +61,9 @@ class Tracking
 public:
     Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Map* pMap,
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor);
+    
+    //Add Odom(Enc/IMU) data to cache queue
+    cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp);
@@ -74,9 +82,7 @@ public:
     // Use this function if you have deactivated local mapping and you only want to localize the camera.
     void InformOnlyTracking(const bool &flag);
 
-
 public:
-
     // Tracking states
     enum eTrackingState{
         SYSTEM_NOT_READY=-1,//used by FrameDrawer, not Tracking
@@ -117,7 +123,6 @@ public:
     void Reset();
 
 protected:
-
     // Main tracking function. It is independent of the input sensor.
     void Track(cv::Mat img[2]=nullptr);//img[2] recorded by KFs
 
@@ -222,9 +227,35 @@ protected:
 
     list<MapPoint*> mlpTemporalPoints;
     
+    //Created by zzh
+    // Odom PreIntegration
+    void PreIntegration(const char type=0);//0 for initialize,1 for inter-Frame PreInt.,2 for inter-KF PreInt. \
+    0/2 also is used to cull the data in 2 lists whose tm is (mLastKeyFrame.mTimeStamp,mCurrentKeyFrame.mTimeStamp], \
+    culling strategy: tm<mtmSyncOdom is discarded & tm>mCurrentFrame.mTimeStamp is reserved in lists & the left is needed for deltax~ij calculation, \
+    for the case Measurement_j-1 uses (M(tj)+M(tj-1))/2, we also reserved last left one in 2 lists(especially for Enc)
+    
+    //Consts
+    //Tbc,Tbo
+    cv::Mat mTbc,mTbo;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
+    //delay time of Odom Data received(CacheOdom) relative to the Image entering(GrabImageX), or -Camera.delaytoimu
+    double mDelayOdom;
+    //Variables
+    //cache queue for vl,vr/IMU & its own timestamp from LastKF
+    list<EncData> mlOdomEnc;
+    list<IMUData> mlOdomIMU;
+    std::mutex mMutexOdom;//for 2 lists' multithreads' operation
+    std::chrono::steady_clock::time_point mtmGrabDelay;//for delay control(we found our Enc&IMU's response has some delay=20ms)
+    list<EncData>::iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
+    list<IMUData>::iterator miterLastIMU;//Last IMUData pointer in LastFrame
+    
+    //the odom data's timestamp (now only for Encoder)
+    double mtimestampOdom;
+    cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
     //last pose by Odom data
     cv::Mat mLastTwcOdom;
     double mLastTimestamp,mVtmspan;
+    //Rwwi
+    cv::Mat mRwbwi;//Rotation Matrix from  the 0th keyframe/frame's IMU frame(wb/b0) to IMU internal Inertial frame(wi/I)
 };
 
 } //namespace ORB_SLAM

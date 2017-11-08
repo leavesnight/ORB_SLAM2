@@ -43,6 +43,15 @@ class KeyFrameDatabase;
 class KeyFrame
 {
 public:
+    // Odom PreIntegration
+    template <class _OdomData>
+    void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+      mOdomPreInt.SetPreIntegrationList<_OdomData>(begin,pback);
+    }
+    void PreIntegration(KeyFrame* pLastKF){//0th KF don't use this function
+      mOdomPreInt.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+    }
+  
     KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB,const char state=2);//2 is OK
 
     // Pose functions
@@ -201,7 +210,6 @@ protected:
     cv::Mat Tcw;
     cv::Mat Twc;
     cv::Mat Ow;
-
     cv::Mat Cw; // Stereo middel point. Only for visualization
 
     // MapPoints associated to keypoints
@@ -237,7 +245,10 @@ protected:
     std::mutex mMutexConnections;
     std::mutex mMutexFeatures;
     
+    //created by zzh
     char mState;
+    // Odom PreIntegration, j means this keyframe, i means last KF, if no measurements it will be cv::Mat()
+    OdomPreIntegrator mOdomPreInt;
 };
 
 } //namespace ORB_SLAM

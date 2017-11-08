@@ -43,8 +43,7 @@ namespace ORB_SLAM2
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer):mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false),mbActivateLocalizationMode(false),
-        mbDeactivateLocalizationMode(false),
-        mtimestampOdom(-1)
+        mbDeactivateLocalizationMode(false)
 { 
     // Output welcome message
     cout << endl <<
@@ -106,7 +105,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
                              mpMap, mpKeyFrameDatabase, strSettingsFile, mSensor);
 
     //Initialize the Local Mapping thread and launch
-    mpLocalMapper = new LocalMapping(mpMap, mSensor==MONOCULAR);
+    mpLocalMapper = new LocalMapping(mpMap, mSensor==MONOCULAR,strSettingsFile);
     mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run,mpLocalMapper);
 
     //Initialize the Loop Closing thread and launch
@@ -658,132 +657,10 @@ void System::SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthm
   fout.close();*/
 }
 
-bool System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
-//   cout<<blue<<"OdomData: ";
-//   int nTotalNum=2+4+3*3;
-//   for (int i=0;i<nTotalNum;++i)
-//     cout<<odomdata[i]<<" ";
-//   cout<<white<<endl;
+cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
+  cv::Mat Tcw=mpTracker->CacheOdom(timestamp,odomdata,mode);
   
-  static const double xbase_c[3]={0.293+0.225,-0.015,0.578-0.105};//from base frame to camera frame(ROS)/from camera coordinate to base coordinate(ORBSLAM)
-  static Eigen::Isometry3d Tbase_c(Eigen::AngleAxisd(-M_PI/2,Eigen::Vector3d(1,0,0)));//Roll/R23
-  
-  static const int ppr=400,datatime=10;//pulse per revolution,the span of the hall sensor data
-  static const double wheelradius=0.105,carradius=0.280,vscaleforhall=2.0/ppr*M_PI*wheelradius/datatime;//radius for the driving wheels(m),the half distance between two driving wheels
-  static const double wscaleforhall=vscaleforhall/carradius;
-  static const double xo_base[3]={0,0,0};//the translational difference from the centre of two driving wheels to base_link frame(the same)
-  static const double xoi_o[3]={0.024,0.324,-0.461};
-  static int estimate_mode=0;
-  static double st_vtmpt,st_wtmpt;//lasttime is replaced by mtimestampOdom
-  double vtmpt,wtmpt;
-  double deltat=0;
-  double vtmp,wtmp,v[2]={odomdata[0],odomdata[1]},arrq[4]={odomdata[2],odomdata[3],odomdata[4],odomdata[5]};
-  static double st_xt[3]={0};//x y theta
-  double xt[3];//temporary pose
-  
-  Eigen::Isometry3d To_base(Eigen::Isometry3d::Identity()),Tbase_o;
-  static Eigen::Isometry3d Toi_o(Eigen::AngleAxisd(M_PI/2,Eigen::Vector3d(0,0,1)));
-  static Eigen::Isometry3d To0_wi(Eigen::Isometry3d::Identity());//transformation/change from  the first odometry frame(centre of two wheels) to IMU internal frame(ros version meaning,not slam or coordinate meaning)
-  To_base.pretranslate(Eigen::Vector3d(xo_base));Tbase_o=To_base.inverse();
-  
-  //get the Tw_base/Todom_baselink
-  if (mtimestampOdom<0){
-    //xt[2]=xt[1]=xt[0]=0;
-    if (mode==1){//if you may use mode==1, this must be true at first time
-      //get initial Tbase_c
-      Tbase_c.prerotate(Eigen::AngleAxisd(-M_PI/2,Eigen::Vector3d(0,0,1)));//Y/R12,notice the order R12*R23=R13/YPR!
-      Tbase_c.pretranslate(Eigen::Vector3d(xbase_c));
-      
-      Toi_o.prerotate(Eigen::AngleAxisd(M_PI/2,Eigen::Vector3d(1,0,0)));
-      //cout<<Toi_o.rotation().eulerAngles(2,1,0).transpose()<<endl;
-      Toi_o.pretranslate(Eigen::Vector3d(xoi_o));
-      
-      To0_wi.prerotate(Eigen::Quaterniond(arrq));//actually use quaterniond.inverse() has some numerical error, u'd better use conjugate()!
-      To0_wi=(To0_wi*Toi_o).inverse();//Tw_wi=(Twi_oi*Toi_o)^(-1);
-      //std::cout<<arrq[0]<<" "<<arrq[1]<<" "<<arrq[2]<<" "<<arrq[3]<<std::endl;
-      //To0_wi=To0_wi.inverse();//Toi0_wi
-    }
-    vtmpt=(v[0]+v[1])/2*vscaleforhall;//v1=v-vw;v2=v+vw => v=(v1+v2)/2
-    wtmpt=(v[1]-v[0])/2*wscaleforhall;// => w=(v2-v1)/2/r
-  }else{
-    double theta_tmp;
-    if (mode==1){
-      Eigen::Isometry3d To0_o(Toi_o);//suppose w means o0 not cr0
-      To0_o.prerotate(Eigen::Quaterniond(arrq));//Tw_o=Tw_oi*Toi_o=Tw_wi*Twi_oi*Toi_o;here it's just Twi_o
-      To0_o=To0_wi*To0_o;//Tw_o=Tw_wi*Twi_o;end suppose
-      //Eigen::Isometry3d To0_o(Eigen::Isometry3d::Identity()),Twi_oi(Eigen::Quaterniond(arrq).toRotationMatrix());
-      //To0_o=To0_wi*Twi_oi;
-      Eigen::AngleAxisd rotatvec_tmp(To0_o.rotation());
-      theta_tmp=(rotatvec_tmp.angle()*rotatvec_tmp.axis()).dot(Eigen::Vector3d(0,0,1));
-      if (theta_tmp>M_PI) theta_tmp-=2*M_PI;
-      else if (theta_tmp<=-M_PI) theta_tmp+=2*M_PI;
-      //double theta2=To0_o.rotation().eulerAngles(2,1,0)[0];
-      streamsize nTmp=cout.precision(3);
-      //std::cout<<theta_tmp*180/M_PI<<" degrees"<<std::endl<<setprecision(nTmp);
-    }
-    ///hall sensor data(counts during 10s)/400*pi*2*radius(mm)/1000/10=velocity
-    deltat=timestamp-mtimestampOdom;
-    vtmpt=(v[0]+v[1])/2*vscaleforhall;wtmpt=(v[1]-v[0])/2*wscaleforhall;
-    vtmp=(vtmpt+st_vtmpt)/2;//v1=v-vw;v2=v+vw => v=(v1+v2)/2
-    wtmp=(wtmpt+st_wtmpt)/2;// => w=(v2-v1)/2/r
-    if (mode==1){
-      double delta_rect=theta_tmp-st_xt[2];
-      if (delta_rect>M_PI) delta_rect-=2*M_PI;
-      else if (delta_rect<=-M_PI) delta_rect+=2*M_PI;
-      //Complementary Filter
-      const double k_comple=0.008;//it's good between 0.006~0.01
-      /*//Kalman Filter/KF
-      double vari_rt=vari_wt*deltat*deltat;
-      //vari_rt=vari_rt2;var_qt=var_qt2;//use const variances
-      double kt_w=(vari_tht+vari_rt)/(vari_tht+var_qt+vari_rt)/deltat;//Kt/deltat*/
-      switch (estimate_mode){
-	case 0:
-	  //Complementary Filter
-	  wtmp+=k_comple*delta_rect;
-	  break;
-	/*case 1:
-	  //Kalman Filter/KF
-	  if (kt_w>1) kt_w=1;
-	  wtmp+=delta_rect*kt_w;
-	  vari_tht=(vari_tht+vari_rt)*var_qt/(vari_tht+var_qt+vari_rt);*/
-      }
-    }
-    if (wtmp!=0){
-      double v_div_w=vtmp/wtmp,dtheta=wtmp*deltat;
-      xt[0]=st_xt[0]+v_div_w*(-sin(st_xt[2])+sin(st_xt[2]+dtheta));//x'=x+-v/w*sinth+v/w*sin(th+w*dt) =v*cos(th)*dt;
-      xt[1]=st_xt[1]+v_div_w*(cos(st_xt[2])-cos(st_xt[2]+dtheta));//y'=y+v/w*costh-v/w*cos(th+w*dt) =v*sin(th)*dt;
-      xt[2]=st_xt[2]+dtheta;//th(eta)'=th+w*dt;
-      if (xt[2]>M_PI) xt[2]-=2*M_PI;
-      else if (xt[2]<=-M_PI) xt[2]+=2*M_PI;
-    }else{
-      xt[0]=st_xt[0]+vtmp*cos(st_xt[2])*deltat;
-      xt[1]=st_xt[1]+vtmp*sin(st_xt[2])*deltat;
-      xt[2]=st_xt[2];
-    }
-    //cout<<dtimetmp<<" "<<theta_tmp<<" "<<xt[2]<<" "<<"! "<<kt_w<<" "<<rotatvec_tmp.axis().transpose()<<endl;
-  }
-  Eigen::Quaterniond q(Eigen::AngleAxisd(xt[2],Eigen::Vector3d(0,0,1)));
-  //thie o means the encoder odom frame not the ros odom frame(base_link frame)
-  Eigen::Isometry3d Two(Eigen::Isometry3d::Identity()),Tb0_base,Tw_camera;//here world means the SLAM camera frame, not the crystal/base but the first frame of the camera frame
-  Two.rotate(q);//here world means the first odom frame
-  Two.pretranslate(Eigen::Vector3d(xt[0],xt[1],0));
-  Tb0_base=Tbase_o*Two*To_base;//though Tocr.inverse() is independent of the shape of the trajectory!
-  Tw_camera=Tbase_c.inverse()*Tb0_base*Tbase_c;//Tcamera0_camera
-  
-  unique_lock<std::mutex> lock(mMutexPose);
-  //first lasttime(mtimestampOdom) initialization must be mode==1
-  if (mode==1||mode<2&&mtimestampOdom>=0){//2 just publish, don't update st_xt
-    for (int i=0;i<3;++i)
-      st_xt[i]=xt[i];
-    mtimestampOdom=timestamp;
-    st_wtmpt=wtmpt;st_vtmpt=vtmpt;
-  }
-  //streamsize nTmp=cout.precision(9);
-  //cout<<blue<<Tw_camera(0,3)<<" "<<Tw_camera(1,3)<<" "<<Tw_camera(2,3)<<" "<<st_xt[2]*180/M_PI<<setprecision(nTmp)<<white<<endl;
-  mTwcOdom=Converter::toCvMat(Tw_camera.matrix());
-  mTcwOdom=Converter::toCvMat(Tw_camera.inverse().matrix());
-  
-  return true;
+  return Tcw;
 }
 
 } //namespace ORB_SLAM

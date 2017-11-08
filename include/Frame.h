@@ -21,6 +21,8 @@
 #ifndef FRAME_H
 #define FRAME_H
 
+#include "OdomPreIntegrator.h"//zzh
+
 #include<vector>
 
 #include "MapPoint.h"
@@ -43,6 +45,15 @@ class KeyFrame;
 class Frame
 {
 public:
+    // Odom PreIntegration
+    template <class _OdomData>
+    void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+      mOdomPreInt.SetPreIntegrationList<_OdomData>(begin,pback);
+    }
+    void PreIntegration(Frame* pLastF){//0th frame don't use this function
+      mOdomPreInt.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
+    }
+  
     Frame();
 
     // Copy constructor.
@@ -201,11 +212,19 @@ private:
     // Assign keypoints to the grid for speed up feature matching (called in the constructor).
     void AssignFeaturesToGrid();
 
-    // Rotation, translation and camera center
+    //adjusted by zzh
+    // Rotation, translation and camera center, & velocity and IMU biases
     cv::Mat mRcw;
     cv::Mat mtcw;
+    cv::Mat mvwbb;//wvB(t) velocity of IMU(B) in 0th IMU frame
+    cv::Mat mbg,mba;//bg(t),ba(t) IMU bias of gyroscope and accelerometer
     cv::Mat mRwc;
-    cv::Mat mOw; //==mtwc, the center of the lefft camera in the world/cam0 frame
+    cv::Mat mOw;//==mtwc, the center of the left camera in the world/cam0 frame
+    // Tbc,Tbo (Consts)
+    cv::Mat mTbc,mTbo;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
+    
+    // Odom PreIntegration, j means this frame, i means last frame(not KF), if no measurements it will be cv::Mat()
+    OdomPreIntegrator mOdomPreInt;
 };
 
 }// namespace ORB_SLAM

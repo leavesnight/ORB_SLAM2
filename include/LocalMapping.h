@@ -40,7 +40,7 @@ class Map;
 class LocalMapping
 {
 public:
-    LocalMapping(Map* pMap, const float bMonocular);//should use bool here
+    LocalMapping(Map* pMap, const float bMonocular,const string &strSettingPath);//should use bool here
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -129,8 +129,12 @@ protected:
     bool mbAcceptKeyFrames;
     std::mutex mMutexAccept;
     
+    //created by zzh
     KeyFrame* mpLastKF;
     unsigned long mnLastOdomKFId;
+    
+    //Local Window size
+    int mnWinSize;//default 20
 };
 
 } //namespace ORB_SLAM
