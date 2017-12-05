@@ -237,7 +237,7 @@ namespace g2o {
         if (theta<0.00001)
         {
           //TODO: CHECK WHETHER THIS IS CORRECT!!!
-          R = (Matrix3d::Identity() + Omega + Omega*Omega/2);//R=I+(1-cos(theta))*a^a^+sin(theta)*a^~=(omit theta^3&&less)=I+theta^2/2*a^a^+theta*a^, /2 rectified by zzh
+          R = (Matrix3d::Identity() + Omega + Omega*Omega);//R=I+(1-cos(theta))*a^a^+sin(theta)*a^~=(omit theta^3&&less)=I+theta^2/2*a^a^+theta*a^, /2 rectified by zzh
 
           V = R;
         }
