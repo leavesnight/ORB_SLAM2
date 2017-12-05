@@ -64,8 +64,7 @@ void LoopClosing::Run()
         if(CheckNewKeyFrames())
         {
             // Detect loop candidates and check covisibility consistency
-            if(DetectLoop())
-            {
+            if(mpIMUInitiator->GetVINSInited()&&DetectLoop()){//else no gw to calculate GBA
                // Compute similarity transformation [sR|t] 
                // In the stereo/RGBD case s=1
                if(ComputeSim3())
@@ -121,7 +120,9 @@ bool LoopClosing::DetectLoop()
     // Compute reference BoW similarity score
     // This is the lowest score to a connected keyframe in the covisibility graph
     // We will impose loop candidates to have a higher similarity than this (higher score)
-    const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();//all 1st layer covisibility KFs/localKFs/connectedKFs in covisibility graph
+      //mpCurrentKF->GetVectorCovisibleKeyFrames()
+    const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetCovisiblesByWeight(15);//all 1st layer covisibility KFs/localKFs/connectedKFs in covisibility graph, \
+    except the one with weight==0(odom edge)/>=15(threshold used in old UpdateConnections())! modified by zzh
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
     float minScore = 1;//score is [0,1]
     for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
@@ -269,7 +270,7 @@ bool LoopClosing::ComputeSim3()
 	corresponding to pKF1/mpCurrentKF in LoopClosing
 
 	cout<<red<<i<<": "<<nmatches<<endl;
-        if(nmatches<10)//same threshold in TrackWithMotionModel(), old 20
+        if(nmatches<20)//same threshold in TrackWithMotionModel(), new 10
         {
             vbDiscarded[i] = true;
             continue;
@@ -424,6 +425,8 @@ void LoopClosing::CorrectLoop()
     // If a Global Bundle Adjustment is running, abort it
     if(isRunningGBA())
     {
+	cout<<"Abort last global BA...";//for debug
+	
         unique_lock<mutex> lock(mMutexGBA);
         mbStopGBA = true;//like mbAbortBA in LocalMapping?
 
@@ -547,7 +550,7 @@ void LoopClosing::CorrectLoop()
                 }
             }
         }
-
+	mpMap->InformNewChange();//improved by zzh
     }
 
     // Project MapPoints observed in the neighborhood of the loop keyframe
@@ -658,10 +661,12 @@ void LoopClosing::ResetIfRequested()
 
 void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here is mpCurrentKF
 {
+    std::chrono::steady_clock::time_point begin= std::chrono::steady_clock::now();
     cout << "Starting Global Bundle Adjustment" << endl;
 
     int idx =  mnFullBAIdx;
-    Optimizer::GlobalBundleAdjustemnt(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+    //Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+    Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),10,&mbStopGBA,nLoopKF,false);
 
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -669,7 +674,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     // We need to propagate the correction through the spanning tree
     {
         unique_lock<mutex> lock(mMutexGBA);
-        if(idx!=mnFullBAIdx)//it's for safe terminating this thread when it's so slow that mbStopGBA becomes false again(but mnFullBAIdx++ before)， synchrone mechanism
+        if(idx!=mnFullBAIdx)//it's for safe terminating this thread when it's so slow that mbStopGBA becomes false again(but mnFullBAIdx++ before), synchrone mechanism
             return;
 
         if(!mbStopGBA)//I think it's useless for when mbStopGBA==true, idx!=mnFullBAIdx
@@ -704,12 +709,21 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
                         cv::Mat Tchildc = pChild->GetPose()*Twc;//Tchildw*Tw0=Tchild0
                         pChild->mTcwGBA = Tchildc*pKF->mTcwGBA;//*Tcorc*pKF->mTcwGBA; Tchild0*T0w(corrected)=Tchildw(corrected)
                         pChild->mnBAGlobalForKF=nLoopKF;//so now its child KF' Pose can seem to be corrected by GBA
+
+                        // Set NavStateGBA and correct the PR&V
+                        pChild->mNavStateGBA = pChild->GetNavState();//Tb_old_w
+                        Matrix3d Rw1 = pChild->mNavStateGBA.getRwb();Vector3d Vw1 = pChild->mNavStateGBA.mvwb;//Rwb_old&wVwb_old
+                        cv::Mat TwbGBA = Converter::toCvMatInverse(Frame::mTbc*pChild->mTcwGBA);//TbwGBA.t()
+                        Matrix3d RwbGBA=Converter::toMatrix3d(TwbGBA.rowRange(0,3).colRange(0,3));
+                        pChild->mNavStateGBA.setRwb(RwbGBA);
+			pChild->mNavStateGBA.mpwb=Converter::toVector3d(TwbGBA.rowRange(0,3).col(3));
+			pChild->mNavStateGBA.mvwb=RwbGBA*Rw1.transpose()*Vw1;//Vwb_new=wVwb_new=Rwb_new*bVwb=Rwb_new*Rb_old_w*wVwb_old=Rwb2*Rwb1.t()*wV1
                     }//now the child is optimized by GBA
                     lpKFtoCheck.push_back(pChild);
                 }
 
                 pKF->mTcwBefGBA = pKF->GetPose();//record the old Tcw
-                pKF->SetPose(pKF->mTcwGBA);//update all KFs' Pose to GBA optimized Tcw
+                pKF->SetNavState(pKF->mNavStateGBA);//update all KFs' Pose to GBA optimized Tbw&Tcw, including UpdatePoseFromNS()&&SetPose(pKF->mTcwGBA), not necessary to update mNavStateBefGBA for unused in MapPoints' correction
                 lpKFtoCheck.pop_front();
             }
 

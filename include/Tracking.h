@@ -22,10 +22,13 @@
 #ifndef TRACKING_H
 #define TRACKING_H
 
+#include "OdomData.h"
+#include<chrono>//for delay control
+
+//created by zzh over.
+
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
-
-#include "OdomData.h" //zzh
 
 #include"Viewer.h"
 #include"FrameDrawer.h"
@@ -42,11 +45,9 @@
 
 #include <mutex>
 
-//for delay control
-#include<chrono>
-
 namespace ORB_SLAM2
 {
+class IMUInitialization;//zzh, for they includes each other
 
 class Viewer;
 class FrameDrawer;
@@ -57,13 +58,61 @@ class System;
 
 class Tracking
 {  
+  //Created by zzh
+  // Odom PreIntegration
+  template<class _OdomData>
+  void PreIntegration(const char type,list<_OdomData> &mlOdom,typename list<_OdomData>::iterator &miterLastEnc,Frame *pLastF=NULL,Frame *pCurF=NULL);//0 for initialize,1 for inter-Frame PreInt.,2 for inter-KF PreInt. \
+  0/2 also is used to cull the data in 2 lists whose tm is (mLastKeyFrame.mTimeStamp,mCurrentKeyFrame.mTimeStamp], \
+  culling strategy: tm<mtmSyncOdom is discarded & tm>mCurrentFrame.mTimeStamp is reserved in lists & the left is needed for deltax~ij calculation, \
+  for the case Measurement_j-1 uses (M(tj)+M(tj-1))/2, we also reserved last left one in 2 lists(especially for Enc); \
+  if pLastF & pCurF exit, we use them instead of mLastFrame & mCurrentFrame
+  void PreIntegration(const char type=0);
+  bool TrackWithIMU(bool bMapUpdated);//use IMU prediction instead of constant velocity/uniform motion model
+  // Predict the NavState of Current Frame by IMU
+  bool PredictNavStateByIMU(bool bMapUpdated);//use IMU motion model, like motion update/prediction in ekf, if prediction failed(e.g. no imu data) then false
+  //IMUPreintegrator GetIMUPreIntSinceLastKF();
+  bool TrackLocalMapWithIMU(bool bMapUpdated);//track local map with IMU motion-only BA, if no imu data it degenerates to TrackLocalMap()
+  void RecomputeIMUBiasAndCurrentNavstate();//recompute bias && mCurrentFrame.mNavState when 19th Frame after reloc.
+  
+  // Flags for relocalization. Create new KF once bias re-computed & flag for preparation for bias re-compute
+  bool mbRelocBiasPrepare;//true means preparing/not prepared
+  bool mbCreateNewKFAfterReloc;//when 19th Frame after reloc, IMU connection is established(bias calculated) then insert this F as KF, but maybe not so important?
+  // 20 Frames are used to compute bias
+  vector<Frame*> mv20pFramesReloc;
+  
+  //Consts
+  //Tbc,Tbo
+  cv::Mat mTbc,mTco;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
+  //delay time of Odom Data received(CacheOdom) relative to the Image entering(GrabImageX), or -Camera.delaytoimu
+  double mDelayOdom;
+  //Variables
+  std::chrono::steady_clock::time_point mtmGrabDelay;//for delay control(we found our Enc&IMU's response has some delay=20ms)
+  //cache queue for vl,vr/IMU & its own timestamp from LastKF
+  std::list<EncData> mlOdomEnc;
+  std::list<IMUData> mlOdomIMU;
+  std::mutex mMutexOdom;//for 2 lists' multithreads' operation
+  std::list<EncData>::iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
+  std::list<IMUData>::iterator miterLastIMU;//Last IMUData pointer in LastFrame
+  
+  //the odom data's timestamp (now only for Encoder)
+  double mtimestampOdom;
+  cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
+  //last pose by Odom data
+  cv::Mat mLastTwcOdom;
+  double mLastTimestamp,mVtmspan;
+  //Rwwi
+  cv::Mat mRwbwi;//Rotation Matrix from  the 0th keyframe/frame's IMU frame(wb/b0) to IMU internal Inertial frame(wi/I)
 
 public:
+  //Add Odom(Enc/IMU) data to cache queue
+   cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
+   
+   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+//created by zzh over.
+  
+public:
     Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Map* pMap,
-             KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor);
-    
-    //Add Odom(Enc/IMU) data to cache queue
-    cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
+             KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor); 
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp);
@@ -72,6 +121,7 @@ public:
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
     void SetLoopClosing(LoopClosing* pLoopClosing);
+    void SetIMUInitiator(IMUInitialization *pIMUInitiator){mpIMUInitiator=pIMUInitiator;}//zzh
     void SetViewer(Viewer* pViewer);
 
     // Load new settings
@@ -90,14 +140,14 @@ public:
         NOT_INITIALIZED=1,
         OK=2,
         LOST=3,
-        ODOMOK=4
+        ODOMOK=4//added by zzh
     };
 
     eTrackingState mState;
     eTrackingState mLastProcessedState;
 
     // Input sensor
-    int mSensor;//ORB_SLAM2::System::eSensor
+    int mSensor;//value's type is ORB_SLAM2::System::eSensor
 
     // Current Frame
     Frame mCurrentFrame;
@@ -165,6 +215,7 @@ protected:
     //Other Thread Pointers
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
+    IMUInitialization* mpIMUInitiator;//zzh
 
     //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
@@ -226,37 +277,109 @@ protected:
     bool mbRGB;
 
     list<MapPoint*> mlpTemporalPoints;
-    
-    //Created by zzh
-    // Odom PreIntegration
-    void PreIntegration(const char type=0);//0 for initialize,1 for inter-Frame PreInt.,2 for inter-KF PreInt. \
-    0/2 also is used to cull the data in 2 lists whose tm is (mLastKeyFrame.mTimeStamp,mCurrentKeyFrame.mTimeStamp], \
-    culling strategy: tm<mtmSyncOdom is discarded & tm>mCurrentFrame.mTimeStamp is reserved in lists & the left is needed for deltax~ij calculation, \
-    for the case Measurement_j-1 uses (M(tj)+M(tj-1))/2, we also reserved last left one in 2 lists(especially for Enc)
-    
-    //Consts
-    //Tbc,Tbo
-    cv::Mat mTbc,mTbo;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
-    //delay time of Odom Data received(CacheOdom) relative to the Image entering(GrabImageX), or -Camera.delaytoimu
-    double mDelayOdom;
-    //Variables
-    //cache queue for vl,vr/IMU & its own timestamp from LastKF
-    list<EncData> mlOdomEnc;
-    list<IMUData> mlOdomIMU;
-    std::mutex mMutexOdom;//for 2 lists' multithreads' operation
-    std::chrono::steady_clock::time_point mtmGrabDelay;//for delay control(we found our Enc&IMU's response has some delay=20ms)
-    list<EncData>::iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
-    list<IMUData>::iterator miterLastIMU;//Last IMUData pointer in LastFrame
-    
-    //the odom data's timestamp (now only for Encoder)
-    double mtimestampOdom;
-    cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
-    //last pose by Odom data
-    cv::Mat mLastTwcOdom;
-    double mLastTimestamp,mVtmspan;
-    //Rwwi
-    cv::Mat mRwbwi;//Rotation Matrix from  the 0th keyframe/frame's IMU frame(wb/b0) to IMU internal Inertial frame(wi/I)
 };
+
+//created by zzh
+template<class EncData>
+void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename list<EncData>::iterator &miterLastEnc,Frame *pLastF,Frame *pCurF){
+  switch (type){//0/2 will cull 2 Odom lists,1 will shift the pointer
+    case 0://for 0th keyframe/frame: erase all the data whose tm<=mCurrentFrame.mTimeStamp but keep the last one, like list.clear()
+      if (!mlOdomEnc.empty()){
+	typename list<EncData>::iterator iter=mlOdomEnc.end();
+	while (iter!=mlOdomEnc.begin()){
+	  if ((--iter)->mtm<=mCurrentFrame.mTimeStamp) break;//get last one
+	}
+	if (iter!=mlOdomEnc.end()&&iter->mtm<=mCurrentFrame.mTimeStamp-1./mMaxFrames) ++iter;//time error allow 33ms(1 pic time of 30Hz)
+	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the last EncData used to calculate the Enc PreIntegration
+	miterLastEnc=mlOdomEnc.begin();
+      }
+      break;
+    case 1:{
+      //PreIntegration between 2 frames, use pLastF & pCurF to be compatible with RecomputeIMUBiasAndCurrentNavstate()
+      if (pLastF==NULL) pLastF=&mLastFrame;if (pCurF==NULL) pCurF=&mCurrentFrame;
+      double tmSyncOdom=pLastF->mTimeStamp;//Integral Interval (tmSyncOdom,mCurrentFrame.mTimeStamp]
+      if (!mlOdomEnc.empty()){
+	for (;miterLastEnc!=mlOdomEnc.end();++miterLastEnc){//search a data whose tm has min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
+	  if (miterLastEnc->mtm>tmSyncOdom){
+	    if (miterLastEnc!=mlOdomEnc.begin()) --miterLastEnc;
+	    break; 
+	  }
+	}
+	typename list<EncData>::iterator iter=mlOdomEnc.end();
+	while (iter!=miterLastEnc){//the begin/iteri for this frame, find the pback/iterj for this frame
+	  if ((--iter)->mtm<=pCurF->mTimeStamp) break;//get last one
+	}
+	if (iter!=mlOdomEnc.end()){
+	  if (iter->mtm<=pCurF->mTimeStamp-1./mMaxFrames) ++iter;//time error allow 33ms(1 pic time of 30Hz)
+	  else if (miterLastEnc->mtm<=tmSyncOdom&&miterLastEnc->mtm>tmSyncOdom-1./mMaxFrames){//Enci exits then delta~xij(phi,p) can be calculated
+	      pCurF->SetPreIntegrationList<EncData>(miterLastEnc,iter);//it can be optimized without copy
+	  }
+	}
+	if (iter!=mlOdomEnc.end())
+	  miterLastEnc=iter;//update miterLastEnc pointing to the last one of this frame/begin for next frame
+	else
+	  miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX
+      }
+      pCurF->PreIntegration<EncData>(pLastF);//it can be optimized without copy
+      break;}
+    case 2:
+      //PreIntegration between 2 KFs & cull 2 odom lists: erase all the data whose tm<=mpReferenceKF(curKF)->mTimeStamp but keep the last one
+      if (!mlOdomEnc.empty()){
+	typename list<EncData>::iterator iter=mlOdomEnc.end();
+	while (iter!=mlOdomEnc.begin()){
+	  if ((--iter)->mtm<=mpReferenceKF->mTimeStamp) break;//get last one
+	}
+	if (iter!=mlOdomEnc.end()){
+	  if (iter->mtm<=mpReferenceKF->mTimeStamp-1./mMaxFrames) ++iter;//time error allow 33ms(1 pic time of 30Hz)
+	  else{
+	    typename list<EncData>::iterator iteri=mlOdomEnc.begin();
+	    if (iteri->mtm<=mpLastKeyFrame->mTimeStamp){//Enci exits then delta~xij(phi,p) can be calculated, here only use half judgement for if iteri->tm <=mtmSyncOdom, it must >mtmSyncOdom-1./mMaxFrames for type==0/1's process(only keep the last acceptable data)
+	      mpReferenceKF->SetPreIntegrationList<EncData>(iteri,iter);
+	    }
+	  }
+	}
+	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the last EncData used to calculate the Enc PreIntegration
+	miterLastEnc=mlOdomEnc.begin();//maybe end() but we handle it in the CacheOdom()
+      }
+      mpReferenceKF->PreIntegration<EncData>(mpLastKeyFrame);//mpLastKeyFrame cannot be bad here for mpReferenceKF hasn't been inserted (SetBadFlag only for before KFs)
+      break;
+    case 3:{
+      //PreIntegration between lastKF & curF
+      double tmSyncOdom=mLastFrame.mTimeStamp;//Interval (tmSyncOdom,mCurrentFrame.mTimeStamp]
+      if (!mlOdomEnc.empty()){
+	//update miterLastEnc, but don't copy the part of list[lastF,curF]
+	for (;miterLastEnc!=mlOdomEnc.end();++miterLastEnc){//search a data whose tm has min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
+	  if (miterLastEnc->mtm>tmSyncOdom){
+	    if (miterLastEnc!=mlOdomEnc.begin()) --miterLastEnc;
+	    break; 
+	  }
+	}
+	typename list<EncData>::iterator iter=mlOdomEnc.end();
+	while (iter!=miterLastEnc){//the begin/iteri for this frame, find the pback/iterj for this frame
+	  if ((--iter)->mtm<=mCurrentFrame.mTimeStamp) break;//get last one
+	}
+	if (iter!=mlOdomEnc.end()){
+	  if (iter->mtm<=mCurrentFrame.mTimeStamp-1./mMaxFrames) ++iter;//time error allow 33ms(1 pic time of 30Hz)
+	  else{
+	    if (miterLastEnc->mtm<=tmSyncOdom&&miterLastEnc->mtm>tmSyncOdom-1./mMaxFrames){//Enci exits then delta~xij(phi,p) can be calculated
+	      //mCurrentFrame.SetPreIntegrationList<EncData>(miterLastEnc,iter);
+	    }
+	  }
+	}
+	if (iter!=mlOdomEnc.end())
+	  miterLastEnc=iter;//update miterLastEnc pointing to the last one of this frame/begin for next frame
+	else
+	  miterLastEnc=--iter;//if not exit please don't point to the end()! so we have to check the full restriction of miterLastX
+	//check if iteri && iterk(curF) exit then preintegrate [lastKF,curF]
+	typename list<EncData>::iterator iteri=mlOdomEnc.begin();
+	if (iteri->mtm<=mpLastKeyFrame->mTimeStamp&&miterLastEnc->mtm>mCurrentFrame.mTimeStamp-1./mMaxFrames){//check iteri && iterk error
+	  mCurrentFrame.SetPreIntegrationList<EncData>(iteri,miterLastEnc);//it can be optimized without copy
+	}
+      }
+      mCurrentFrame.PreIntegration<EncData>(&mLastFrame);//it can be optimized without copy
+      break;}
+  }
+}
 
 } //namespace ORB_SLAM
 

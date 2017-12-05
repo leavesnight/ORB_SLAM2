@@ -37,6 +37,20 @@ class KeyFrame;
 
 class Map
 {
+  int mnChangeIdx;// Index related to any change when mMutexMapUpdate is locked && current KF's Pose is changed
+  
+public:
+  void InformNewChange(){
+    unique_lock<std::mutex> lock(mMutexMap);
+    ++mnChangeIdx;
+  }
+  int GetLastChangeIdx(){//used for Tracking strategy choice
+    unique_lock<mutex> lock(mMutexMap);
+    return mnChangeIdx;
+  }
+  
+//created by zzh over.
+  
 public:
     Map();
 

@@ -28,19 +28,20 @@
 namespace ORB_SLAM2
 {
 
-LocalMapping::LocalMapping(Map *pMap, const float bMonocular,const string &strSettingPath):
+LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
     mpLastKF(nullptr),mnLastOdomKFId(0)
 {
-  cv::FileStorage fsettings(strSettingPath,cv::FileStorage::READ);
-  cv::FileNode fnSize=fsettings["LocalMapping.LocalWindowSize"];
+  cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
+  cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
   if (fnSize.empty()){
-    mnWinSize=-1;
+    mnLocalWindowSize=0;
     cout<<"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<endl;
   }else{
-    mnWinSize=fnSize;
+    mnLocalWindowSize=fnSize;
   }
+  
 }
 
 void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
@@ -68,6 +69,7 @@ void LocalMapping::Run()
         {
             // BoW conversion and insertion in Map
             ProcessNewKeyFrame();
+	    mpIMUInitiator->SetCurrentKeyFrame(mpCurrentKeyFrame);//zzh
 
             // Check recent added MapPoints
             MapPointCulling();
@@ -86,13 +88,21 @@ void LocalMapping::Run()
             if(!CheckNewKeyFrames() && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4)//at least 3 KFs in mpMap, should add Odom condition here!
-                    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);//local BA
+                if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
+		  Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);//local BA
+		  if(!mpIMUInitiator->GetVINSInited()){
+		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);
+		  }else{//maybe it needs transition when initialized with a few imu edges<N
+		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
+		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mGravityVec);
+		  }
+		}
 
                 // Check redundant local Keyframes
                 KeyFrameCulling();
             }
-
+	    
+	    if(mpIMUInitiator->GetInitGBAFinish())
             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
         }
         else if(Stop())
@@ -120,13 +130,13 @@ void LocalMapping::Run()
     SetFinish();
 }
 
-void LocalMapping::InsertKeyFrame(KeyFrame *pKF,const char state)
+void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
 {
     unique_lock<mutex> lock(mMutexNewKFs);
     mlNewKeyFrames.push_back(pKF);
     mbAbortBA=true;//stop localBA
     
-    if (state==(char)Tracking::ODOMOK){
+    if (pKF->getState()==(char)Tracking::ODOMOK){
       mnLastOdomKFId=pKF->mnId;
     }
 }
@@ -180,9 +190,43 @@ void LocalMapping::ProcessNewKeyFrame()
       mpLastKF=mpLastKF->GetParent();
       pKFTmp->SetBadFlag();
     }
-    mpCurrentKeyFrame->UpdateConnections(mpLastKF);
+    //mpCurrentKeyFrame->UpdateConnections(mpLastKF);
+    mpCurrentKeyFrame->UpdateConnections();
     //if (mpCurrentKeyFrame->getState()==(char)Tracking::OK)
     mpLastKF=mpCurrentKeyFrame;
+    
+    //I think I can just use timestamp of last Nth KF to reduce the mlLocalKeyFrames
+    //DeleteBadInLocalWindow
+    std::list<KeyFrame*>::iterator lit = mlLocalKeyFrames.begin();
+    while(lit != mlLocalKeyFrames.end())
+    {
+        KeyFrame* pKF = *lit;
+        //Test log
+        assert(pKF&&"pKF null?");
+        if(pKF->isBad())
+        {
+            lit = mlLocalKeyFrames.erase(lit);
+        }
+        else
+        {
+            lit++;
+        }
+    }
+    //AddToLocalWindow
+    mlLocalKeyFrames.push_back(mpCurrentKeyFrame);
+    if(mlLocalKeyFrames.size() > mnLocalWindowSize)
+    {
+        mlLocalKeyFrames.pop_front();
+    }
+    else
+    {
+        KeyFrame* pKF0 = mlLocalKeyFrames.front();
+        while(mlLocalKeyFrames.size() < mnLocalWindowSize && pKF0->GetPrevKeyFrame()!=NULL)
+        {
+            pKF0 = pKF0->GetPrevKeyFrame();
+            mlLocalKeyFrames.push_front(pKF0);
+        }
+    }
 
     // Insert Keyframe in Map
     mpMap->AddKeyFrame(mpCurrentKeyFrame);
@@ -660,17 +704,55 @@ void LocalMapping::InterruptBA()
 
 void LocalMapping::KeyFrameCulling()
 {
+    if(mpIMUInitiator->GetCopyInitKFs()) return;//during the copying KFs' stage in IMU Initialization, don't cull any KF!
+    mpIMUInitiator->SetCopyInitKFs(true);
+    
     // Check redundant keyframes (only local keyframes)
     // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
     // in at least other 3 keyframes (in the same or finer scale)
     // We only consider close stereo points
     vector<KeyFrame*> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();//get all 1st layer covisibility KFs as localKFs, notice no mpCurrentKeyFrame
+    
+    KeyFrame* pOldestLocalKF = mlLocalKeyFrames.front();
+    KeyFrame* pPrevLocalKF = pOldestLocalKF->GetPrevKeyFrame();
+    KeyFrame* pNewestLocalKF = mlLocalKeyFrames.back();
 
     for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; vit++)
     {
         KeyFrame* pKF = *vit;
         if(pKF->mnId==0)//cannot erase the initial KF
             continue;
+	//added by JingWang
+	// Don't cull the oldest KF in LocalWindow,
+        // And the KF before this KF
+        if(pKF == pOldestLocalKF || pKF == pPrevLocalKF)
+            continue;
+
+        // Check time between Prev/Next Keyframe, if larger than 0.5s(for local)/3s(others), don't cull
+        // Note, the KF just out of Local is similarly considered as Local
+        KeyFrame* pPrevKF = pKF->GetPrevKeyFrame();
+        KeyFrame* pNextKF = pKF->GetNextKeyFrame();
+        if(pPrevKF && pNextKF && !mpIMUInitiator->GetVINSInited())
+        {
+            if(fabs(pNextKF->mTimeStamp - pPrevKF->mTimeStamp) > /*0.2*/0.5)
+                continue;
+        }
+        // Don't drop the KF before current KF
+        if(pKF->GetNextKeyFrame() == mpCurrentKeyFrame)
+            continue;
+        if(pKF->mTimeStamp >= mpCurrentKeyFrame->mTimeStamp - 0.11)
+            continue;
+
+        if(pPrevKF && pNextKF)
+        {
+            double timegap=0.51;
+            if(mpIMUInitiator->GetVINSInited() && pKF->mTimeStamp < mpCurrentKeyFrame->mTimeStamp - 4.0)
+                timegap = 3.01;
+
+            if(fabs(pNextKF->mTimeStamp - pPrevKF->mTimeStamp) > timegap)
+                continue;
+        }
+        //end
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
 
         int nObs = 3;
@@ -726,6 +808,8 @@ void LocalMapping::KeyFrameCulling()
             pKF->SetBadFlag();
 	}
     }
+    
+    mpIMUInitiator->SetCopyInitKFs(false);
 }
 
 cv::Mat LocalMapping::SkewSymmetricMatrix(const cv::Mat &v)
@@ -761,6 +845,8 @@ void LocalMapping::ResetIfRequested()
         mlNewKeyFrames.clear();
         mlpRecentAddedMapPoints.clear();
         mbResetRequested=false;
+	
+	mlLocalKeyFrames.clear();//added by zzh
     }
 }
 

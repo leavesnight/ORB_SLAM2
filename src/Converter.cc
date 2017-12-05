@@ -23,6 +23,30 @@
 
 namespace ORB_SLAM2
 {
+  
+cv::Mat Converter::toCvMatInverse(const cv::Mat &Tcw)
+{
+    cv::Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
+    cv::Mat tcw = Tcw.rowRange(0,3).col(3);
+    cv::Mat Rwc = Rcw.t();
+    cv::Mat twc = -Rwc*tcw;
+
+    cv::Mat Twc = cv::Mat::eye(4,4,Tcw.type());
+    Rwc.copyTo(Twc.rowRange(0,3).colRange(0,3));
+    twc.copyTo(Twc.rowRange(0,3).col(3));
+
+    return Twc;//smart pointer so not necessary to use .clone()
+}
+
+Eigen::Isometry3d Converter::toIsometry3d(const cv::Mat &cvMat4){//by zzh
+  Eigen::Isometry3d T;
+  for (int i=0;i<4;++i)
+    for (int j=0;j<4;++j)
+      T(i,j)=cvMat4.at<float>(i,j);
+  return T;
+}
+
+//created by zzh over.
 
 std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
 {
@@ -146,28 +170,6 @@ std::vector<float> Converter::toQuaternion(const cv::Mat &M)
     v[3] = q.w();
 
     return v;
-}
-
-std::vector<float> Converter::toQuat(const Eigen::Quaterniond &q){
-  std::vector<float> v(4);
-  v[0] = q.x();v[1] = q.y();v[2] = q.z();v[3] = q.w();
-  return v;
-}
-Eigen::Matrix<double,2,2> Converter::toMatrix2d(const cv::Mat &cvMat2)
-{
-    Eigen::Matrix<double,2,2> M;
-
-    M << cvMat2.at<float>(0,0), cvMat2.at<float>(0,1),
-         cvMat2.at<float>(1,0), cvMat2.at<float>(1,1);
-
-    return M;
-}
-Eigen::Isometry3d Converter::toIsometry3d(const cv::Mat &cvMat4){//by zzh
-  Eigen::Isometry3d T;
-  for (int i=0;i<4;++i)
-    for (int j=0;j<4;++j)
-      T(i,j)=cvMat4.at<float>(i,j);
-  return T;
 }
 
 } //namespace ORB_SLAM

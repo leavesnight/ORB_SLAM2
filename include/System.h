@@ -22,6 +22,9 @@
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
+#include "IMUInitialization.h"
+//created by zzh
+
 #include<string>
 #include<thread>
 #include<opencv2/core/core.hpp>
@@ -36,12 +39,9 @@
 #include "ORBVocabulary.h"
 #include "Viewer.h"
 
-//for Odomdata
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-
 namespace ORB_SLAM2
 {
+class IMUInitialization;//zzh
 
 class Viewer;
 class FrameDrawer;
@@ -52,18 +52,40 @@ class LoopClosing;
 
 class System
 {
+  //used to make pcl
+  cv::FileStorage fsSettings;
+  
+  // Local Mapper. It manages the local map and performs local bundle adjustment.
+  IMUInitialization* mpIMUInitiator;
+  //System thread: a new IMUInitialization thread added
+  std::thread* mptIMUInitialization;
+  
+public:
+  enum eOdom{
+    ENCODER=0,
+    IMU,
+    BOTH
+  };
+  
+  // Process the given (IMU/encoder)odometry data. \
+  mode==0:Encoder data 2 vl,vr; 1:qIMU data 4 qxyzw; \
+  2:Both 6 vl,vr,qxyzw; 3:Pure-IMU data 6 ax~z,wx~z(opposite of the order of EuRoc)
+  cv::Mat TrackOdom(const double &timestamp, const double* odomdata, const char mode);
+  
+  // TODO: Save/Load functions
+  void SaveMap(const string &filename);
+  // LoadMap(const string &filename);
+  void SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp);
+  int mkdir_p(string foldername,int mode);
+  
+//created by zzh over.
+  
 public:
     // Input sensor
     enum eSensor{
         MONOCULAR=0,
         STEREO=1,
         RGBD=2
-    };
-    enum eOdom{
-      ENCODER=0,
-      IMU,
-      BOTH,
-      RESERVEDODOM
     };
 
 public:
@@ -80,11 +102,6 @@ public:
     // Input depthmap: Float (CV_32F).
     // Returns the camera pose (empty if tracking fails).
     cv::Mat TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
-    
-    // Process the given (IMU/encoder)odometry data. \
-    mode==0:Encoder data 2 vl,vr; 1:qIMU data 4 qxyzw; \
-    2:Both 6 vl,vr,qxyzw; 3:Pure-IMU data 6 ax~z,wx~z(opposite of the order of EuRoc)
-    cv::Mat TrackOdom(const double &timestamp, const double* odomdata, const char mode);
 
     // Proccess the given monocular frame
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
@@ -126,12 +143,6 @@ public:
     // See format details at: http://www.cvlibs.net/datasets/kitti/eval_odometry.php
     void SaveTrajectoryKITTI(const string &filename);
 
-    // TODO: Save/Load functions
-    void SaveMap(const string &filename);
-    // LoadMap(const string &filename);
-    void SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp);
-    int mkdir_p(string foldername,int mode);
-
     // Information from most recent processed frame
     // You can call this right after TrackMonocular (or stereo or RGBD)
     int GetTrackingState();
@@ -139,12 +150,9 @@ public:
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
 
 private:
-    //used to make pcl
-    cv::FileStorage fsSettings;
-  
     // Input sensor
     eSensor mSensor;
-
+    
     // ORB vocabulary used for place recognition and feature matching.
     ORBVocabulary* mpVocabulary;
 
@@ -172,7 +180,7 @@ private:
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
 
-    // System threads: Local Mapping, Loop Closing, Viewer.
+    // System threads: Local Mapping, Loop Closing(will create a new GBA thread), Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.
     std::thread* mptLocalMapping;
     std::thread* mptLoopClosing;
@@ -196,7 +204,7 @@ private:
 
 }// namespace ORB_SLAM
 
-//zzh defined color cout
+//zzh defined color cout, must after include opencv2
 #define red "\033[31m"
 #define green "\e[32m"
 #define blue "\e[34m"

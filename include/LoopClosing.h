@@ -21,6 +21,8 @@
 #ifndef LOOPCLOSING_H
 #define LOOPCLOSING_H
 
+#include "IMUInitialization.h"//zzh
+
 #include "KeyFrame.h"
 #include "LocalMapping.h"
 #include "Map.h"
@@ -36,6 +38,8 @@
 namespace ORB_SLAM2
 {
 
+class IMUInitialization;//zzh, for they includes each other
+  
 class Tracking;
 class LocalMapping;
 class KeyFrameDatabase;
@@ -56,8 +60,8 @@ public:
     LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale);
 
     void SetTracker(Tracking* pTracker);
-
     void SetLocalMapper(LocalMapping* pLocalMapper);
+    void SetIMUInitiator(IMUInitialization *pIMUInitiator){mpIMUInitiator=pIMUInitiator;}//zzh
 
     // Main function
     void Run();
@@ -123,6 +127,7 @@ protected:
     ORBVocabulary* mpORBVocabulary;
 
     LocalMapping *mpLocalMapper;
+    IMUInitialization* mpIMUInitiator;//zzh
 
     
     std::list<KeyFrame*> mlpLoopKeyFrameQueue;

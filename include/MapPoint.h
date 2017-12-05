@@ -39,6 +39,11 @@ class Frame;
 class MapPoint
 {
 public:
+  void UpdateScale(const float &scale);
+  
+//added by zzh
+  
+public:
     MapPoint(const cv::Mat &Pos, KeyFrame* pRefKF, Map* pMap,const char state=2);
     MapPoint(const cv::Mat &Pos,  Map* pMap, Frame* pFrame, const int &idxF);//used in localization mode tracking
 

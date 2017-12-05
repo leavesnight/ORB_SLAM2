@@ -38,6 +38,7 @@ endif()
 
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(Cholmod REQUIRED)#added for cholmod linear solver
 
 find_package(PCL REQUIRED COMPONENT common io filters)
 
@@ -47,6 +48,8 @@ ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 
+${PROJECT_SOURCE_DIR}/src/Odom
+${CHOLMOD_INCLUDE_DIR}
 ${PCL_INCLUDE_DIRS}
 )
 
@@ -74,8 +77,13 @@ src/KeyFrameDatabase.cc
 src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
-src/OdomData.cpp
-src/OdomPreIntegrator.cpp
+
+src/Odom/OdomData.cpp
+src/Odom/OdomPreIntegrator.cpp
+src/Odom/IMUInitialization.cpp
+src/Odom/so3.cpp
+
+src/Odom/g2otypes.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -85,6 +93,9 @@ ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 
+${CHOLMOD_LIBRARIES}
+${BLAS_LIBRARIES}
+${LAPACK_LIBRARIES}
 ${PCL_LIBRARIES}
 )
 

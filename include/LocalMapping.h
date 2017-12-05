@@ -21,6 +21,8 @@
 #ifndef LOCALMAPPING_H
 #define LOCALMAPPING_H
 
+#include "IMUInitialization.h"//zzh
+
 #include "KeyFrame.h"
 #include "Map.h"
 #include "LoopClosing.h"
@@ -32,6 +34,8 @@
 
 namespace ORB_SLAM2
 {
+  
+class IMUInitialization;//zzh, for they includes each other
 
 class Tracking;
 class LoopClosing;
@@ -39,18 +43,27 @@ class Map;
 
 class LocalMapping
 {
+  KeyFrame* mpLastKF;
+  unsigned long mnLastOdomKFId;
+  
+  //Local Window size
+  int mnLocalWindowSize;//default 20
+  std::list<KeyFrame*> mlLocalKeyFrames;
+
+//created by zzh over.
+  
 public:
-    LocalMapping(Map* pMap, const float bMonocular,const string &strSettingPath);//should use bool here
+    LocalMapping(Map* pMap, const bool bMonocular,const string &strSettingPath);//should use bool here
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
-
     void SetTracker(Tracking* pTracker);
+    void SetIMUInitiator(IMUInitialization *pIMUInitiator){mpIMUInitiator=pIMUInitiator;}//zzh
 
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame* pKF,const char state=2);//mlNewKeyFrames.push_back(pKF) and mbAbortBA=true(stop localBA), \
-    we cannot use Traking::OK/eTrackingState here for Tracking.h and LocalMapping.h include each other
+    void InsertKeyFrame(KeyFrame* pKF);//mlNewKeyFrames.push_back(pKF) and mbAbortBA=true(stop localBA), \
+    if use ,const char state=2: we cannot use Traking::OK/eTrackingState here for Tracking.h and LocalMapping.h include each other
 
     // Thread Synch
     void RequestStop();//non-blocking request stop, it will finally be stopped when it's idle, used in localization mode/CorrectLoop() in LoopClosing thread
@@ -106,6 +119,7 @@ protected:
     Map* mpMap;
 
     LoopClosing* mpLoopCloser;
+    IMUInitialization* mpIMUInitiator;//zzh
     Tracking* mpTracker;//unused
 
     
@@ -128,13 +142,6 @@ protected:
 
     bool mbAcceptKeyFrames;
     std::mutex mMutexAccept;
-    
-    //created by zzh
-    KeyFrame* mpLastKF;
-    unsigned long mnLastOdomKFId;
-    
-    //Local Window size
-    int mnWinSize;//default 20
 };
 
 } //namespace ORB_SLAM

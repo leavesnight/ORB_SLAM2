@@ -70,7 +70,7 @@ namespace g2o {
         explicit SE3Quat(const MatrixBase<Derived>& v)
         {
           assert((v.size() == 6 || v.size() == 7) && "Vector dimension does not match");
-          if (v.size() == 6) {
+          if (v.size() == 6) {//t qxyz 6*1
             for (int i=0; i<3; i++){
               _t[i]=v[i];
               _r.coeffs()(i)=v[i+3];
@@ -83,7 +83,7 @@ namespace g2o {
               _r.w()= (w2<0.) ? 0. : sqrt(w2);
             }
           }
-          else if (v.size() == 7) {
+          else if (v.size() == 7) {//t q 7*1
             int idx = 0;
             for (int i=0; i<3; ++i, ++idx)
               _t(i) = v(idx);

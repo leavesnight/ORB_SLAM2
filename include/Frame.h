@@ -22,6 +22,7 @@
 #define FRAME_H
 
 #include "OdomPreIntegrator.h"//zzh
+#include "NavState.h"
 
 #include<vector>
 
@@ -43,20 +44,43 @@ class MapPoint;
 class KeyFrame;
 
 class Frame
-{
+{ 
 public:
-    // Odom PreIntegration
-    template <class _OdomData>
-    void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
-      mOdomPreInt.SetPreIntegrationList<_OdomData>(begin,pback);
-    }
-    void PreIntegration(Frame* pLastF){//0th frame don't use this function
-      mOdomPreInt.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
-    }
+  //const Tbc,Tco, so it can be used in multi threads
+  static cv::Mat mTbc,mTco;
   
+  // Odom PreIntegration, j means this frame, i means last frame(not KF), if no measurements it will be cv::Mat()
+  EncPreIntegrator mOdomPreIntEnc;
+  IMUPreintegrator mOdomPreIntIMU;
+  // state xi={Ri,pi,vi,bi}, not designed for multi threads/just used in Tracking thread
+  NavState mNavState;
+  // For pose optimization/motion-only BA, use as prior and prior information(inverse covariance)
+  Matrix<double,15,15> mMargCovInv;//Sigmap in VIORBSLAM paper/prior Hessian matrix for next Frame, notice it's unintialized(to infinity/fixedlast)
+  NavState mNavStatePrior;//needed by PoseOptimization twice, notice if no imu data, it's unintialized
+  
+  const NavState& GetNavState(void){//cannot use const &(make mutex useless)
+    return mNavState;//don't call copy constructor, just for template of PoseOptimization()
+  }
+  void UpdatePoseFromNS();//replace SetPose(), directly update mNavState for efficiency and then please call this func. to update Tcw
+  void UpdateNavStatePVRFromTcw();//for imu data empty condition after imu's initialized(including bias recomputed)
+  
+  // Odom PreIntegration
+  template <class _OdomData>
+  void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+    mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
+  }
+  template <class _OdomData>
+  void PreIntegration(Frame* pLastF){//0th frame don't use this function
+    mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
+  }
+  
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState
+//created by zzh over.
+  
+public:
     Frame();
 
-    // Copy constructor.
+    // Copy constructor. use default = func. is the mGrid[A][B] copy OK?
     Frame(const Frame &frame);
 
     // Constructor for stereo cameras.
@@ -212,20 +236,18 @@ private:
     // Assign keypoints to the grid for speed up feature matching (called in the constructor).
     void AssignFeaturesToGrid();
 
-    //adjusted by zzh
-    // Rotation, translation and camera center, & velocity and IMU biases
+    // Rotation, translation and camera center
     cv::Mat mRcw;
     cv::Mat mtcw;
-    cv::Mat mvwbb;//wvB(t) velocity of IMU(B) in 0th IMU frame
-    cv::Mat mbg,mba;//bg(t),ba(t) IMU bias of gyroscope and accelerometer
     cv::Mat mRwc;
     cv::Mat mOw;//==mtwc, the center of the left camera in the world/cam0 frame
-    // Tbc,Tbo (Consts)
-    cv::Mat mTbc,mTbo;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
-    
-    // Odom PreIntegration, j means this frame, i means last frame(not KF), if no measurements it will be cv::Mat()
-    OdomPreIntegrator mOdomPreInt;
 };
+
+//created by zzh
+template <>//specialized
+void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator &begin,typename std::list<IMUData>::iterator &pback);
+template <>
+void Frame::PreIntegration<IMUData>(Frame* pLastF);
 
 }// namespace ORB_SLAM
 

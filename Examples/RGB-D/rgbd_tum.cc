@@ -17,7 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
-
+// rectified by zzh in 2017.
 
 #include<iostream>
 #include<algorithm>
@@ -38,6 +38,7 @@ double g_simulateTimestamp=-1;
 bool g_brgbdFinished=false;
 mutex g_mutex;
 
+//a new thread simulating the odom serial threads
 void odomRun(ifstream &finOdomdata,int totalNum){//must use &
   //read until reading over
   int nTotalNum=2+4+3*3;
@@ -65,7 +66,13 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
       finOdomdata>>odomdata[i];
     }
     if (timestamp>tmstpLast)//avoid == condition
+#ifndef TRACK_WITH_IMU
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::BOTH);
+#elif defined(TRACK_WITH_IMU_VQMAW)
+      g_pSLAM->TrackOdom(timestamp,odomdata+2+4+3,(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz
+#else
+      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::IMU);//for EuRoC dataset
+#endif
     //cout<<green<<timestamp<<white<<endl;
     tmstpLast=timestamp;
   }

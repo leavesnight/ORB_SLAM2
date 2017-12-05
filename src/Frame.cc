@@ -25,7 +25,59 @@
 
 namespace ORB_SLAM2
 {
+  
+cv::Mat Frame::mTbc,Frame::mTco;
 
+void Frame::UpdatePoseFromNS()
+{
+  cv::Mat Rbc = mTbc.rowRange(0,3).colRange(0,3).clone();
+  cv::Mat Pbc = mTbc.rowRange(0,3).col(3).clone();//or tbc
+  
+  cv::Mat Rwb = Converter::toCvMat(mNavState.getRwb());
+  cv::Mat Pwb = Converter::toCvMat(mNavState.mpwb);//or twb
+  //Tcw=Tcb*Twb, Twc=Twb*Tbc
+  cv::Mat Rcw = (Rwb*Rbc).t();
+  cv::Mat Pwc = Rwb*Pbc + Pwb;
+  cv::Mat Pcw = -Rcw*Pwc;//tcw=-Rwc.t()*twc=-Rcw*twc
+
+  cv::Mat Tcw = cv::Mat::eye(4,4,CV_32F);
+  Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
+  Pcw.copyTo(Tcw.rowRange(0,3).col(3));
+
+  SetPose(Tcw);//notice w means B0/0th IMU Frame, c means ci/c(ti)/now camera Frame
+}
+void Frame::UpdateNavStatePVRFromTcw()
+{
+  cv::Mat Twb = Converter::toCvMatInverse(mTbc*mTcw);
+  Eigen::Matrix3d Rwb=Converter::toMatrix3d(Twb.rowRange(0,3).colRange(0,3));
+  Eigen::Vector3d Pwb=Converter::toVector3d(Twb.rowRange(0,3).col(3));
+
+  Eigen::Matrix3d Rw1=mNavState.getRwb();//Rwbj_old/Rwb1
+  Eigen::Vector3d Vw1=mNavState.mvwb;//Vw1/wV1=wvbj-1bj_old now bj_old/b1 is changed to bj_new/b2, wV2=wvbj-1bj_new
+  Eigen::Vector3d Vw2=Rwb*Rw1.transpose()*Vw1;//bV1 = bV2 ==> Rwb1^T*wV1 = Rwb2^T*wV2 ==> wV2 = Rwb2*Rwb1^T*wV1
+
+  mNavState.mpwb=Pwb;
+  mNavState.setRwb(Rwb);
+  mNavState.mvwb=Vw2;
+}
+
+//created by zzh
+template <>//specialized
+void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator &begin,typename std::list<IMUData>::iterator &pback){
+  mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
+}
+template <>
+void Frame::PreIntegration<IMUData>(Frame* pLastF){
+  Eigen::Vector3d bgi_bar=pLastF->mNavState.mbg,bai_bar=pLastF->mNavState.mba;
+#ifndef TRACK_WITH_IMU
+  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
+#else
+  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
+#endif
+}
+
+//created by zzh over.
+  
 long unsigned int Frame::nNextId=0;
 bool Frame::mbInitialComputations=true;
 float Frame::cx, Frame::cy, Frame::fx, Frame::fy, Frame::invfx, Frame::invfy;
@@ -55,6 +107,12 @@ Frame::Frame(const Frame &frame)
 
     if(!frame.mTcw.empty())
         SetPose(frame.mTcw);
+    
+    //created by zzh
+    mOdomPreIntIMU=frame.mOdomPreIntIMU;mOdomPreIntEnc=frame.mOdomPreIntEnc;//list uncopied
+    mNavState = frame.mNavState;
+    mMargCovInv = frame.mMargCovInv;
+    mNavStatePrior = frame.mNavStatePrior;
 }
 
 

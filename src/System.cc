@@ -18,14 +18,6 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-
-#include "System.h"
-#include "Converter.h"
-#include <thread>
-#include <pangolin/pangolin.h>
-#include <iomanip>
-
 //PCL
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
@@ -37,9 +29,173 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <opencv2/core/eigen.hpp>
 
+//created by zzh over.
+
+#include "System.h"
+#include "Converter.h"
+#include <thread>
+#include <pangolin/pangolin.h>
+#include <iomanip>
 
 namespace ORB_SLAM2
 {
+
+cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
+  cv::Mat Tcw=mpTracker->CacheOdom(timestamp,odomdata,mode);
+  
+  return Tcw;
+}
+
+void System::SaveMap(const string &filename){//maybe can be rewritten in Tracking.cc
+  //typedef
+  typedef pcl::PointXYZRGB PointT;
+
+  typedef pcl::PointCloud<PointT> PointCloud;
+  cout << endl << "Saving keyframe map to " << filename << " ..." << endl;
+
+  vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+  sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+
+  // Transform all keyframes so that the first keyframe is at the origin.
+  // After a loop closure the first keyframe might not be at the origin???here it's at the origin
+  //cv::Mat Two = vpKFs[0]->GetPoseInverse();
+
+  PointCloud::Ptr pPC(new PointCloud);
+  //vector<Eigen::Isometry3d*> poses;
+  double fx=fsSettings["Camera.fx"],fy=fsSettings["Camera.fy"],cx=fsSettings["Camera.cx"],cy=fsSettings["Camera.cy"];
+  double depthScale=fsSettings["DepthMapFactor"];
+  for(size_t i=0; i<vpKFs.size(); i+=2)
+  {
+      KeyFrame* pKF = vpKFs[i];
+      // pKF->SetPose(pKF->GetPose()*Two);
+      if(pKF->isBad())
+	  continue;
+
+      //cv::Mat R = pKF->GetRotation().t();
+      //vector<float> q = Converter::toQuaternion(R);
+      //cv::Mat t = pKF->GetCameraCenter();
+      //f << setprecision(6) << pKF->mTimeStamp << setprecision(7) << " " << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2)
+	//<< " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+      cv::Mat cvTwc=pKF->GetPoseInverse();
+      Eigen::Matrix3d r;
+      cv::cv2eigen(cvTwc.colRange(0,3).rowRange(0,3),r);
+      Eigen::Isometry3d* Twc=new Eigen::Isometry3d(r);
+      (*Twc)(0,3)=cvTwc.at<float>(0,3);(*Twc)(1,3)=cvTwc.at<float>(1,3);(*Twc)(2,3)=cvTwc.at<float>(2,3);
+      //poses.push_back(Twc);]
+      
+      PointCloud::Ptr current(new PointCloud);
+      cv::Mat color=pKF->Img[0];
+      cv::Mat depth=pKF->Img[1];
+      Eigen::Isometry3d T=*(Twc);
+      for (int v=0;v<color.rows;++v)
+	for (int u=0;u<color.cols;++u){
+	  unsigned int d=depth.ptr<unsigned short>(v)[u];
+	  if (d==0||d>7000) continue;
+	  Eigen::Vector3d point;
+	  point[2]=d*1.0/depthScale;
+	  point[0]=(u-cx)*point[2]/fx;
+	  point[1]=(v-cy)*point[2]/fy;
+	  Eigen::Vector3d pointWorld=T*point;
+	  
+	  PointT p;
+	  p.x=pointWorld[0];p.y=pointWorld[1];p.z=pointWorld[2];
+	  p.b=color.data[v*color.step+u*color.channels()];
+	  p.g=color.data[v*color.step+u*color.channels()+1];
+	  p.r=color.data[v*color.step+u*color.channels()+2];
+	  current->points.push_back(p);
+	}
+      //depth filter and statistical removal
+      /*PointCloud::Ptr pTmp(new PointCloud);
+      pcl::StatisticalOutlierRemoval<PointT> statis_filter;//this one costs lots of time!!!
+      statis_filter.setMeanK(50);//the number of the nearest points used to calculate the mean neighbor distance
+      statis_filter.setStddevMulThresh(1.0);//the standart deviation multiplier,here just use 70% for the normal distri.
+      statis_filter.setInputCloud(current);
+      statis_filter.filter(*pTmp);
+      *pPC+=*pTmp;*/
+      *pPC+=*current;
+  }
+  pPC->is_dense=false;//it contains nan data
+  cout<<"PC has "<<pPC->size()<<" points"<<endl;
+  
+  //voxel filter, to make less volume
+  pcl::VoxelGrid<PointT> voxel_filter;
+  voxel_filter.setLeafSize(0.05,0.05,0.05);//1cm^3 resolution;now 5cm
+  PointCloud::Ptr pTmp(new PointCloud);
+  voxel_filter.setInputCloud(pPC);
+  voxel_filter.filter(*pTmp);
+  //pTmp->swap(*pPC);
+  
+  //statistical filter, to eliminate the single points
+  pcl::StatisticalOutlierRemoval<PointT> statis_filter;//this one costs lots of time!!!
+  statis_filter.setMeanK(50);//the number of the nearest points used to calculate the mean neighbor distance
+  statis_filter.setStddevMulThresh(1.0);//the standart deviation multiplier,here just use 70% for the normal distri.
+  statis_filter.setInputCloud(pTmp);
+  statis_filter.filter(*pPC);
+  
+  cout<<"after downsampling, it has "<<pPC->size()<<" points"<<endl;
+  pcl::io::savePCDFileBinary(filename,*pPC);
+
+  cout << endl << "Map saved!" << endl;
+}
+#include<sys/stat.h>
+#include<sys/types.h>
+void System::SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp){
+  if (foldername[foldername.length()-1]!='/') foldername+='/';
+  string rgbname=foldername+"rgb/",depthname=foldername+"depth/";
+  static bool bInit=false;
+  if (!bInit){
+	if (access(depthname.c_str(),0)==-1){
+	  cout<<depthname<<" not exists!"<<endl;
+	  if (mkdir_p(depthname,0777)==-1) cout<<"depth mkdir error"<<endl;
+	}
+	if (access(rgbname.c_str(),0)==-1){
+	  cout<<rgbname<<" not exists!"<<endl;
+	  if (mkdir_p(rgbname,0777)==-1) cout<<"rgb mkdir error"<<endl;
+	}else if (access(depthname.c_str(),0)==0){
+	  ofstream fout(foldername+"odometrysensor.txt");
+	  fout<<"# odometry data\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp vl vr qx qy qz qw"<<endl;
+	  fout.close();
+	  fout.open(foldername+"groundtruth.txt");
+	  fout<<"# ground truth trajectory\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp tx ty tz qx qy qz qw"<<endl;
+	  fout.close();
+	  bInit=true;
+	}
+  }
+  char ch[25];//at least 10+1+6+4+1=22
+  sprintf(ch,"%.6f.",tm_stamp);//mpTracker->mCurrentFrame.mTimeStamp);
+  rgbname=rgbname+ch+"bmp";
+  depthname=depthname+ch+"png";
+
+  cv::imwrite(rgbname,im);
+  cv::imwrite(depthname,depthmap);
+  /*ofstream fout(foldername+"odometrysensor.txt",ios_base::app);
+  fout<<fixed;
+  fout<<setprecision(6)<<tm_stamp<<" "<<setprecision(3);
+  int num_tmp=6;
+  for (int i=0;i<num_tmp-1;++i)
+    fout<<data[i]<<" ";
+  fout<<data[num_tmp-1]<<endl;
+  fout.close();
+  fout.open(foldername+"groundtruth.txt",ios_base::app);
+  fout<<fixed;
+  fout<<setprecision(6)<<tm_stamp<<setprecision(4);
+  for (int i=0;i<7;++i){
+    fout<<" "<<data[2+i];
+  }
+  fout<<endl;
+  fout.close();*/
+}
+int System::mkdir_p(string foldername,int mode){
+  if (foldername.empty()) return -1;
+  if (mkdir(foldername.c_str(),mode)==-1){
+	int pos=string::npos;
+	if (foldername[foldername.length()-1]=='/') pos=foldername.length()-2;
+	if (mkdir_p(foldername.substr(0,foldername.rfind('/',pos)),mode)==-1) return -1;
+	else return mkdir(foldername.c_str(),mode);
+  }else return 0;
+}
+
+//created by zzh over.
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer):mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false),mbActivateLocalizationMode(false),
@@ -129,6 +285,16 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
+    
+//created by zzh
+    //Initialize the IMU Initialization thread and launch
+    mpIMUInitiator=new IMUInitialization(mpMap, mSensor==MONOCULAR,strSettingsFile);
+    mptIMUInitialization=new thread(&ORB_SLAM2::IMUInitialization::Run,mpIMUInitiator);
+    //Set pointers between threads
+    mpTracker->SetIMUInitiator(mpIMUInitiator);
+    mpLocalMapper->SetIMUInitiator(mpIMUInitiator);
+    mpLoopCloser->SetIMUInitiator(mpIMUInitiator);
+    mpIMUInitiator->SetLocalMapper(mpLocalMapper);//for Stop LocalMapping thread&&NeedNewKeyFrame() in Tracking thread
 }
 
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)
@@ -319,6 +485,7 @@ void System::Reset()
 
 void System::Shutdown()
 {
+    mpIMUInitiator->SetFinishRequest(true);//zzh
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
     if(mpViewer)
@@ -329,9 +496,8 @@ void System::Shutdown()
     }
 
     // Wait until all thread have effectively stopped
-    while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA())
-    {
-        usleep(5000);
+    while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA() || !mpIMUInitiator->GetFinish()){//changed by zzh
+      usleep(5000);
     }
 
     if(mpViewer)
@@ -398,97 +564,6 @@ void System::SaveTrajectoryTUM(const string &filename)
     cout << endl << "trajectory saved!" << endl;
 }
 
-void System::SaveMap(const string &filename){
-  //typedef
-  typedef pcl::PointXYZRGB PointT;
-
-  typedef pcl::PointCloud<PointT> PointCloud;
-  cout << endl << "Saving keyframe map to " << filename << " ..." << endl;
-
-  vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
-  sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
-
-  // Transform all keyframes so that the first keyframe is at the origin.
-  // After a loop closure the first keyframe might not be at the origin???here it's at the origin
-  //cv::Mat Two = vpKFs[0]->GetPoseInverse();
-
-  PointCloud::Ptr pPC(new PointCloud);
-  //vector<Eigen::Isometry3d*> poses;
-  double fx=fsSettings["Camera.fx"],fy=fsSettings["Camera.fy"],cx=fsSettings["Camera.cx"],cy=fsSettings["Camera.cy"];
-  double depthScale=fsSettings["DepthMapFactor"];
-  for(size_t i=0; i<vpKFs.size(); i+=2)
-  {
-      KeyFrame* pKF = vpKFs[i];
-      // pKF->SetPose(pKF->GetPose()*Two);
-      if(pKF->isBad())
-	  continue;
-
-      //cv::Mat R = pKF->GetRotation().t();
-      //vector<float> q = Converter::toQuaternion(R);
-      //cv::Mat t = pKF->GetCameraCenter();
-      //f << setprecision(6) << pKF->mTimeStamp << setprecision(7) << " " << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2)
-	//<< " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
-      cv::Mat cvTwc=pKF->GetPoseInverse();
-      Eigen::Matrix3d r;
-      cv::cv2eigen(cvTwc.colRange(0,3).rowRange(0,3),r);
-      Eigen::Isometry3d* Twc=new Eigen::Isometry3d(r);
-      (*Twc)(0,3)=cvTwc.at<float>(0,3);(*Twc)(1,3)=cvTwc.at<float>(1,3);(*Twc)(2,3)=cvTwc.at<float>(2,3);
-      //poses.push_back(Twc);]
-      
-      PointCloud::Ptr current(new PointCloud);
-      cv::Mat color=pKF->Img[0];
-      cv::Mat depth=pKF->Img[1];
-      Eigen::Isometry3d T=*(Twc);
-      for (int v=0;v<color.rows;++v)
-	for (int u=0;u<color.cols;++u){
-	  unsigned int d=depth.ptr<unsigned short>(v)[u];
-	  if (d==0||d>7000) continue;
-	  Eigen::Vector3d point;
-	  point[2]=d*1.0/depthScale;
-	  point[0]=(u-cx)*point[2]/fx;
-	  point[1]=(v-cy)*point[2]/fy;
-	  Eigen::Vector3d pointWorld=T*point;
-	  
-	  PointT p;
-	  p.x=pointWorld[0];p.y=pointWorld[1];p.z=pointWorld[2];
-	  p.b=color.data[v*color.step+u*color.channels()];
-	  p.g=color.data[v*color.step+u*color.channels()+1];
-	  p.r=color.data[v*color.step+u*color.channels()+2];
-	  current->points.push_back(p);
-	}
-      //depth filter and statistical removal
-      /*PointCloud::Ptr pTmp(new PointCloud);
-      pcl::StatisticalOutlierRemoval<PointT> statis_filter;//this one costs lots of time!!!
-      statis_filter.setMeanK(50);//the number of the nearest points used to calculate the mean neighbor distance
-      statis_filter.setStddevMulThresh(1.0);//the standart deviation multiplier,here just use 70% for the normal distri.
-      statis_filter.setInputCloud(current);
-      statis_filter.filter(*pTmp);
-      *pPC+=*pTmp;*/
-      *pPC+=*current;
-  }
-  pPC->is_dense=false;//it contains nan data
-  cout<<"PC has "<<pPC->size()<<" points"<<endl;
-  
-  //voxel filter, to make less volume
-  pcl::VoxelGrid<PointT> voxel_filter;
-  voxel_filter.setLeafSize(0.05,0.05,0.05);//1cm^3 resolution;now 5cm
-  PointCloud::Ptr pTmp(new PointCloud);
-  voxel_filter.setInputCloud(pPC);
-  voxel_filter.filter(*pTmp);
-  //pTmp->swap(*pPC);
-  
-  //statistical filter, to eliminate the single points
-  pcl::StatisticalOutlierRemoval<PointT> statis_filter;//this one costs lots of time!!!
-  statis_filter.setMeanK(50);//the number of the nearest points used to calculate the mean neighbor distance
-  statis_filter.setStddevMulThresh(1.0);//the standart deviation multiplier,here just use 70% for the normal distri.
-  statis_filter.setInputCloud(pTmp);
-  statis_filter.filter(*pPC);
-  
-  cout<<"after downsampling, it has "<<pPC->size()<<" points"<<endl;
-  pcl::io::savePCDFileBinary(filename,*pPC);
-
-  cout << endl << "Map saved!" << endl;
-}
 void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 {
     cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
@@ -596,71 +671,6 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
 {
     unique_lock<mutex> lock(mMutexState);
     return mTrackedKeyPointsUn;
-}
-
-#include<sys/stat.h>
-#include<sys/types.h>
-
-int System::mkdir_p(string foldername,int mode){
-  if (foldername.empty()) return -1;
-  if (mkdir(foldername.c_str(),mode)==-1){
-	int pos=string::npos;
-	if (foldername[foldername.length()-1]=='/') pos=foldername.length()-2;
-	if (mkdir_p(foldername.substr(0,foldername.rfind('/',pos)),mode)==-1) return -1;
-	else return mkdir(foldername.c_str(),mode);
-  }else return 0;
-}
-void System::SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp){
-  if (foldername[foldername.length()-1]!='/') foldername+='/';
-  string rgbname=foldername+"rgb/",depthname=foldername+"depth/";
-  static bool bInit=false;
-  if (!bInit){
-	if (access(depthname.c_str(),0)==-1){
-	  cout<<depthname<<" not exists!"<<endl;
-	  if (mkdir_p(depthname,0777)==-1) cout<<"depth mkdir error"<<endl;
-	}
-	if (access(rgbname.c_str(),0)==-1){
-	  cout<<rgbname<<" not exists!"<<endl;
-	  if (mkdir_p(rgbname,0777)==-1) cout<<"rgb mkdir error"<<endl;
-	}else if (access(depthname.c_str(),0)==0){
-	  ofstream fout(foldername+"odometrysensor.txt");
-	  fout<<"# odometry data\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp vl vr qx qy qz qw"<<endl;
-	  fout.close();
-	  fout.open(foldername+"groundtruth.txt");
-	  fout<<"# ground truth trajectory\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp tx ty tz qx qy qz qw"<<endl;
-	  fout.close();
-	  bInit=true;
-	}
-  }
-  char ch[25];//at least 10+1+6+4+1=22
-  sprintf(ch,"%.6f.",tm_stamp);//mpTracker->mCurrentFrame.mTimeStamp);
-  rgbname=rgbname+ch+"bmp";
-  depthname=depthname+ch+"png";
-
-  cv::imwrite(rgbname,im);
-  cv::imwrite(depthname,depthmap);
-  /*ofstream fout(foldername+"odometrysensor.txt",ios_base::app);
-  fout<<fixed;
-  fout<<setprecision(6)<<tm_stamp<<" "<<setprecision(3);
-  int num_tmp=6;
-  for (int i=0;i<num_tmp-1;++i)
-    fout<<data[i]<<" ";
-  fout<<data[num_tmp-1]<<endl;
-  fout.close();
-  fout.open(foldername+"groundtruth.txt",ios_base::app);
-  fout<<fixed;
-  fout<<setprecision(6)<<tm_stamp<<setprecision(4);
-  for (int i=0;i<7;++i){
-    fout<<" "<<data[2+i];
-  }
-  fout<<endl;
-  fout.close();*/
-}
-
-cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
-  cv::Mat Tcw=mpTracker->CacheOdom(timestamp,odomdata,mode);
-  
-  return Tcw;
 }
 
 } //namespace ORB_SLAM

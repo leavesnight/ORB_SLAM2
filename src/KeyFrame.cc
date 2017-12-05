@@ -25,10 +25,63 @@
 
 namespace ORB_SLAM2
 {
+  
+void KeyFrame::UpdatePoseFromNS()//same as Frame::UpdatePoseFromNS()
+{
+  cv::Mat Rbc = Frame::mTbc.rowRange(0,3).colRange(0,3).clone();
+  cv::Mat Pbc = Frame::mTbc.rowRange(0,3).col(3).clone();//or tbc
+  
+  cv::Mat Rwb = Converter::toCvMat(mNavState.getRwb());
+  cv::Mat Pwb = Converter::toCvMat(mNavState.mpwb);//or twb
+  //Tcw=Tcb*Twb, Twc=Twb*Tbc
+  cv::Mat Rcw = (Rwb*Rbc).t();
+  cv::Mat Pwc = Rwb*Pbc + Pwb;
+  cv::Mat Pcw = -Rcw*Pwc;//tcw=-Rwc.t()*twc=-Rcw*twc
+
+  cv::Mat Tcw = cv::Mat::eye(4,4,CV_32F);
+  Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
+  Pcw.copyTo(Tcw.rowRange(0,3).col(3));
+
+  SetPose(Tcw);//notice w means B0/0th IMU Frame, c means ci/c(ti)/now camera Frame
+}
+
+void KeyFrame::UpdateNavStatePVRFromTcw()
+{
+  unique_lock<mutex> lock(mMutexNavState);
+  cv::Mat Twb = Converter::toCvMatInverse(Frame::mTbc*Tcw);
+  Eigen::Matrix3d Rwb=Converter::toMatrix3d(Twb.rowRange(0,3).colRange(0,3));
+  Eigen::Vector3d Pwb=Converter::toVector3d(Twb.rowRange(0,3).col(3));
+
+  Eigen::Matrix3d Rw1=mNavState.getRwb();//Rwbj_old/Rwb1
+  Eigen::Vector3d Vw1=mNavState.mvwb;//Vw1/wV1=wvbj-1bj_old now bj_old/b1 is changed to bj_new/b2, wV2=wvbj-1bj_new
+  Eigen::Vector3d Vw2=Rwb*Rw1.transpose()*Vw1;//bV1 = bV2 ==> Rwb1^T*wV1 = Rwb2^T*wV2 ==> wV2 = Rwb2*Rwb1^T*wV1
+
+  mNavState.mpwb=Pwb;
+  mNavState.setRwb(Rwb);
+  mNavState.mvwb=Vw2;
+}
+
+template <>//specialized
+void KeyFrame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator begin,typename std::list<IMUData>::iterator pback){
+  unique_lock<mutex> lock(mMutexOdomData);
+  mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
+}
+template <>
+void KeyFrame::PreIntegration<IMUData>(KeyFrame* pLastKF){
+  Eigen::Vector3d bgi_bar=pLastKF->GetNavState().mbg,bai_bar=pLastKF->GetNavState().mba;
+  unique_lock<mutex> lock(mMutexOdomData);
+#ifndef TRACK_WITH_IMU
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+#else
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
+#endif
+}
+  
+//created by zzh over.
 
 long unsigned int KeyFrame::nNextId=0;
 
-KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,const char state):
+KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevKF,const char state):
     mnFrameId(F.mnId),  mTimeStamp(F.mTimeStamp), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
     mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
     mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
@@ -44,6 +97,14 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,const char state
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap),
     mState(state)
 {
+    if(pPrevKF)
+      pPrevKF->SetNextKeyFrame(this);
+    mpPrevKeyFrame=pPrevKF;mpNextKeyFrame=NULL;//zzh, constructor doesn't need to lock mutex
+    mNavState=F.mNavState;
+    // Set bias as bias+delta_bias, and reset the delta_bias term
+    mNavState.mbg+=mNavState.mdbg;mNavState.mba+=mNavState.mdba;
+    mNavState.mdbg=Eigen::Vector3d::Zero();mNavState.mdba=Eigen::Vector3d::Zero();//update bi (bi=bi+dbi) for a better PreIntegration of nextKF(localBA) & fixedlastKF motion-only BA of next Frame(this won't optimize lastKF.mdbi any more)
+  
     mnId=nNextId++;
 
     mGrid.resize(mnGridCols);
@@ -464,7 +525,7 @@ void KeyFrame::SetErase()
 {
     {
         unique_lock<mutex> lock(mMutexConnections);
-        if(mspLoopEdges.empty())
+        if(mspLoopEdges.empty())//if the pair of loop edges doesn't include this KF, it can be erased
         {
             mbNotErase = false;
         }
@@ -472,12 +533,28 @@ void KeyFrame::SetErase()
 
     if(mbToBeErased)
     {
-        SetBadFlag();
+        SetBadFlag();//if it's not the loop edges, then erased here when SetBadFlag() called during mbNotErase==true
     }
 }
 
 void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in Tracking, no memory leak(not be deleted) for bad KFs may be used by some Frames' trajectory retrieve
 {   
+    // Test log
+    if(mbBad)
+    {
+        vector<KeyFrame*> vKFinMap =mpMap->GetAllKeyFrames();
+        std::set<KeyFrame*> KFinMap(vKFinMap.begin(),vKFinMap.end());
+        if(KFinMap.count(this))
+        {
+            cerr<<"this bad KF is still in map?"<<endl;
+            mpMap->EraseKeyFrame(this);
+        }
+        mpKeyFrameDB->erase(this);
+        cerr<<"KeyFrame "<<mnId<<" is already bad. Set bad return"<<endl;
+	assert(!mbBad);
+        return;
+    }//please delete it when checked!!!
+    
     {
         unique_lock<mutex> lock(mMutexConnections);
         if(mnId==0)//cannot erase the initial/fixed KF
@@ -564,6 +641,25 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
         mpParent->EraseChild(this);//notice here mspChildrens may not be empty, but it's ok for it isn't the interface
         mTcp = Tcw*mpParent->GetPoseInverse();//the inter spot/link of Frames with its refKF in spanning tree
         mbBad = true;
+    }
+    
+    // Update Prev/Next KeyFrame in prev/next
+    {
+      unique_lock<mutex> lock(mMutexPNConnections);
+      assert(mpPrevKeyFrame&&mpNextKeyFrame);//check!!!
+      assert(!mpPrevKeyFrame->isBad()&&!mpNextKeyFrame->isBad());//check completeness!!!
+      mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
+      mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
+      //AppendIMUDataToFront, qIMU can speed up!
+      list<IMUData> limunew=mpPrevKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't  copy list!
+      {
+	unique_lock<mutex> lock(mMutexOdomData);
+	limunew.insert(limunew.end(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
+	mOdomPreIntIMU.SetPreIntegrationList(limunew.begin(),--limunew.end());
+      }
+      //ComputePreInt
+      PreIntegration<IMUData>(mpPrevKeyFrame);
+      mpPrevKeyFrame=mpNextKeyFrame=NULL;//clear this KF's pointer, I think it's not necessary
     }
 
     //erase this(&KF) in mpMap && mpKeyFrameDB

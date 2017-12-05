@@ -42,17 +42,93 @@ class KeyFrameDatabase;
 
 class KeyFrame
 {
-public:
-    // Odom PreIntegration
-    template <class _OdomData>
-    void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
-      mOdomPreInt.SetPreIntegrationList<_OdomData>(begin,pback);
-    }
-    void PreIntegration(KeyFrame* pLastKF){//0th KF don't use this function
-      mOdomPreInt.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
-    }
+  char mState;
   
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB,const char state=2);//2 is OK
+  // state xi={Ri,pi,vi,bi}, this xi doesn't include landmarks' state li/mi but include the camera's state xci(for Tbc is a constant)
+  NavState mNavState;
+  std::mutex mMutexNavState;//the mutex of mNavState(state/vertex), similar to mMutexPose
+  
+  // Odom measurements/PreIntegration, j means this keyframe, i means last KF, if no measurements=>mdeltatij==0
+  EncPreIntegrator mOdomPreIntEnc;
+  IMUPreintegrator mOdomPreIntIMU;
+  std::mutex mMutexOdomData;//the mutex of PreIntegrator(measurements), though BA doesn't change bi_bar leading to the unchanged IMU measurement, KFCulling() does change Odom measurement
+  
+  // Odom connections for localBA
+  KeyFrame *mpPrevKeyFrame,*mpNextKeyFrame;
+  std::mutex mMutexPNConnections;//the mutex of Prev/Next KF(connections/sparse states related to this KF), similar to mMutexConnections
+  
+  void UpdatePoseFromNS();
+  
+public:
+  NavState mNavStateGBA;//like mTcwGBA, for LoopClosing, set and used in the same thread(LoopClosing or IMUInitialization)
+  NavState mNavStatePrior;Matrix<double,15,15> mMargCovInv;//empty, just for template of PoseOptimization()
+  //PCL used image
+  cv::Mat Img[2];//0 is color,1 is depth
+  
+  NavState GetNavState(void){//cannot use const &(make mutex useless)
+    unique_lock<mutex> lock(mMutexNavState);
+    return mNavState;//call copy constructor
+  }
+  void SetNavState(const NavState& ns){
+    unique_lock<mutex> lock(mMutexNavState);
+    mNavState=ns;
+    UpdatePoseFromNS();
+  }//I think this should always call SetPose()
+  void SetNavStateOnly(const NavState& ns){
+    unique_lock<mutex> lock(mMutexNavState);
+    mNavState=ns;
+  }//if u use this func., please SetPose() by yourself
+  EncPreIntegrator GetEncPreInt(void){
+    unique_lock<mutex> lock(mMutexOdomData);
+    return mOdomPreIntEnc;//call copy constructor
+  }
+  IMUPreintegrator GetIMUPreInt(void){
+    unique_lock<mutex> lock(mMutexOdomData);
+    return mOdomPreIntIMU;//call copy constructor
+  }
+  std::list<IMUData> GetListIMUData(){
+    unique_lock<mutex> lock(mMutexOdomData);
+    return mOdomPreIntIMU.getlOdom();//call copy constructor
+  }//used in LocalMapping && IMUInitialization threads
+  KeyFrame* GetPrevKeyFrame(void){//for localBA fixing N+1th KF
+      unique_lock<mutex> lock(mMutexPNConnections);
+      return mpPrevKeyFrame;//return copy of int
+  }
+  KeyFrame* GetNextKeyFrame(void){//for KFCulling() judgement of timespan<=0.5/3s in VIORBSLAM paper
+      unique_lock<mutex> lock(mMutexPNConnections);
+      return mpNextKeyFrame;//return copy of int
+  }
+  void SetPrevKeyFrame(KeyFrame* pKF){//for KFCulling()/SetBadFlag()
+    unique_lock<mutex> lock(mMutexPNConnections);
+    mpPrevKeyFrame = pKF;
+  }
+  void SetNextKeyFrame(KeyFrame* pKF){//for KF's constructor && KFCulling()
+    unique_lock<mutex> lock(mMutexPNConnections);
+    mpNextKeyFrame = pKF;
+  }
+  void UpdateNavStatePVRFromTcw();//mainly for Posegraph optimization, but I think when Tcw is finally optimized, please call this func. to update NavState
+  
+  // Odom PreIntegration
+  template <class _OdomData>
+  void SetPreIntegrationList(typename std::list<_OdomData>::iterator begin,typename std::list<_OdomData>::iterator pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+    unique_lock<mutex> lock(mMutexOdomData);
+    mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
+  }
+  template <class _OdomData>
+  void PreIntegration(KeyFrame* pLastKF){
+    unique_lock<mutex> lock(mMutexOdomData);
+    mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+  }//0th frame don't use this function, pLastKF shouldn't be bad
+  
+  inline char getState(){
+    return mState;
+  }
+  
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState
+//created by zzh over.
+  
+public:
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB,KeyFrame* pPrevKF=NULL,const char state=2);//2 is OK
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -124,16 +200,9 @@ public:
     static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
         return pKF1->mnId<pKF2->mnId;
     }
-    
-    inline char getState(){
-      return mState;
-    }
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
-    //PCL used image
-    cv::Mat Img[2];//0 is color,1 is depth
-
     static long unsigned int nNextId;
     long unsigned int mnId;
     const long unsigned int mnFrameId;
@@ -243,13 +312,14 @@ protected:
 
     std::mutex mMutexPose;
     std::mutex mMutexConnections;
-    std::mutex mMutexFeatures;
-    
-    //created by zzh
-    char mState;
-    // Odom PreIntegration, j means this keyframe, i means last KF, if no measurements it will be cv::Mat()
-    OdomPreIntegrator mOdomPreInt;
+    std::mutex mMutexFeatures;//the mutex of mvpMapPoints(landmarks' states/vertices)
 };
+
+//created by zzh
+template <>//specialized
+void KeyFrame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator begin,typename std::list<IMUData>::iterator pback);
+template <>
+void KeyFrame::PreIntegration<IMUData>(KeyFrame* pLastKF);
 
 } //namespace ORB_SLAM
 
