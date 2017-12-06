@@ -3,7 +3,6 @@
 #define ODOMDATA_H
 
 #define TRACK_WITH_IMU
-#define TRACK_WITH_IMU_VQMAW
 
 //for Jacobi calculation & member data
 #include <Eigen/Core>

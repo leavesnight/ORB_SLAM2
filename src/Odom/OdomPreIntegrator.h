@@ -143,6 +143,7 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
 }
 template<class IMUDataBase>
 void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vector3d& acc, const double& dt){
+  assert(dt>=0);
   using namespace Sophus;
   using namespace Eigen;
   double dt2div2=dt*dt/2;
@@ -180,10 +181,10 @@ void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vect
   //see the same paper (69) & use similar iterative rearrange method (59)
   // jacobian of delta measurements w.r.t bias of gyro/acc, for motion_update_with_dbi & residual error & J_error_dxi,xj calculation
   // update P first, then V, then R for using ij as ij-1 term
-  mJapij += mJavij*dt - dR*dt2div2;
-  mJgpij += mJgvij*dt - dR*skewa*mJgRij*dt2div2;
-  mJavij += -dR*dt;
-  mJgvij += -dR*skewa*mJgRij*dt;
+  mJapij += mJavij*dt - mRij*dt2div2;//mRij here is delta~Rij-1 before its updation
+  mJgpij += mJgvij*dt - mRij*skewa*mJgRij*dt2div2;
+  mJavij += -mRij*dt;
+  mJgvij += -mRij*skewa*mJgRij*dt;//notice except mJgRij use dR, the other Jxxij use mRij!
   mJgRij = dR.transpose()*mJgRij - Jr*dt;//like (59): JgRij=delta~Rj-1j.t()*JgRij-1 - Jrj-1*dtj-1j, the left incremental formula is easy to get for there's no j label
   
   //see paper On-Manifold Preintegration (35~37)

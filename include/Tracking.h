@@ -174,10 +174,10 @@ public:
 
 protected:
     // Main tracking function. It is independent of the input sensor.
-    void Track(cv::Mat img[2]=nullptr);//img[2] recorded by KFs
+    void Track(cv::Mat img[2]=NULL);//img[2] recorded by KFs
 
     // Map initialization for stereo and RGB-D
-    void StereoInitialization(cv::Mat img[2]=nullptr);
+    void StereoInitialization(cv::Mat img[2]=NULL);
 
     // Map initialization for monocular
     void MonocularInitialization();
@@ -204,7 +204,7 @@ protected:
     call mCurrentFrame.isInFrustum(pMP,0.5), then try to match mvpLocalMapPoints to mCurrentFrame by SBP()(add some mvpMapPoints)
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame(cv::Mat img[2]=nullptr,eTrackingState state=OK);
+    void CreateNewKeyFrame(cv::Mat img[2]=NULL,eTrackingState state=OK);
 
     // In case of performing only localization, this flag is true when there are no matches to
     // points in the map. Still tracking will continue if there are enough matches with temporal points.

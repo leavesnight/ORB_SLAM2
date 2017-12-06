@@ -19,6 +19,8 @@
 */
 // rectified by zzh in 2017.
 
+//#define TRACK_WITH_IMU_VQMAW//we use the last parameter as the odometryData's number, default is 15
+
 #include<iostream>
 #include<algorithm>
 #include<fstream>
@@ -46,11 +48,10 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
   double* odomdata=new double[nTotalNum];
   double timestamp,tmstpLast=-1;
   
-  while (!g_pSLAM){//if it's nullptr
+  while (!g_pSLAM){//if it's NULL
     sleep(0.1);//wait 0.1s
   }
   while (!finOdomdata.eof()){
-    string strTmp;
     finOdomdata>>timestamp;
     if (finOdomdata.eof())
       break;
@@ -68,10 +69,8 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
     if (timestamp>tmstpLast)//avoid == condition
 #ifndef TRACK_WITH_IMU
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::BOTH);
-#elif defined(TRACK_WITH_IMU_VQMAW)
-      g_pSLAM->TrackOdom(timestamp,odomdata+2+4+3,(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz
 #else
-      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::IMU);//for EuRoC dataset
+      g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
 #endif
     //cout<<green<<timestamp<<white<<endl;
     tmstpLast=timestamp;
@@ -83,7 +82,7 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
 
 int main(int argc, char **argv)
 {
-    thread* pOdomThread=nullptr;
+    thread* pOdomThread=NULL;
     ifstream finOdomdata;
     int totalNum=0;
     cout<<fixed<<setprecision(6)<<endl;
@@ -101,7 +100,7 @@ int main(int argc, char **argv)
 	  return -1;
 	}
         string strTmp;
-	getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);
+	getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);//odom.txt should have 3 unused lines
         pOdomThread=new thread(&odomRun,ref(finOdomdata),totalNum);//must use ref()
 	}
 	break;
@@ -224,7 +223,7 @@ int main(int argc, char **argv)
     SLAM.SaveMap("Map.pcd");
     
     //wait for pOdomThread finished
-    if (pOdomThread!=nullptr)
+    if (pOdomThread!=NULL)
       pOdomThread->join();
 
     return 0;

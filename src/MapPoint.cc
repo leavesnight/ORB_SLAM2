@@ -27,8 +27,8 @@ namespace ORB_SLAM2
 {
 
 void MapPoint::UpdateScale(const float &scale){
-  unique_lock<mutex> lock(mMutexPos);
   SetWorldPos(mWorldPos*scale);
+  unique_lock<mutex> lock(mMutexPos);
   mfMaxDistance*=scale;
   mfMinDistance*=scale;
 }

@@ -81,19 +81,20 @@ class IMUInitialization{//designed for multi threads
   }
   void ResetIfRequested(){
     if(GetReset()){
-      SetReset(false);
       //reset relevant variables
-      mdStartTime=-1;SetSensorIMU(false);
+      mdStartTime=-1;SetSensorIMU(false);SetCurrentKeyFrame(NULL);
       SetVINSInited(false);
       SetInitGBAFinish(false);//if it's true, won't be automatically reset
       SetFirstVINSInited(false);
+      
+      SetReset(false);
     }
   }
   CREATOR_SET(Finish,bool,b)
   CREATOR_GET(FinishRequest,bool,b)
 public:
   IMUInitialization(Map* pMap,const bool bMonocular,const string& strSettingPath):mpMap(pMap),mbMonocular(bMonocular),mbFinish(true),mbFinishRequest(false){
-    mdStartTime=-1;mbSensorIMU=false;
+    mdStartTime=-1;mbSensorIMU=false;mpCurrentKeyFrame=NULL;
     mbVINSInited=false;
     mbCopyInitKFs=false;
 

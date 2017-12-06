@@ -20,13 +20,13 @@ void IMUInitialization::Run(){
   while(1){
     if(GetSensorIMU()&&KeyFrame::nNextId>3){//at least 4 consecutive KFs, see IV-B/C VIORBSLAM paper
       KeyFrame* pCurKF=GetCurrentKeyFrame();
-      if(!GetVINSInited() && pCurKF->mnId > initedid){
+      if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
 	initedid = pCurKF->mnId;
 	if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish
       }
     }
     
-    ResetIfRequested();
+    ResetIfRequested();if (mdStartTime<0) initedid=0;
     if(GetFinishRequest()) break;
     usleep(3000);
   }
@@ -34,6 +34,8 @@ void IMUInitialization::Run(){
 }
 bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the KFs has no inter IMUData in initial 15s!!!
   //Recording data in txt files for further analysis
+  static double trytime=0;
+  cout<<"IMUInitialization: "<<trytime++<<endl;
   static bool fopened = false;
   static ofstream fgw,fscale,fbiasa,fcondnum,fbiasg;
   if(mTmpfilepath.length()>0&&!fopened){
@@ -73,6 +75,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   //see VIORBSLAM paper IV, here N=all KFs in map, not the meaning of local KFs' number
   // Use all KeyFrames in map to compute
   vector<KeyFrame*> vScaleGravityKF = mpMap->GetAllKeyFrames();
+  sort(vScaleGravityKF.begin(),vScaleGravityKF.end(),[](const KeyFrame *a,const KeyFrame *b){return a->mnId<b->mnId;});
+  assert((*vScaleGravityKF.begin())->mnId==0);
   int N = vScaleGravityKF.size();
   KeyFrame* pNewestKF = vScaleGravityKF[N-1];
   // Store initialization-required KeyFrame data
@@ -90,6 +94,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Step 1. / see VIORBSLAM paper IV-A
   // Try to compute initial gyro bias, using optimization with Gauss-Newton
   Vector3d bgest=Optimizer::OptimizeInitialGyroBias<IMUKeyFrameInit>(vKFInit);//nothing changed, just return the optimized result bg*
+  cout<<"bgest: "<<bgest<<endl;
 
   // Update biasg and pre-integration in LocalWindow(here all KFs).
   for(int i=0;i<N;i++) vKFInit[i]->mbg_=bgest;
@@ -105,6 +110,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3=vKFInit[i+2];
     double dt12 = pKF2->mOdomPreIntIMU.mdeltatij;//deltat12
     double dt23 = pKF3->mOdomPreIntIMU.mdeltatij;
+    assert(dt12!=0&&dt23!=0);//now let them not be 0
+    assert(dt12>0&&dt23>0);
     // Pre-integrated measurements
     cv::Mat dp12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mpij);//deltap12
     cv::Mat dv12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mvij);
@@ -128,7 +135,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Use svd to compute A*x=B, x=[s,gw] 4x1 vector
   // A=u*S*vt=u*w*vt, u*w*vt*x=B => x=vt'*winv*u'*B, or we call the pseudo inverse of A/A.inv()=(A.t()*A).inv()*A.t(), in SVD we have A.inv()=v*winv*u.t() where winv is the w with all nonzero term is the reciprocal of the corresponding singular value
   cv::Mat w,u,vt;// Note w is 4x1 vector by SVDecomp()/SVD::compute() not the 4*4(not FULL_UV)/m*n(FULL_UV) singular matrix we stated last line
-  cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A);// A is changed in SVDecomp()(just calling the SVD::compute) with cv::SVD::MODIFY_A for speed
+  cv::SVDecomp(A,w,u,vt,cv::SVD::MODIFY_A);// A is changed in SVDecomp()(just calling the SVD::compute) with cv::SVD::MODIFY_A for speed
   cv::Mat winv=cv::Mat::eye(4,4,CV_32F);
   for(int i=0;i<4;++i){
     if(fabs(w.at<float>(i))<1e-10){//too small in sufficient w meaning the linear dependent equations causing the solution is not unique?
@@ -140,7 +147,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cv::Mat x=vt.t()*winv*u.t()*B;
   double sstar=x.at<float>(0);		// scale should be positive
   cv::Mat gwstar=x.rowRange(1,4);	// gravity should be about ~9.8
-  //cout<<"scale sstar: "<<sstar<<endl;cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
+  cout<<"scale sstar: "<<sstar<<endl;cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
 
   // Step 3. / See VIORBSLAM paper IV-C
   // Use gravity magnitude 9.810 as constraint; gIn/^gI=[0;0;1], the normalized gravity vector in an inertial frame
@@ -245,12 +252,33 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	unique_lock<mutex> lock(mpMap->mMutexMapUpdate);// Get Map Mutex
 	//Update KFs' PRVB
 	//update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped
-	vScaleGravityKF=mpMap->GetAllKeyFrames();//notice old KFs in vScaleGravityKF may be culled during before 3 steps
-	pNewestKF=vScaleGravityKF.back();
+	vScaleGravityKF=mpMap->GetAllKeyFrames();
+	pNewestKF=GetCurrentKeyFrame();
+	assert(pNewestKF==vScaleGravityKF.back());//they must be same!
+	/*KeyFrame* pCurKF=GetCurrentKeyFrame();
+	//correct pNewestKF if it's Bad
+	if (pNewestKF->isBad()){//if it's Bad, it cannot be pCurKF
+	  assert(pNewestKF!=pCurKF);
+	  cout<<"Try to recover a good pNewestKF!"<<endl;
+	  KeyFrame* pNewestGoodKF;
+	  do{
+	    pNewestGoodKF=pCurKF->GetPrevKeyFrame();
+	  }while (pNewestGoodKF->mnId>pNewestKF->mnId);//for we use all KFs in map as N, it must be found!
+	  pNewestKF=pNewestGoodKF;
+	}
+	while (pNewestKF!=pCurKF){
+	  KeyFrame* pNextKF=pNewestKF->GetNextKeyFrame();
+	  vScaleGravityKF.push_back(pNextKF);//notice old KFs in vScaleGravityKF may be culled during before 3 steps
+	  pNewestKF=pNextKF;
+	}*/
 	//recover right scaled Twc&NavState from old unscaled Twc with scale
-	for(vector<KeyFrame*>::const_iterator vit=vScaleGravityKF.begin(), vend=vScaleGravityKF.end(); vit!=vend; vit++){
+	for(vector<KeyFrame*>::const_iterator vit=vScaleGravityKF.begin(), vend=vScaleGravityKF.end(); vit!=vend; ++vit){
 	  KeyFrame* pKF = *vit;
 	  if(pKF->isBad()) continue;
+	  //we can SetPose() first even no IMU data
+	  cv::Mat Tcw=pKF->GetPose();
+	  cv::Mat tcw=Tcw.rowRange(0,3).col(3)*scale;//right scaled pwc
+	  tcw.copyTo(Tcw.rowRange(0,3).col(3));pKF->SetPose(Tcw);//manually SetPose(right scaled Tcw)
 	  // Position and rotation of visual SLAM
 	  cv::Mat wPc = pKF->GetPoseInverse().rowRange(0,3).col(3);                   // wPc/twc
 	  cv::Mat Rwc = pKF->GetPoseInverse().rowRange(0,3).colRange(0,3);            // Rwc
@@ -265,9 +293,10 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	  if(pKF!=vScaleGravityKF.back()){
 	    KeyFrame* pKFnext=pKF->GetNextKeyFrame();
 	    assert(pKFnext&&"pKFnext is NULL");
+	    if (pKFnext->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
 	    pKF->SetNavStateOnly(ns);//we must update the pKF->mbg&mba before pKFnext->PreIntegration()
 	    pKFnext->PreIntegration<IMUData>(pKF);//it's originally based on bi_bar=0, but now it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
-	    const IMUPreintegrator& imupreint=pKFnext->GetIMUPreInt();//IMU pre-int between pKF ~ pKFnext, though the paper seems to use the vKFInit[k].mOdomPreIntIMU so its dbgi=0 but its dbai=bai, we use more precise bi_bar here
+	    const IMUPreintegrator imupreint=pKFnext->GetIMUPreInt();//IMU pre-int between pKF ~ pKFnext, though the paper seems to use the vKFInit[k].mOdomPreIntIMU so its dbgi=0 but its dbai=bai, we use more precise bi_bar here
 	    double dt=imupreint.mdeltatij;                                		// deltati_i+1
 	    cv::Mat dp=Converter::toCvMat(imupreint.mpij);       			// deltapi_i+1
 	    //cv::Mat Japij=Converter::toCvMat(imupreint.mJapij);    			// Ja_deltap
@@ -277,21 +306,19 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	    ns.mvwb=Converter::toVector3d(vwbi);
 	  }else{
 	    // If this is the last KeyFrame, no 'next' KeyFrame exists, use (3) in VOIRBSLAM paper with ba_bar=0,bg_bar=bgest=>dba=ba,dbg=0
+	    if (pKF->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
 	    KeyFrame* pKFprev=pKF->GetPrevKeyFrame();
 	    assert(pKFprev&&"pKFnext is NULL");
-	    const IMUPreintegrator& imupreint=pKF->GetIMUPreInt();//notice it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
+	    const IMUPreintegrator imupreint=pKF->GetIMUPreInt();//notice it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
 	    double dt=imupreint.mdeltatij;
 	    NavState nsprev=pKFprev->GetNavState();
 	    ns.mvwb=nsprev.mvwb+gweig*dt+nsprev.mRwb*(imupreint.mvij);//vwbj=vwbi+gw*dt+Rwbi*(dvij+Javij*dbai)
 	  }
 	  pKF->SetNavStateOnly(ns);//now ns also has the right mvwb
-	  cv::Mat Tcw=pKF->GetPose();
-	  cv::Mat tcw=Tcw.rowRange(0,3).col(3)*scale;//right scaled pwc
-	  tcw.copyTo(Tcw.rowRange(0,3).col(3));pKF->SetPose(Tcw);//manually SetPose(right scaled Tcw)
 	}
 	//Update MPs' Position
 	vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();//we don't change the vpMPs[i] but change the *vpMPs[i]
-	for(vector<MapPoint*>::iterator vit=vpMPs.begin(), send=vpMPs.end(); vit!=send; vit++) (*vit)->UpdateScale(scale);
+	for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; ++vit) (*vit)->UpdateScale(scale);
 	//Now every thing in Map is right scaled & mGravityVec is got
 	SetVINSInited(true);
 	SetFirstVINSInited(true);
@@ -302,7 +329,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       }
 
       // Run global BA after inited
-      unsigned long nLoopKF=pNewestKF->mnId;
+      unsigned long nLoopKF=pNewestKF->mnId;//does it need to be set noterase?
       Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mGravityVec,10,NULL,nLoopKF,false);
       cerr<<"finish global BA after vins init"<<endl;
       

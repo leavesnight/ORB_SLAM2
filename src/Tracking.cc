@@ -91,14 +91,15 @@ void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
-//   if (type==2){
+   if (type==2){
+     cout<<"List size: "<<mpReferenceKF->GetListIMUData().size()<<endl;
 // #ifndef TRACK_WITH_IMU
 //     Eigen::AngleAxisd angax(mpReferenceKF->GetIMUPreInt().mdelxRji);
 //     cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<"t, "<<angax.angle()*angax.axis()[1]<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #else
 //     cout<<Sophus::SO3::log(Sophus::SO3(mpReferenceKF->GetIMUPreInt().mRij)).transpose()<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #endif
-//   }
+   }
 }
 bool Tracking::TrackWithIMU(bool bMapUpdated){
     ORBmatcher matcher(0.9,true);//here 0.9 is useless
@@ -663,7 +664,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 
     if(mState==NOT_INITIALIZED)
     {
-	PreIntegration();//PreIntegration Intialize
         if(mSensor==System::STEREO || mSensor==System::RGBD)
             StereoInitialization(img);
         else
@@ -708,6 +708,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                         bOK = TrackReferenceKeyFrame();
 			cout<<red"TrackRefKF()2"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 		    }
+		    cout<<mCurrentFrame.mnId<<endl;
                 }
             }
             else
@@ -1005,6 +1006,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 
 void Tracking::StereoInitialization(cv::Mat img[2])
 {
+    PreIntegration();//PreIntegration Intialize, zzh
+    
     if(mCurrentFrame.N>500)
     {
         // Set Frame pose to the origin
@@ -1064,6 +1067,8 @@ void Tracking::MonocularInitialization()
 
     if(!mpInitializer)
     {
+	PreIntegration();//PreIntegration Intialize, Clear IMUData buffer, zzh
+	
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
@@ -1137,8 +1142,10 @@ void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);
-    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
-
+    mpLastKeyFrame=pKFini;//initial KF doesn't need to ComputePreInt(), and PreIntegration()/Clear IMUData buffer before initial KF is done in MonocularInitialization()
+    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,pKFini);//zzh, it's very important! or assert failed in KF->SetBadFlag()
+    mpReferenceKF=pKFcur;//next 2KFs' ComputePreInt()/Preintegration(2) need this variable set to current KF
+    PreIntegration(2);//this will automatically Clear IMUData buffer before mCurrentFrame/pKFcur, zzh
 
     pKFini->ComputeBoW();
     pKFcur->ComputeBoW();

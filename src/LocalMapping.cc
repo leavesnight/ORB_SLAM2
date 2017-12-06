@@ -31,7 +31,7 @@ namespace ORB_SLAM2
 LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-    mpLastKF(nullptr),mnLastOdomKFId(0)
+    mpLastKF(NULL),mnLastOdomKFId(0)
 {
   cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
@@ -184,11 +184,12 @@ void LocalMapping::ProcessNewKeyFrame()
     }    
 
     // Update links in the Covisibility Graph
-    if (mpLastKF!=nullptr&&mpLastKF->getState()==Tracking::ODOMOK
+    if (mpLastKF!=NULL&&mpLastKF->getState()==Tracking::ODOMOK
       &&mpCurrentKeyFrame->getState()==Tracking::ODOMOK){//not a good start then delete the last Odom KF and its Odom MPs
-      KeyFrame* pKFTmp=mpLastKF;
-      mpLastKF=mpLastKF->GetParent();
-      pKFTmp->SetBadFlag();
+	KeyFrame* pKFTmp=mpLastKF;
+	mpLastKF=mpLastKF->GetParent();
+	pKFTmp->SetBadFlag();
+	cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
     }
     //mpCurrentKeyFrame->UpdateConnections(mpLastKF);
     mpCurrentKeyFrame->UpdateConnections();
@@ -805,7 +806,10 @@ void LocalMapping::KeyFrameCulling()
 	    if (mpLastKF==pKF){
 	      mpLastKF=pKF->GetParent();
 	    }
+	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
+	    cout<<red"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
             pKF->SetBadFlag();
+	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<endl;
 	}
     }
     

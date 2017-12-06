@@ -384,8 +384,8 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
     // This should not happen
     if(KFcounter.empty()){
         cout<<"Failed to update spanning tree! "<<mnId<<" "<<mnFrameId<<endl;
-	if (pLastKF==nullptr){
-	  if (mpParent==nullptr)
+	if (pLastKF==NULL){
+	  if (mpParent==NULL)
 	    cout<<"Error in parameter in UpdateConnections()"<<endl;
 	  else
 	    cout<<"but has 1 parent and "<<mConnectedKeyFrameWeights.size()<<" covisibility KFs"<<endl;
@@ -646,19 +646,20 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
     // Update Prev/Next KeyFrame in prev/next
     {
       unique_lock<mutex> lock(mMutexPNConnections);
-      assert(mpPrevKeyFrame&&mpNextKeyFrame);//check!!!
+      assert(mpPrevKeyFrame);
+      assert(mpNextKeyFrame);//check!!!
       assert(!mpPrevKeyFrame->isBad()&&!mpNextKeyFrame->isBad());//check completeness!!!
       mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
       mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
       //AppendIMUDataToFront, qIMU can speed up!
-      list<IMUData> limunew=mpPrevKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't  copy list!
+      list<IMUData> limunew=mpNextKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't  copy list!
       {
 	unique_lock<mutex> lock(mMutexOdomData);
-	limunew.insert(limunew.end(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
-	mOdomPreIntIMU.SetPreIntegrationList(limunew.begin(),--limunew.end());
+	limunew.insert(limunew.begin(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
+	mpNextKeyFrame->SetPreIntegrationList<IMUData>(limunew.begin(),--limunew.end());
       }
       //ComputePreInt
-      PreIntegration<IMUData>(mpPrevKeyFrame);
+      mpNextKeyFrame->PreIntegration<IMUData>(mpPrevKeyFrame);
       mpPrevKeyFrame=mpNextKeyFrame=NULL;//clear this KF's pointer, I think it's not necessary
     }
 
