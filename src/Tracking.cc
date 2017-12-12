@@ -520,7 +520,7 @@ void Tracking::StereoInitialization(cv::Mat img[2])
 
         // Create KeyFrame
         KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
-	pKFini->Img[0]=img[0];pKFini->Img[1]=img[1];
+	if (img) {pKFini->Img[0]=img[0];pKFini->Img[1]=img[1];}
 
         // Insert KeyFrame in the map
         mpMap->AddKeyFrame(pKFini);
@@ -1080,7 +1080,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
 
     if(mSensor!=System::MONOCULAR)
     {	
-	pKF->Img[0]=img[0];pKF->Img[1]=img[1];
+	if (img){pKF->Img[0]=img[0];pKF->Img[1]=img[1];}
 	
 	
         mCurrentFrame.UpdatePoseMatrices();//UnprojectStereo() use mRwc,mOw
