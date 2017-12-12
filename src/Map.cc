@@ -24,6 +24,10 @@
 
 namespace ORB_SLAM2
 {
+  
+bool Map::KFIdComapre::operator ()(const KeyFrame* kfleft,const KeyFrame* kfright) const{//zzh
+    return kfleft->mnId < kfright->mnId;
+}
 
 Map::Map():mnMaxKFid(0),mnBigChangeIdx(0),
 mnChangeIdx(0)//zzh

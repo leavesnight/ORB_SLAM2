@@ -50,6 +50,9 @@ class Optimizer
 public:
   template<class KeyFrame>
   int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false,const bool bFixedLast=true);//2 frames' motion-only BA, fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
+  template<class KeyFrame>
+  static void PoseOptimizationAddEdge(KeyFrame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
+			       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastKFPVRId){}//we specialize the Frame version
   void static LocalBAPRVIDP(KeyFrame *pKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool* pbStopFlag, Map* pMap, cv::Mat &gw);
   void static LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool *pbStopFlag, Map *pMap, cv::Mat gw);
   void static GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations=5, bool *pbStopFlag=NULL,
@@ -97,10 +100,10 @@ public:
 using namespace Eigen;
 template <class KeyFrame>
 int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg,const bool bFixedLast){
+  cout<<"Enter PoseOpt... curFrameId="<<pFrame->mnId<<endl;
   // Extrinsics
-  cv::Mat Tcb=Converter::toCvMatInverse(pFrame->mTbc);
-  Matrix3d Rcb = Converter::toMatrix3d(Tcb.rowRange(0,3).colRange(0,3));
-  Vector3d tcb = Converter::toVector3d(Tcb.rowRange(0,3).col(3));
+  Matrix3d Rcb = pFrame->meigRcb;
+  Vector3d tcb = pFrame->meigtcb;
   // Gravity vector in world frame
   Vector3d GravityVec = Converter::toVector3d(gw);
 
@@ -170,12 +173,15 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   int nInitialCorrespondences=0;
 
   // Set MapPoint Unary edges/Set MapPoint vertices
-  const int N = pFrame->N;//for LastFrame JingWang use Nlast while the VIORBSLAM paper hasn't done this see its Fig.2.!
+  const int N = pFrame->N;//for LastFrame JingWang use Nlast while the VIORBSLAM paper hasn't done this see its Fig.2.! let's try his method!
 
   vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> vpEdgesMono;//2*1(_measurement) unary edge<VertexNavStatePVR>
   vector<size_t> vnIndexEdgeMono;
   vpEdgesMono.reserve(N);
   vnIndexEdgeMono.reserve(N);//this can be optimized in RGBD mode
+  //for bFixedLast==false
+  vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> vpEdgesMonoLast;
+  vector<size_t> vnIndexEdgeMonoLast;
 
   vector<g2o::EdgeStereoNavStatePVRPointXYZOnlyPose*> vpEdgesStereo;//3*1(ul vl ur) unary edge
   vector<size_t> vnIndexEdgeStereo;
@@ -205,7 +211,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 
 	      g2o::EdgeNavStatePVRPointXYZOnlyPose* e = new g2o::EdgeNavStatePVRPointXYZOnlyPose();
 
-	      e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+	      e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(FramePVRId)));//here should change to FramePVRId!
 	      e->setMeasurement(obs);
 	      const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
 	      e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
@@ -223,6 +229,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	  }
 	  else  // Stereo observation
 	  {
+	      assert(0&&"Now we just test Mono!but u enter the wrong section!");
 	      nInitialCorrespondences++;
 	      pFrame->mvbOutlier[i] = false;
 
@@ -235,7 +242,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	      //g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
 	      g2o::EdgeStereoNavStatePVRPointXYZOnlyPose* e = new g2o::EdgeStereoNavStatePVRPointXYZOnlyPose();
 
-	      e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));//this dynamic_cast is useless
+	      e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(FramePVRId)));//this dynamic_cast is useless
 	      e->setMeasurement(obs);//edge parameter/measurement formula output z
 	      const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
 	      Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;//optimization target block=|e'*Omiga(or Sigma^(-1))*e|, diagonal matrix means independece between x and y pixel noise
@@ -253,10 +260,10 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	      vnIndexEdgeStereo.push_back(i);//record the edge recording feature index
 	  }
       }
-
   }
+  //for bFixedLast==false
+  if (!bFixedLast) PoseOptimizationAddEdge<KeyFrame>(pLastKF,vpEdgesMonoLast,vnIndexEdgeMonoLast,Rcb,tcb,optimizer,LastKFPVRId);
   }
-
 
   if(nInitialCorrespondences<3)//at least P3P（well posed equation） EPnP(n>3) (overdetermined equation)
       return 0;
@@ -308,6 +315,34 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	  if(it==2)
 	      e->setRobustKernel(0);
       }
+      for(size_t i=0, iend=vpEdgesMonoLast.size(); i<iend; i++)//for 3D-monocular 2D matches, may entered in RGBD!
+      {
+	  KeyFrame* pFrame=pLastKF;
+	  g2o::EdgeNavStatePVRPointXYZOnlyPose* e = vpEdgesMonoLast[i];
+
+	  const size_t idx = vnIndexEdgeMonoLast[i];
+
+	  if(pFrame->mvbOutlier[idx])
+	  {
+	      e->computeError();
+	  }
+
+	  const float chi2 = e->chi2();
+
+	  if(chi2>chi2Mono[it])
+	  {                
+	      pFrame->mvbOutlier[idx]=true;
+	      e->setLevel(1);
+	  }
+	  else
+	  {
+	      pFrame->mvbOutlier[idx]=false;
+	      e->setLevel(0);
+	  }
+
+	  if(it==2)
+	      e->setRobustKernel(0);
+      }
 
       for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)//for 3D-stereo 2D matches
       {
@@ -340,10 +375,11 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 
       if(optimizer.edges().size()<10)//it outliers+inliers(/_edges) number<10 only optimize once with RobustKernelHuber
 	  break;
-  }    
+  }
 
   // Recover optimized pose and return number of inliers
   g2o::VertexNavStatePVR* vNSPVR_recov = static_cast<g2o::VertexNavStatePVR*>(optimizer.vertex(FramePVRId));
+  cout<<"recovered pwb="<<vNSPVR_recov->estimate().mpwb.transpose()<<" & matches by motion-only BA:"<<nInitialCorrespondences-nBad<<", before Optimized:"<<nInitialCorrespondences<<endl;
   nsj=vNSPVR_recov->estimate();
   g2o::VertexNavStateBias* vNSBias_recov = static_cast<g2o::VertexNavStateBias*>(optimizer.vertex(FrameBiasId));
   const NavState& nsBias_recov = vNSBias_recov->estimate();
@@ -353,36 +389,40 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   // Compute marginalized Hessian H and B, H*x=B, H/B can be used as prior for next optimization in PoseOptimization, dx'Hdx should be small then next optimized result is appropriate for former BA
   if(bComputeMarg)
   {
-      std::vector<g2o::OptimizableGraph::Vertex*> margVertices;
-      margVertices.push_back(optimizer.vertex(FramePVRId));
-      margVertices.push_back(optimizer.vertex(FrameBiasId));
+    cout<<"Optimized OK. now computeMarginals..."<<endl;
+    std::vector<g2o::OptimizableGraph::Vertex*> margVertices;
+    margVertices.push_back(optimizer.vertex(FramePVRId));
+    margVertices.push_back(optimizer.vertex(FrameBiasId));
 
-      //TODO: how to get the joint marginalized covariance of PVR&Bias, here it's already marginalized for fixed LastKF(for SigmaI ind. with SigmaR then H(0,1)=0,H(1,0)=0)
-      g2o::SparseBlockMatrixXd spinv;
-      optimizer.computeMarginals(spinv, margVertices);//marginalized by cholmod linearsolver
-      // spinv include 2 blocks, 9x9-(0,0) for PVR, 6x6-(1,1) for Bias
-      if (bFixedLast){
-	Matrix<double,15,15> margCovInv = Matrix<double,15,15>::Zero();
-	margCovInv.topLeftCorner(9,9) = spinv.block(0,0)->inverse();//0 corresponding to the FramePVRId & fixed LastKFPVRId's hessianidx=-1
-	margCovInv.bottomRightCorner(6,6) = spinv.block(1,1)->inverse();//1 corresponding to the FrameBiasId
-	pFrame->mMargCovInv = margCovInv;
-      }else{
-	Matrix<double,15,15> margCov = Matrix<double,15,15>::Zero();
-	margCov.topLeftCorner(9,9) = spinv.block(0,0)->eval();//I think eval() is useless for there's no confusion here/.noalias()=
-	margCov.topRightCorner(9,6) = spinv.block(0,1)->eval();
-	margCov.bottomLeftCorner(6,9) = spinv.block(1,0)->eval();
-	margCov.bottomRightCorner(6,6) = spinv.block(1,1)->eval();
-	pFrame->mMargCovInv = margCov.inverse();
-      }
-      pFrame->mNavStatePrior=pFrame->mNavState;//pLastF->mNavStatePrior is needed for this func. will be called twice and pLastF->mNavState will also be optimized
+    //TODO: how to get the joint marginalized covariance of PVR&Bias, here it's already marginalized for fixed LastKF(for SigmaI ind. with SigmaR then H(0,1)=0,H(1,0)=0)
+    g2o::SparseBlockMatrixXd spinv;
+    optimizer.computeMarginals(spinv, margVertices);//marginalized by cholmod linearsolver
+    // spinv include 2 blocks, 9x9-(0,0) for PVR, 6x6-(1,1) for Bias
+    if (bFixedLast){
+      Matrix<double,15,15> margCovInv = Matrix<double,15,15>::Zero();
+      margCovInv.topLeftCorner(9,9) = spinv.block(0,0)->inverse();//0 corresponding to the FramePVRId & fixed LastKFPVRId's hessianidx=-1
+      margCovInv.bottomRightCorner(6,6) = spinv.block(1,1)->inverse();//1 corresponding to the FrameBiasId
+      pFrame->mMargCovInv = margCovInv;
+    }else{
+      Matrix<double,15,15> margCov = Matrix<double,15,15>::Zero();
+      margCov.topLeftCorner(9,9) = spinv.block(0,0)->eval();//I think eval() is useless for there's no confusion here/.noalias()=
+      margCov.topRightCorner(9,6) = spinv.block(0,1)->eval();
+      margCov.bottomLeftCorner(6,9) = spinv.block(1,0)->eval();
+      margCov.bottomRightCorner(6,6) = spinv.block(1,1)->eval();
+      pFrame->mMargCovInv = margCov.inverse();
+    }
+    pFrame->mNavStatePrior=nsj;//pLastF->mNavStatePrior is needed for this func. will be called twice and pLastF->mNavState will also be optimized
   }
 
   return nInitialCorrespondences-nBad;//number of inliers
 }
+template <>
+void Optimizer::PoseOptimizationAddEdge<Frame>(Frame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
+					       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastFramePVRId);
 
 template <class IMUKeyFrameInit>
 Vector3d Optimizer::OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> &vpKFInit, bool bInfo){
-  Matrix3d Rcb=Converter::toMatrix3d(Frame::mTbc.rowRange(0,3).colRange(0,3).t());
+  Matrix3d Rcb = Frame::meigRcb;
 
   // Setup optimizer
   g2o::SparseOptimizer optimizer;

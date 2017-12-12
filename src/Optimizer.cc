@@ -39,15 +39,60 @@ namespace ORB_SLAM2
 
 using namespace Eigen;
 
+template <>
+void Optimizer::PoseOptimizationAddEdge<Frame>(Frame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
+					       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastFramePVRId){
+  return;
+  const int N=pFrame->N;
+  vpEdgesMono.reserve(N);
+  vnIndexEdgeMono.reserve(N);
+  
+  const float deltaMono = sqrt(5.991);//chi2(0.05,2)
+  for(int i=0; i<N; i++)
+  {
+    MapPoint* pMP = pFrame->mvpMapPoints[i];
+    if(pMP)
+    {
+	// Monocular observation
+	if(pFrame->mvuRight[i]<0)//this may happen in RGBD case!
+	{
+	    pFrame->mvbOutlier[i] = false;
+
+	    Eigen::Matrix<double,2,1> obs;
+	    const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
+	    obs << kpUn.pt.x, kpUn.pt.y;
+
+	    g2o::EdgeNavStatePVRPointXYZOnlyPose* e = new g2o::EdgeNavStatePVRPointXYZOnlyPose();
+
+	    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(LastFramePVRId)));//here is LastFramePVRId not 0!!!
+	    e->setMeasurement(obs);
+	    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+	    e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
+
+	    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+	    e->setRobustKernel(rk);
+	    rk->setDelta(deltaMono);
+
+	    e->SetParams(pFrame->fx,pFrame->fy,pFrame->cx,pFrame->cy,Rcb,tcb,Converter::toVector3d(pMP->GetWorldPos()));
+
+	    optimizer.addEdge(e);
+
+	    vpEdgesMono.push_back(e);
+	    vnIndexEdgeMono.push_back(i);
+	}
+    }
+  }
+}
+
 void Optimizer::LocalBAPRVIDP(KeyFrame *pCurKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool* pbStopFlag, Map* pMap, cv::Mat& gw){
   
 }
 void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<KeyFrame*> &lLocalKeyFramesRef, bool *pbStopFlag, Map *pMap, cv::Mat gw){
+  cout<<blue<<"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFramesRef.size()<<white<<endl;
   assert(pKF==lLocalKeyFramesRef.back()&&"pCurKF != lLocalKeyFramesRef.back. check");//I think it cannot be true, just use it for debugging
   // Extrinsics
-  cv::Mat Tcb=Converter::toCvMatInverse(Frame::mTbc);
-  Matrix3d Rcb = Converter::toMatrix3d(Tcb.rowRange(0,3).colRange(0,3));
-  Vector3d tcb = Converter::toVector3d(Tcb.rowRange(0,3).col(3));
+  Matrix3d Rcb = Frame::meigRcb;
+  Vector3d tcb = Frame::meigtcb;
   // Gravity vector in world frame
   Vector3d GravityVec = Converter::toVector3d(gw);
 
@@ -426,9 +471,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   vector<MapPoint*> vpMP = pMap->GetAllMapPoints();
   
   // Extrinsics
-  cv::Mat Tcb=Converter::toCvMatInverse(Frame::mTbc);
-  Matrix3d Rcb = Converter::toMatrix3d(Tcb.rowRange(0,3).colRange(0,3));
-  Vector3d tcb = Converter::toVector3d(Tcb.rowRange(0,3).col(3));
+  Matrix3d Rcb = Frame::meigRcb;
+  Vector3d tcb = Frame::meigtcb;
   // Gravity vector in world frame
   Vector3d GravityVec = Converter::toVector3d(gw);
   

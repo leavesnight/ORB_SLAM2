@@ -373,10 +373,12 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	//check if iteri && iterk(curF) exit then preintegrate [lastKF,curF]
 	typename list<EncData>::iterator iteri=mlOdomEnc.begin();
 	if (iteri->mtm<=mpLastKeyFrame->mTimeStamp&&miterLastEnc->mtm>mCurrentFrame.mTimeStamp-1./mMaxFrames){//check iteri && iterk error
+// 	  cout<<"tm of LastF:"<<mLastFrame.mTimeStamp<<" LastKF:"<<mpLastKeyFrame->mTimeStamp<<" curF:"<<mCurrentFrame.mTimeStamp<<endl;
+// 	  for (typename list<EncData>::iterator iterShow=iteri;iterShow!=miterLastEnc;++iterShow){cout<<iterShow->mtm<<" ";}cout<<endl;
 	  mCurrentFrame.SetPreIntegrationList<EncData>(iteri,miterLastEnc);//it can be optimized without copy
 	}
       }
-      mCurrentFrame.PreIntegration<EncData>(&mLastFrame);//it can be optimized without copy
+      mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame);//it can be optimized without copy, Notice here should start from last KF!
       break;}
   }
 }

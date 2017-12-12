@@ -1,6 +1,13 @@
 #include "IMUInitialization.h"
 #include "Optimizer.h"
 
+//zzh defined color cout, must after include opencv2
+#define red "\033[31m"
+#define green "\e[32m"
+#define blue "\e[34m"
+#define yellow "\e[33m"
+#define white "\e[37m"
+
 namespace ORB_SLAM2 {
 
 using namespace std;
@@ -14,28 +21,30 @@ mOdomPreIntIMU(kf.GetIMUPreInt()){//this func. for IMU Initialization cache of K
 }
 
 void IMUInitialization::Run(){
-  unsigned long initedid = 0;
+  unsigned long initedid;
   cout<<"start VINSInitThread"<<endl;
   mbFinish=false;
   while(1){
-    if(GetSensorIMU()&&KeyFrame::nNextId>3){//at least 4 consecutive KFs, see IV-B/C VIORBSLAM paper
+    if(GetSensorIMU()){//at least 4 consecutive KFs, see IV-B/C VIORBSLAM paper
       KeyFrame* pCurKF=GetCurrentKeyFrame();
+      if (mdStartTime==-1){ initedid=0;mdStartTime=-2;}
       if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
 	initedid = pCurKF->mnId;
-	if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish
+	if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
       }
     }
     
-    ResetIfRequested();if (mdStartTime<0) initedid=0;
+    ResetIfRequested();
     if(GetFinishRequest()) break;
     usleep(3000);
   }
   SetFinish(true);
+  cout<<"VINSInitThread is Over."<<endl;
 }
 bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the KFs has no inter IMUData in initial 15s!!!
+  //at least N>=4
+  if(mpMap->KeyFramesInMap()<4){ return false;}//21
   //Recording data in txt files for further analysis
-  static double trytime=0;
-  cout<<"IMUInitialization: "<<trytime++<<endl;
   static bool fopened = false;
   static ofstream fgw,fscale,fbiasa,fcondnum,fbiasg;
   if(mTmpfilepath.length()>0&&!fopened){
@@ -71,11 +80,12 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Cache KFs / wait for KeyFrameCulling() over
   while(GetCopyInitKFs()) usleep(1000);
   SetCopyInitKFs(true);//stop KeyFrameCulling() when this copying KFs
+  if(mpMap->KeyFramesInMap()<4){ SetCopyInitKFs(false);return false;}//ensure no KeyFrameCulling() during the start of this func. till here
 
   //see VIORBSLAM paper IV, here N=all KFs in map, not the meaning of local KFs' number
   // Use all KeyFrames in map to compute
   vector<KeyFrame*> vScaleGravityKF = mpMap->GetAllKeyFrames();
-  sort(vScaleGravityKF.begin(),vScaleGravityKF.end(),[](const KeyFrame *a,const KeyFrame *b){return a->mnId<b->mnId;});
+  //sort(vScaleGravityKF.begin(),vScaleGravityKF.end(),[](const KeyFrame *a,const KeyFrame *b){return a->mnId<b->mnId;});//we change the set less/compare func. so that we don't need to sort them!
   assert((*vScaleGravityKF.begin())->mnId==0);
   int N = vScaleGravityKF.size();
   KeyFrame* pNewestKF = vScaleGravityKF[N-1];
@@ -94,19 +104,19 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Step 1. / see VIORBSLAM paper IV-A
   // Try to compute initial gyro bias, using optimization with Gauss-Newton
   Vector3d bgest=Optimizer::OptimizeInitialGyroBias<IMUKeyFrameInit>(vKFInit);//nothing changed, just return the optimized result bg*
-  cout<<"bgest: "<<bgest<<endl;
+//   cout<<"bgest: "<<bgest<<endl;
 
   // Update biasg and pre-integration in LocalWindow(here all KFs).
-  for(int i=0;i<N;i++) vKFInit[i]->mbg_=bgest;
-  for(int i=1;i<N;i++) vKFInit[i]->ComputePreInt();//so vKFInit[i].mOdomPreIntIMU is based on bg_bar=bgest,ba_bar=0; dbg=0 but dba/ba waits to be optimized
+  for(int i=0;i<N;++i) vKFInit[i]->mbg_=bgest;
+  for(int i=1;i<N;++i) vKFInit[i]->ComputePreInt();//so vKFInit[i].mOdomPreIntIMU is based on bg_bar=bgest,ba_bar=0; dbg=0 but dba/ba waits to be optimized
 
   // Step 2. / See VIORBSLAM paper IV-B
-  // Approx Scale and Gravity vector in 'world' frame (first KF's camera frame)
+  // Approx Scale and Gravity vector in 'world' frame (first/0th KF's camera frame)
   // Solve A*x=B for x=[s,gw] 4x1 vector, using SVD method
   cv::Mat A=cv::Mat::zeros(3*(N-2),4,CV_32F);//4 unknowns so N must >=4
   cv::Mat B=cv::Mat::zeros(3*(N-2),1,CV_32F);
   cv::Mat I3=cv::Mat::eye(3,3,CV_32F);
-  for(int i=0; i<N-2; i++){
+  for(int i=0; i<N-2; ++i){
     IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3=vKFInit[i+2];
     double dt12 = pKF2->mOdomPreIntIMU.mdeltatij;//deltat12
     double dt23 = pKF3->mOdomPreIntIMU.mdeltatij;
@@ -116,6 +126,10 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     cv::Mat dp12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mpij);//deltap12
     cv::Mat dv12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mvij);
     cv::Mat dp23=Converter::toCvMat(pKF3->mOdomPreIntIMU.mpij);
+//     cout<<fixed<<setprecision(6);
+//     cout<<"dt12:"<<dt12<<" KF1:"<<vKFInit[i]->mTimeStamp<<" KF2:"<<pKF2->mTimeStamp<<" dt23:"<<dt23<<" KF3:"<<pKF3->mTimeStamp<<endl;
+//     cout<<dp12.t()<<" 1id:"<<vScaleGravityKF[i]->mnId<<" 2id:"<<vScaleGravityKF[i+1]->mnId<<" 3id:"<<vScaleGravityKF[i+2]->mnId<<endl;
+//     cout<<" Size12="<<pKF2->mOdomPreIntIMU.getlOdom().size()<<" Size23="<<pKF3->mOdomPreIntIMU.getlOdom().size()<<endl;
     // Pose of camera in world frame
     cv::Mat Twc1=vKFInit[i]->mTwc;//Twci for pwci&Rwci, not necessary for clone()
     cv::Mat Twc2=pKF2->mTwc;cv::Mat Twc3=pKF3->mTwc;
@@ -135,7 +149,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Use svd to compute A*x=B, x=[s,gw] 4x1 vector
   // A=u*S*vt=u*w*vt, u*w*vt*x=B => x=vt'*winv*u'*B, or we call the pseudo inverse of A/A.inv()=(A.t()*A).inv()*A.t(), in SVD we have A.inv()=v*winv*u.t() where winv is the w with all nonzero term is the reciprocal of the corresponding singular value
   cv::Mat w,u,vt;// Note w is 4x1 vector by SVDecomp()/SVD::compute() not the 4*4(not FULL_UV)/m*n(FULL_UV) singular matrix we stated last line
-  cv::SVDecomp(A,w,u,vt,cv::SVD::MODIFY_A);// A is changed in SVDecomp()(just calling the SVD::compute) with cv::SVD::MODIFY_A for speed
+  cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A);// A is changed in SVDecomp()(just calling the SVD::compute) with cv::SVD::MODIFY_A for speed
   cv::Mat winv=cv::Mat::eye(4,4,CV_32F);
   for(int i=0;i<4;++i){
     if(fabs(w.at<float>(i))<1e-10){//too small in sufficient w meaning the linear dependent equations causing the solution is not unique?
@@ -147,7 +161,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cv::Mat x=vt.t()*winv*u.t()*B;
   double sstar=x.at<float>(0);		// scale should be positive
   cv::Mat gwstar=x.rowRange(1,4);	// gravity should be about ~9.8
-  cout<<"scale sstar: "<<sstar<<endl;cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
+  cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
 
   // Step 3. / See VIORBSLAM paper IV-C
   // Use gravity magnitude 9.810 as constraint; gIn/^gI=[0;0;1], the normalized gravity vector in an inertial frame
@@ -206,8 +220,9 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   Vector3d bastareig=Converter::toVector3d(y.rowRange(3,6));//here bai_bar=0, so dba=ba
 
   // Record data for analysis
-  cv::Mat gwbefore=Rwi*GI,gwafter=Rwi_*GI;//gwstar, u can prove it && gwstar2
+  cv::Mat gwbefore=Rwi*GI,gwafter=Rwi_*GI;//direction of gwbefore is the same as gwstar, but value is different!
   cout<<"Time: "<<pNewestKF->mTimeStamp-mdStartTime<<", sstar: "<<sstar<<", s: "<<s_<<endl;//Debug the frequency & sstar2&sstar
+  //<<" bgest: "<<bgest.transpose()<<", gw*(gwafter)="<<gwafter.t()<<", |gw*|="<<cv::norm(gwafter)<<", norm(gwbefore,gwstar)"<<cv::norm(gwbefore.t())<<" "<<cv::norm(gwstar.t())<<endl;
   if (mTmpfilepath.length()>0){//Debug the Rwistar2
     ofstream fRwi(mTmpfilepath+"Rwi.txt");
     fRwi<<Rwieig_(0,0)<<" "<<Rwieig_(0,1)<<" "<<Rwieig_(0,2)<<" "
@@ -254,34 +269,18 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	//update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped
 	vScaleGravityKF=mpMap->GetAllKeyFrames();
 	pNewestKF=GetCurrentKeyFrame();
-	assert(pNewestKF==vScaleGravityKF.back());//they must be same!
-	/*KeyFrame* pCurKF=GetCurrentKeyFrame();
-	//correct pNewestKF if it's Bad
-	if (pNewestKF->isBad()){//if it's Bad, it cannot be pCurKF
-	  assert(pNewestKF!=pCurKF);
-	  cout<<"Try to recover a good pNewestKF!"<<endl;
-	  KeyFrame* pNewestGoodKF;
-	  do{
-	    pNewestGoodKF=pCurKF->GetPrevKeyFrame();
-	  }while (pNewestGoodKF->mnId>pNewestKF->mnId);//for we use all KFs in map as N, it must be found!
-	  pNewestKF=pNewestGoodKF;
-	}
-	while (pNewestKF!=pCurKF){
-	  KeyFrame* pNextKF=pNewestKF->GetNextKeyFrame();
-	  vScaleGravityKF.push_back(pNextKF);//notice old KFs in vScaleGravityKF may be culled during before 3 steps
-	  pNewestKF=pNextKF;
-	}*/
+	assert(pNewestKF==vScaleGravityKF.back());//they must be same for we change the set less func. in Map.h
 	//recover right scaled Twc&NavState from old unscaled Twc with scale
 	for(vector<KeyFrame*>::const_iterator vit=vScaleGravityKF.begin(), vend=vScaleGravityKF.end(); vit!=vend; ++vit){
 	  KeyFrame* pKF = *vit;
 	  if(pKF->isBad()) continue;
 	  //we can SetPose() first even no IMU data
-	  cv::Mat Tcw=pKF->GetPose();
+	  cv::Mat Tcw=pKF->GetPose(),Twc=pKF->GetPoseInverse();//we must cache Twc first!
 	  cv::Mat tcw=Tcw.rowRange(0,3).col(3)*scale;//right scaled pwc
 	  tcw.copyTo(Tcw.rowRange(0,3).col(3));pKF->SetPose(Tcw);//manually SetPose(right scaled Tcw)
 	  // Position and rotation of visual SLAM
-	  cv::Mat wPc = pKF->GetPoseInverse().rowRange(0,3).col(3);                   // wPc/twc
-	  cv::Mat Rwc = pKF->GetPoseInverse().rowRange(0,3).colRange(0,3);            // Rwc
+	  cv::Mat wPc = Twc.rowRange(0,3).col(3);                   // wPc/twc
+	  cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);            // Rwc
 	  // Set position and rotation of navstate
 	  cv::Mat wPb = scale*wPc + Rwc*pcb;//right scaled pwb from right scaled pwc
 	  NavState ns;
@@ -331,7 +330,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       // Run global BA after inited
       unsigned long nLoopKF=pNewestKF->mnId;//does it need to be set noterase?
       Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mGravityVec,10,NULL,nLoopKF,false);
-      cerr<<"finish global BA after vins init"<<endl;
+      cerr<<red<<"finish global BA after vins init"<<white<<endl;
       
       {//the same as LoopClosing::RunGlobalBundleAdjustment()
 	mpLocalMapper->RequestStop();//same as CorrectLoop(), suspend/stop/freeze LocalMapping thread
@@ -416,7 +415,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	mpMap->InformNewBigChange();//used to check the SLAM's state
 	mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
 	
-	cout << "Map updated in IMU Initialization!" << endl;//if Initial GBA/loop correction successed, this word should appear!
+	cout <<red<< "Map updated in IMU Initialization!" << white<<endl;//if Initial GBA/loop correction successed, this word should appear!
 	SetInitGBAFinish(true);//allow LoopClosing to start
       }
   }

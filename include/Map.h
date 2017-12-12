@@ -37,6 +37,10 @@ class KeyFrame;
 
 class Map
 {
+  class KFIdComapre{//ready for mspKeyFrames set less func., used in IMU Initialization thread, and I think it may help the insert speed
+  public:
+    bool operator()(const KeyFrame* kfleft,const KeyFrame* kfright) const;
+  };
   int mnChangeIdx;// Index related to any change when mMutexMapUpdate is locked && current KF's Pose is changed
   
 public:
@@ -83,7 +87,7 @@ public:
 
 protected:
     std::set<MapPoint*> mspMapPoints;
-    std::set<KeyFrame*> mspKeyFrames;
+    std::set<KeyFrame*,KFIdComapre> mspKeyFrames;//zzh, it's very important!
 
     std::vector<MapPoint*> mvpReferenceMapPoints;
 

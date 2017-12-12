@@ -14,7 +14,7 @@ void EdgeNavStateBias::computeError(){
   // residual error of Gyroscope's bias, Forster 15'RSS
   Vector3d rBiasG = (NSj.mbg+NSj.mdbg)-(NSi.mbg+NSi.mdbg);
   // residual error of Accelerometer's bias, Forster 15'RSS
-  Vector3d rBiasA = (NSj.mbg+NSj.mdbg)-(NSi.mba+NSi.mdba);
+  Vector3d rBiasA = (NSj.mba+NSj.mdba)-(NSi.mba+NSi.mdba);//here is x(x)xa!!!
   Vector6d err(Vector6d::Zero());
   // 6-Dim error vector order: deltabiasGyr_i;deltabiasAcc_i, rBiasGi;rBiasAi
   err.segment<3>(0)=rBiasG;err.segment<3>(3)=rBiasA;

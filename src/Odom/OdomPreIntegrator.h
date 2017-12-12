@@ -29,7 +29,7 @@ public:
   }
   const std::list<_OdomData>& getlOdom(){return mlOdom;}//the list of Odom, for KFCulling()
   // Odom PreIntegration
-  virtual void PreIntegration(const double timeStampi,const double timeStampj){}
+  virtual void PreIntegration(const double timeStampi,const double timeStampj){assert(0&&"You called an empty virtual function!!!");}
   
 };
 
@@ -85,9 +85,9 @@ public:
   }
   virtual ~IMUPreIntegratorBase(){}
   
-  void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar);//rewrite
+  void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar);//rewrite, like override
   // incrementally update 1)delta measurements, 2)jacobians, 3)covariance matrix
-  void update(const Vector3d& omega, const Vector3d& acc, const double& dt);
+  void update(const Vector3d& omega, const Vector3d& acc, const double& dt);//don't allow dt<0!
   inline Quaterniond normalizeRotationQ(const Quaterniond& r)
   {
     Quaterniond _r(r);
@@ -107,6 +107,7 @@ public:
   void reset(){
     mRij.setIdentity();mvij.setZero();mpij.setZero();mSigmaijPRV.setZero();mSigmaij.setZero();
     mJgpij.setZero();mJapij.setZero();mJgvij.setZero();mJavij.setZero();mJgRij.setZero();
+    this->mdeltatij=0;//very important!
   }
   
   // exponential map from vec3 to mat3x3 (Rodrigues formula)
@@ -132,6 +133,7 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
       if (iterjm1==this->mlOdom.begin()) tj_1=timeStampi; else tj_1=iterjm1->mtm;
       if (iterj==this->mlOdom.end()) tj=timeStampj; else tj=iterj->mtm;
       dt=tj-tj_1;
+      if (dt==0) continue;//for we use [nearest imu data at timeStampi, nearest but <=timeStampj] or [/(timeStampi,timeStampj], when we concate them in KeyFrameCulling(), dt may be 0
       
       //selete/design measurement_j-1
       const IMUDataBase& imu=*iterjm1;//imuj-1 for w~j-1 & a~j-1 chooses imu(tj-1), maybe u can try (imu(tj-1)+imu(tj))/2 or other filter here

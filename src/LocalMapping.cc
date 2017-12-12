@@ -89,9 +89,8 @@ void LocalMapping::Run()
             {
                 // Local BA
                 if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
-		  Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);//local BA
 		  if(!mpIMUInitiator->GetVINSInited()){
-		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);
+		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mGravityVec);
@@ -807,9 +806,9 @@ void LocalMapping::KeyFrameCulling()
 	      mpLastKF=pKF->GetParent();
 	    }
 	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
-	    cout<<red"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
+// 	    cout<<red"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
             pKF->SetBadFlag();
-	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<endl;
+// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<endl;
 	}
     }
     

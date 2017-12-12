@@ -27,11 +27,12 @@ namespace ORB_SLAM2
 {
   
 cv::Mat Frame::mTbc,Frame::mTco;
+Eigen::Matrix3d Frame::meigRcb;Eigen::Vector3d Frame::meigtcb;
 
 void Frame::UpdatePoseFromNS()
 {
-  cv::Mat Rbc = mTbc.rowRange(0,3).colRange(0,3).clone();
-  cv::Mat Pbc = mTbc.rowRange(0,3).col(3).clone();//or tbc
+  cv::Mat Rbc = mTbc.rowRange(0,3).colRange(0,3);//don't need clone();
+  cv::Mat Pbc = mTbc.rowRange(0,3).col(3);//or tbc
   
   cv::Mat Rwb = Converter::toCvMat(mNavState.getRwb());
   cv::Mat Pwb = Converter::toCvMat(mNavState.mpwb);//or twb
@@ -68,11 +69,24 @@ void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator
 }
 template <>
 void Frame::PreIntegration<IMUData>(Frame* pLastF){
-  Eigen::Vector3d bgi_bar=pLastF->mNavState.mbg,bai_bar=pLastF->mNavState.mba;
+  Eigen::Vector3d bgi_bar=pLastF->mNavState.mbg,bai_bar=pLastF->mNavState.mba;//we can directly use mNavState here
 #ifndef TRACK_WITH_IMU
   mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
 #else
   mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
+#endif
+}
+template <>
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF){
+  mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+}
+template <>
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF){
+  Eigen::Vector3d bgi_bar=pLastKF->GetNavState().mbg,bai_bar=pLastKF->GetNavState().mba;
+#ifndef TRACK_WITH_IMU
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+#else
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
 #endif
 }
 

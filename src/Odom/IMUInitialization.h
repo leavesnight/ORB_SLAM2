@@ -82,8 +82,8 @@ class IMUInitialization{//designed for multi threads
   void ResetIfRequested(){
     if(GetReset()){
       //reset relevant variables
-      mdStartTime=-1;SetSensorIMU(false);SetCurrentKeyFrame(NULL);
-      SetVINSInited(false);
+      mdStartTime=-1;SetCurrentKeyFrame(NULL);//SetSensorIMU(false);
+      SetVINSInited(false);//usually this 3 variables are false when LOST then this func. will be called
       SetInitGBAFinish(false);//if it's true, won't be automatically reset
       SetFirstVINSInited(false);
       

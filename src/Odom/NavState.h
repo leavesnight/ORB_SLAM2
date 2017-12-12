@@ -13,7 +13,7 @@ typedef Matrix<double, 9, 1> Vector9d;
 typedef Matrix<double, 6, 1> Vector6d;
 
 //navigation state xj for IMU, and my encoder state is included
-class NavState{//refer to the JW's NavState.h, used in PR&V/PVR order, we will use w means world Frame=B0/b0/0th frame/KF of IMU Frame in the whole project when no specially explained
+class NavState{//refer to the JW's NavState.h, used in PR&V/PVR order, we will use w means world Frame=C0/c0/0th frame/KF of Camera Frame in the whole project when no specially explained
   //cv::Mat mTbc,mTbo;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
   
 public:
@@ -48,7 +48,7 @@ public:
 //specialized function when using Matrix<double,D,1> I've to defined in .h with inline/static(not good), when it's defined in NavState.cpp, it enters the undefined reference problem? Though I try using Matrix<double,D,1,0> can overcome this problem
 template<>
 inline void NavState::IncSmall<3>(const Vector3d &dV){
-  mvwb+=dV.segment<3>(0);
+  mvwb+=dV;
 }//IncSmallV
 template<>
 inline void NavState::IncSmall<9>(const Vector9d &dPVR){

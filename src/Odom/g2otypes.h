@@ -118,7 +118,7 @@ template <int DE,int DV>
 void EdgeNavStateProjectXYZOnlyPose<DE,DV>::linearizeOplus(){
   const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[0]);
   const NavState& ns=vNS->estimate();
-  Matrix3d Rwb=ns.getRwb();Vector3d Pwb=ns.mpwb;
+  Matrix3d Rwb=ns.getRwb();
 
   Vector3d Pc=Rcb*Rwb.transpose()*(Pw-ns.mpwb)+tcb;//Pc=Rcb*Rbw*(Pw-twb)+tcb
   double x=Pc[0],y=Pc[1],invz=1/Pc[2],invz_2=invz*invz;
@@ -132,14 +132,14 @@ void EdgeNavStateProjectXYZOnlyPose<DE,DV>::linearizeOplus(){
   // Jacobian of error w.r.t dPwb = JdPwb=J_e_Pc*J_Pc_dPwb, notice we use pwb->pwb+dpwb increment model in the corresponding Vertex, so here is the same, a bit dfferent from (21)
   Matrix<double,DE,3> JdPwb=Jproj*(-Rcb*Rwb.transpose());//J_Pc_dPwb = -Rcw;
   // Jacobian of error w.r.t dRwb
-  Vector3d Paux=Rcb*Rwb.transpose()*(Pw-Pwb);//J_Pc_dRwb=(Rcw*(Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
+  Vector3d Paux=Rcb*Rwb.transpose()*(Pw-ns.mpwb);//J_Pc_dRwb=(Rcw*(Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
   Matrix<double,DE,3> JdRwb=Jproj*(Sophus::SO3::hat(Paux)*Rcb);
 
   // Jacobian of error w.r.t NavStatePR, order in 'update_': dP, dPhi
   Matrix<double,DE,DV> JNavState = Matrix<double,DE,DV>::Zero();
   JNavState.template block<DE,3>(0,0)=JdPwb;//J_error_dnotPR=0 so we'd better use PR&V instead of PVR/PVRB
   JNavState.template block<DE,3>(0,DV-3)=JdRwb;//only for 9(J_e_dV=0)/6
-  _jacobianOplusXi=JNavState;
+  _jacobianOplusXi=JNavState; 
 }
 
 typedef EdgeNavStateProjectXYZOnlyPose<2,6> EdgeNavStatePRPointXYZOnlyPose;
@@ -198,7 +198,7 @@ void EdgeNavStateProjectXYZ<DE,DV>::linearizeOplus(){
   const Vector3d &Pw=pXw->estimate();
   const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[1]);//Tbw
   const NavState& ns=vNS->estimate();
-  Matrix3d Rwb=ns.getRwb();Vector3d Pwb=ns.mpwb;
+  Matrix3d Rwb=ns.getRwb();
 
   Vector3d Pc=Rcb*ns.getRwb().transpose()*(Pw-ns.mpwb)+tcb;//Pc=Rcb*Rbw*(Pw-twb)+tcb
   double x=Pc[0],y=Pc[1],invz=1/Pc[2],invz_2=invz*invz;
@@ -212,7 +212,7 @@ void EdgeNavStateProjectXYZ<DE,DV>::linearizeOplus(){
   // Jacobian of error w.r.t dPwb = JdPwb=J_e_Pc*J_Pc_dPwb, notcie we use pwb->pwb+dpwb increment model in the corresponding Vertex, so here is the same, a bit dfferent from (21)
   Matrix<double,DE,3> JdPwb=Jproj*(-Rcb*Rwb.transpose());//J_Pc_dPwb = -Rcw;
   // Jacobian of error w.r.t dRwb
-  Vector3d Paux=Rcb*Rwb.transpose()*(Pw-Pwb);//J_Pc_dRwb=(Rcw*(Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
+  Vector3d Paux=Rcb*Rwb.transpose()*(Pw-ns.mpwb);//J_Pc_dRwb=(Rcw*(Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
   Matrix<double,DE,3> JdRwb=Jproj*(Sophus::SO3::hat(Paux)*Rcb);
 
   // Jacobian of error w.r.t NavStatePR, order in 'update_': dP, dPhi
@@ -248,11 +248,12 @@ public:
 
 protected:
     Vector3d gw;//gw: Gravity vector in 'world' frame
+    typedef VertexNavState<(NV==3?9:6)> VertexNavStateNV;//NV==5 -> <6>PR NV==3 -> <9>PVR, this is very important typedef!
 };
 template <int NV>
 void EdgeNavStateI<NV>::computeError(){
-  const VertexNavStatePR* vPRi = static_cast<const VertexNavStatePR*>(_vertices[0]);
-  const VertexNavStatePR* vPRj = static_cast<const VertexNavStatePR*>(_vertices[1]);
+  const VertexNavStateNV* vPRi = static_cast<const VertexNavStateNV*>(_vertices[0]);
+  const VertexNavStateNV* vPRj = static_cast<const VertexNavStateNV*>(_vertices[1]);
   const NavState &nsPRi=vPRi->estimate(),&nsPRj=vPRj->estimate(),*pBiasi;
   const Sophus::SO3 RiT=nsPRi.mRwb.inverse();
   //get vi,vj,dbi in PRV/PVR situation
@@ -269,7 +270,7 @@ void EdgeNavStateI<NV>::computeError(){
   double deltat=_measurement.mdeltatij;//deltatij
   
   //see VIORBSLAM paper (6)/ Manifold (45)
-  _error.segment<3>(0)=RiT*(nsPRj.mpwb-nsPRi.mpwb-vi*deltat-gw*deltat*deltat/2)-//r_deltapij/ep=Rbiw*(pwbj-pwbi-vwbi*deltatij-1/2*gw*deltatij^2)-
+  _error.segment<3>(0)=RiT*(nsPRj.mpwb-nsPRi.mpwb-vi*deltat-gw*(deltat*deltat/2))-//r_deltapij/ep=Rbiw*(pwbj-pwbi-vwbi*deltatij-1/2*gw*deltatij^2)-
   (_measurement.mpij+_measurement.mJgpij*dbgi+_measurement.mJapij*dbai);//(deltapij+J_g_deltap*dbgi+J_a_deltap*dbai),here deltapij=delta~pij(bi_bar)
   int idR=(NV>3)?3:6;//if NV==5 then error_PRV else ePVR
   _error.segment<3>(idR)=((Sophus::SO3(_measurement.mRij)*Sophus::SO3::exp(_measurement.mJgRij*dbgi)).inverse()*RiT*nsPRj.mRwb).log();//eR=Log((deltaRij*Exp(Jg_deltaR*dbgi)).t()*Rbiw*Rwbj)
@@ -278,8 +279,8 @@ void EdgeNavStateI<NV>::computeError(){
 }
 template <int NV>
 void EdgeNavStateI<NV>::linearizeOplus(){
-  const VertexNavStatePR* vPRi = static_cast<const VertexNavStatePR*>(_vertices[0]);
-  const VertexNavStatePR* vPRj = static_cast<const VertexNavStatePR*>(_vertices[1]);
+  const VertexNavStateNV* vPRi = static_cast<const VertexNavStateNV*>(_vertices[0]);
+  const VertexNavStateNV* vPRj = static_cast<const VertexNavStateNV*>(_vertices[1]);
   const NavState &nsPRi=vPRi->estimate(),&nsPRj=vPRj->estimate(),*pBiasi;
   const Vector3d &pi=nsPRi.mpwb,&pj=nsPRj.mpwb;
   const Matrix3d RiT=nsPRi.getRwb().transpose();
@@ -301,11 +302,11 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   if (NV>3){//J_ePRV_PRi,PRj,Vi,Vj,Bi
     idR=3;idV=6;
   }else{//J_ePVR_PVRi,PVRj,Bi
-    idR=6;idV=3;
+    idR=6;idV=3;//please notice everything after meaning row/col should use idR/idV except bias term!
   }
   Vector3d eR=_error.segment<3>(idR);//r_deltaRij/eR/r_Phiij
   //J_rpij_dxi
-  JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(pj-pi-vi*deltat-gw*deltat*deltat/2));//J_rpij_dPhi_i
+  JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(pj-pi-vi*deltat-gw*(deltat*deltat/2)));//J_rpij_dPhi_i
   JPRVi.block<3,3>(0,0)=-RiT;//J_rpij_dpi, notice here use pi->pi+dpi not the form pi->pi+Ri*dpi in the paper!
   JPRVi.block<3,3>(0,idV)=-RiT*deltat;//J_rpij_dvi
   JBiasi.block<3,3>(0,0)=-_measurement.mJgpij;//J_rpij_ddbgi
@@ -315,27 +316,27 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   JPRVj.block<3,3>(0,0)=RiT;//J_rpij_dpj, notice here use pj->pj+dpj not the form pj->pj+Rj*dpj in the paper!
   JPRVj.block<3,3>(0,idV)=O3x3;//J_rpij_dvj
   //J_rvij_dxi
-  JPRVi.block<3,3>(6,idR)=Sophus::SO3::hat(RiT*(vj-vi-gw*deltat));//J_rvij_dPhi_i
-  JPRVi.block<3,3>(6,0)=O3x3;//J_rvij_dpi(pi->pi+dpi)
-  JPRVi.block<3,3>(6,idV)=-RiT;//J_rvij_dvi
-  JBiasi.block<3,3>(6,0)=-_measurement.mJgvij;//J_rvij_ddbgi
-  JBiasi.block<3,3>(6,3)=-_measurement.mJavij;//J_rvij_ddbai
+  JPRVi.block<3,3>(idV,idR)=Sophus::SO3::hat(RiT*(vj-vi-gw*deltat));//J_rvij_dPhi_i
+  JPRVi.block<3,3>(idV,0)=O3x3;//J_rvij_dpi(pi->pi+dpi)
+  JPRVi.block<3,3>(idV,idV)=-RiT;//J_rvij_dvi
+  JBiasi.block<3,3>(idV,0)=-_measurement.mJgvij;//J_rvij_ddbgi
+  JBiasi.block<3,3>(idV,3)=-_measurement.mJavij;//J_rvij_ddbai
   //J_rvij_dxj
-  JPRVj.block<3,3>(6,idR)=O3x3;//J_rvij_dPhi_j
-  JPRVj.block<3,3>(6,0)=O3x3;//J_rvij_dpj(pj->pj+dpj)
-  JPRVj.block<3,3>(6,idV)=RiT;//J_rvij_dvj
+  JPRVj.block<3,3>(idV,idR)=O3x3;//J_rvij_dPhi_j
+  JPRVj.block<3,3>(idV,0)=O3x3;//J_rvij_dpj(pj->pj+dpj)
+  JPRVj.block<3,3>(idV,idV)=RiT;//J_rvij_dvj
   //J_rRij_dxi
   Matrix3d Jrinv=Sophus::SO3::JacobianRInv(eR);//JrInv_rPhi/Jrinv_rdeltaRij/Jrinv_eR
-  JPRVi.block<3,3>(3,idR)=-Jrinv*(nsPRj.mRwb.inverse()*nsPRi.mRwb).matrix();//J_rRij_dPhi_i
-  JPRVi.block<3,3>(3,0)=O3x3;//J_rRij_dpi(pi->pi+dpi)
-  JPRVi.block<3,3>(3,idV)=O3x3;//J_rRij_dvi
-  JBiasi.block<3,3>(3,0)=-Jrinv*IMUPreintegrator::Expmap(-eR)*//right is Exp(rdeltaRij).t(), same as Sophus::SO3::exp(rPhiij).inverse().matrix()
+  JPRVi.block<3,3>(idR,idR)=-Jrinv*(nsPRj.mRwb.inverse()*nsPRi.mRwb).matrix();//J_rRij_dPhi_i
+  JPRVi.block<3,3>(idR,0)=O3x3;//J_rRij_dpi(pi->pi+dpi)
+  JPRVi.block<3,3>(idR,idV)=O3x3;//J_rRij_dvi
+  JBiasi.block<3,3>(idR,0)=-Jrinv*IMUPreintegrator::Expmap(-eR)*//right is Exp(rdeltaRij).t(), same as Sophus::SO3::exp(rPhiij).inverse().matrix()
   Sophus::SO3::JacobianR(_measurement.mJgRij*dbgi)*_measurement.mJgRij;//J_rRij_ddbgi, notice Jr_b=Jr(Jg_deltaR*dbgi)
-  JBiasi.block<3,3>(3,3)=O3x3;//J_rRij_ddbai
+  JBiasi.block<3,3>(idR,3)=O3x3;//J_rRij_ddbai
   //J_rRij_dxj
-  JPRVj.block<3,3>(3,idR)=Jrinv;//J_rRij_dPhi_j
-  JPRVj.block<3,3>(3,0)=O3x3;//J_rRij_dpj(pj->pj+dpj)
-  JPRVj.block<3,3>(3,idV)=O3x3;//J_rRij_dvj
+  JPRVj.block<3,3>(idR,idR)=Jrinv;//J_rRij_dPhi_j
+  JPRVj.block<3,3>(idR,0)=O3x3;//J_rRij_dpj(pj->pj+dpj)
+  JPRVj.block<3,3>(idR,idV)=O3x3;//J_rRij_dvj
   
   if (NV>3){//J_ePRV_PRi,PRj,Vi,Vj,Bi = 9*24
     _jacobianOplus[0]=JPRVi.block<9,6>(0,0);_jacobianOplus[1]=JPRVj.block<9,6>(0,0);

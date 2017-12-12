@@ -48,6 +48,7 @@ class Frame
 public:
   //const Tbc,Tco, so it can be used in multi threads
   static cv::Mat mTbc,mTco;
+  static Eigen::Matrix3d meigRcb;static Eigen::Vector3d meigtcb;
   
   // Odom PreIntegration, j means this frame, i means last frame(not KF), if no measurements it will be cv::Mat()
   EncPreIntegrator mOdomPreIntEnc;
@@ -59,7 +60,7 @@ public:
   NavState mNavStatePrior;//needed by PoseOptimization twice, notice if no imu data, it's unintialized
   
   const NavState& GetNavState(void){//cannot use const &(make mutex useless)
-    return mNavState;//don't call copy constructor, just for template of PoseOptimization()
+    return mNavState;//don't call copy constructor, just for template of PoseOptimization() & PreIntegration
   }
   void UpdatePoseFromNS();//replace SetPose(), directly update mNavState for efficiency and then please call this func. to update Tcw
   void UpdateNavStatePVRFromTcw();//for imu data empty condition after imu's initialized(including bias recomputed)
@@ -69,12 +70,14 @@ public:
   void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
     mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
   }
-  template <class _OdomData>
+  template <class _OdomData>//here if u use _Frame*, it can be automatically checked while vector<_Frame>::iterator won't do so! but partial specialized template function doesn't exist!
   void PreIntegration(Frame* pLastF){//0th frame don't use this function
     mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
   }
+  template <class _OdomData>
+  void PreIntegration(KeyFrame* pLastKF);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
   
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState && Matrix4d
 //created by zzh over.
   
 public:
@@ -248,6 +251,10 @@ template <>//specialized
 void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator &begin,typename std::list<IMUData>::iterator &pback);
 template <>
 void Frame::PreIntegration<IMUData>(Frame* pLastF);
+template <>
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF);
+template <>
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF);
 
 }// namespace ORB_SLAM
 
