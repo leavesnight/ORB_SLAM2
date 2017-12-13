@@ -20,6 +20,11 @@ mOdomPreIntIMU(kf.GetIMUPreInt()){//this func. for IMU Initialization cache of K
   mOdomPreIntIMU.SetPreIntegrationList(limu.begin(),--limu.end());
 }
 
+cv::Mat IMUInitialization::GetGravityVec(void){
+  //unique_lock<mutex> lock(mMutexInitIMU);//now we don't need mutex for it 1stly calculated only in this thread and then it will be a const!
+  return mGravityVec;//.clone();//avoid simultaneous operation
+}
+
 void IMUInitialization::Run(){
   unsigned long initedid;
   cout<<"start VINSInitThread"<<endl;
@@ -36,7 +41,8 @@ void IMUInitialization::Run(){
     
     ResetIfRequested();
     if(GetFinishRequest()) break;
-    usleep(3000);
+    //usleep(3000);
+    sleep(3);
   }
   SetFinish(true);
   cout<<"VINSInitThread is Over."<<endl;

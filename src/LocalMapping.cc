@@ -85,13 +85,14 @@ void LocalMapping::Run()
 
             mbAbortBA = false;
 
-            if(!CheckNewKeyFrames() && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
+            if((!CheckNewKeyFrames()) && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
                 if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
 		  if(!mpIMUInitiator->GetVINSInited()){
 		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
+		    //Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mGravityVec);
 		  }

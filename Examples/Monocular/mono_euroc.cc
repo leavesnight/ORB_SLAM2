@@ -216,7 +216,7 @@ int main(int argc, char **argv)
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+    SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
     //SLAM.SaveMap("Map.pcd");//zzh
     //wait for pOdomThread finished
     if (pOdomThread!=NULL)//zzh

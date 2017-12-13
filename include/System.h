@@ -73,6 +73,7 @@ public:
   cv::Mat TrackOdom(const double &timestamp, const double* odomdata, const char mode);
   
   // TODO: Save/Load functions
+  void SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc=true);//we will save filename(like "KeyFrameTrajectoryIMU.txt")(including t,q,v,bg,ba) from Tcw by using Tbc or directly from Twb
   void SaveMap(const string &filename);
   // LoadMap(const string &filename);
   void SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp);

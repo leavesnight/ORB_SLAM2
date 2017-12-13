@@ -184,7 +184,7 @@ protected:
     void CreateInitialMapMonocular();
 
     void CheckReplacedInLastFrame();
-    bool TrackReferenceKeyFrame();//track mCurrentFrame with mpReferenceKF by SBB and motion-only BA(if nmatches is enough), then \
+    bool TrackReferenceKeyFrame(int thInMPs=10,int thMatch=15);//track mCurrentFrame with mpReferenceKF by SBB and motion-only BA(if nmatches is enough), then \
     discard outliers, return nInliers>=10
     void UpdateLastFrame();//update last Frame's Pose by reference KeyFrame&&mlRelativeFramePoses for nonlocalization mode
     bool TrackWithMotionModel();//UpdateLastFrame, use SBP to get mCurrentFrame.mvpMapPoints, then motion-only BA(if nmatches is enough), \

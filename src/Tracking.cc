@@ -36,7 +36,6 @@
 
 #include<mutex>
 
-
 using namespace std;
 
 namespace ORB_SLAM2
@@ -91,9 +90,9 @@ void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
   PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
-  cout<<"encdata over"<<endl;
+//   cout<<"encdata over"<<endl;
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
-  cout<<"over"<<endl;
+//   cout<<"over"<<endl;
    if (type==2){
      cout<<"List size: "<<mpReferenceKF->GetListIMUData().size()<<endl;
 // #ifndef TRACK_WITH_IMU
@@ -112,12 +111,12 @@ void Tracking::PreIntegration(const char type){
      NavState ns;
      if (type==3) ns=mpLastKeyFrame->GetNavState(); else ns=mLastFrame.mNavState;
      cout<<"lastF/KF's bg="<<ns.mbg.transpose()<<", ba="<<ns.mba.transpose()<<", dbg="<<ns.mdbg.transpose()<<" ,dba="<<ns.mdba.transpose()<<endl;
-     cout<<"last F/KF(i) to CurF(j): delta_pij="<<mCurrentFrame.mOdomPreIntIMU.mpij.transpose()<<endl;
+     cout<<"last F/KF(i) to CurF(j): delta_pij="<<mCurrentFrame.mOdomPreIntIMU.mpij.transpose()<<endl;/*
      cout<<"gw="<<mpIMUInitiator->GetGravityVec().t()<<endl;
      cv::Mat Tji;
      if (type==3) Tji=mlRelativeFramePoses.back();else Tji=mVelocity;//Tcjci
      Tji=Frame::mTbc*Tji*Converter::toCvMatInverse(Frame::mTbc);//Tbjbi=Tbc*Tcjci*Tcb
-     cout<<"pij by camera="<<-(Tji.rowRange(0,3).colRange(0,3).t()*Tji.rowRange(0,3).col(3)).t()<<endl;
+     cout<<"pij by camera="<<-(Tji.rowRange(0,3).colRange(0,3).t()*Tji.rowRange(0,3).col(3)).t()<<endl;*/
    }
 }
 bool Tracking::TrackWithIMU(bool bMapUpdated){
@@ -126,7 +125,7 @@ bool Tracking::TrackWithIMU(bool bMapUpdated){
     // Update current frame pose according to last frame or keyframe when last KF is changed by LocalMapping/LoopClosing threads
     // unadded code: Create "visual odometry" points if in Localization Mode
     if (!PredictNavStateByIMU(bMapUpdated)){
-      cout<<"CurF.mdeltatij==0! we have to TrackWithMotionModel()!"<<endl;
+      cout<<red"CurF.mdeltatij==0! we have to TrackWithMotionModel()!"<<white<<endl;
       if (!mVelocity.empty()){
 	bool bOK=TrackWithMotionModel();//maybe track failed then call pure-vision TrackWithMotionModel
 	if (bOK) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated
@@ -297,7 +296,7 @@ bool Tracking::TrackLocalMapWithIMU(bool bMapUpdated){
 
   // Decide if the tracking was succesful
   // More restrictive if there was a relocalization recently (recent 1s)
-  if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
+  if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<10)//50)
       return false;
 
   if(mnMatchesInliers<6)//30)//notice it's a class data member, changed by JingWang
@@ -726,11 +725,13 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		if (mpIMUInitiator->GetVINSInited()//if IMU info(bgi,gw,bai) is intialized use IMU motion model
 		  &&!mbRelocBiasPrepare){//but still need >=20 Frames after reloc, bi becomes ok for IMU motion update(calculated in 19th Frame after reloc. KF)
 		    bOK=TrackWithIMU(bMapUpdated);
-		    if(!bOK)
-		      if (bOK=TrackReferenceKeyFrame()) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated
+		    if(!bOK){
+		      cout<<red"TrackWitIMU() failed!"<<white<<endl;
+		      if (bOK=TrackReferenceKeyFrame(6,7)) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated
+		    }
 		}else//<20 Frames after reloc then use pure-vision tracking, but notice we can still use Encoder motion update!
-                if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2){//if last frame relocalized, there's no motion could be calculated, so I think 2nd condition is useless
-		    if (!mVelocity.empty()) cerr<<red"Error in Velocity.empty()!!!"<<endl;//check if right
+                if(mVelocity.empty()){// || mCurrentFrame.mnId<mnLastRelocFrameId+2){//if last frame relocalized, there's no motion could be calculated, so I think 2nd condition is useless
+// 		    if (!mVelocity.empty()) cerr<<red"Error in Velocity.empty()!!!"<<endl;//check if right
 		    
                     bOK = TrackReferenceKeyFrame();//match with rKF, use lF as initial & m-o BA
 		    cout<<fixed<<setprecision(6);
@@ -741,7 +742,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                         bOK = TrackReferenceKeyFrame();
 			cout<<red"TrackRefKF()2"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 		    }
-		    cout<<mCurrentFrame.mnId<<endl;
+		    //cout<<mCurrentFrame.mnId<<endl;
                 }
             }
             else
@@ -1294,7 +1295,7 @@ void Tracking::CheckReplacedInLastFrame()
 }
 
 
-bool Tracking::TrackReferenceKeyFrame()
+bool Tracking::TrackReferenceKeyFrame(int thInMPs,int thMatch)
 {
     // Compute Bag of Words vector
     mCurrentFrame.ComputeBoW();
@@ -1306,7 +1307,7 @@ bool Tracking::TrackReferenceKeyFrame()
 
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);//match with rKF,rectify the vpMapPointMatches, SBBoW better than SBP for the mCurrentFrame.Tcw is unknown
 
-    if(nmatches<15)//looser than 20 in TrackWithMotionModel()
+    if(nmatches<thMatch)//15)//looser than 20 in TrackWithMotionModel()
         return false;
 
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;//use temporary vector<MapPoint*> for not believe SBBow() so much
@@ -1335,7 +1336,7 @@ bool Tracking::TrackReferenceKeyFrame()
         }
     }
 
-    return nmatchesMap>=10;//Track ok when enough inlier MapPoints
+    return nmatchesMap>=thInMPs;//10;//Track ok when enough inlier MapPoints
 }
 
 void Tracking::UpdateLastFrame()
@@ -1578,11 +1579,11 @@ bool Tracking::NeedNewKeyFrame()
     if(mpIMUInitiator->GetVINSInited())
         timegap = 0.5;
     //const bool cTimeGap = (fabs(mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp)>=0.3 && mnMatchesInliers>15);
-    const bool cTimeGap = ((mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+    const bool cTimeGap =false;// ((mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
 
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-    const bool c1a = mCurrentFrame.mTimeStamp>=mpLastKeyFrame->mTimeStamp+3.0;//timestamp span too long, changed by JingWang, 3s is from VIORBSLAM paper III-B
-    //const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;//time span too long(1s)
+    //const bool c1a = mCurrentFrame.mTimeStamp>=mpLastKeyFrame->mTimeStamp+3.0;//timestamp span too long, changed by JingWang, 3s is from VIORBSLAM paper III-B
+    const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;//time span too long(1s)
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);//for minF=0, if LocalMapper is idle
     //Condition 1c: tracking is weak

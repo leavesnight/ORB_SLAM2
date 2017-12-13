@@ -109,10 +109,7 @@ public:
   
   void Run();
   
-  cv::Mat GetGravityVec(void){
-    unique_lock<mutex> lock(mMutexInitIMU);
-    return mGravityVec.clone();//avoid simultaneous operation
-  }
+  cv::Mat GetGravityVec(void);
   
   CREATOR_GET(Finish,bool,b)
   CREATOR_SET(FinishRequest,bool,b)

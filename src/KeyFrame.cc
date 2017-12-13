@@ -48,7 +48,11 @@ void KeyFrame::UpdatePoseFromNS()//same as Frame::UpdatePoseFromNS()
 void KeyFrame::UpdateNavStatePVRFromTcw()
 {
   unique_lock<mutex> lock(mMutexNavState);
-  cv::Mat Twb = Converter::toCvMatInverse(Frame::mTbc*Tcw);
+  cv::Mat Twb;
+  {
+    unique_lock<mutex> lock(mMutexPose);//important for using Tcw for this func. is multi threads!
+    Twb=Converter::toCvMatInverse(Frame::mTbc*Tcw);
+  }
   Eigen::Matrix3d Rwb=Converter::toMatrix3d(Twb.rowRange(0,3).colRange(0,3));
   Eigen::Vector3d Pwb=Converter::toVector3d(Twb.rowRange(0,3).col(3));
 

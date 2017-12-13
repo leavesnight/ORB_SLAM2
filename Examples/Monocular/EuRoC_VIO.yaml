@@ -48,8 +48,8 @@ Camera.Tco:
   1.000000000,  0.000000000,  0.000000000, -0.518000000,
   0.000000000,  0.000000000,  0.000000000,  1.000000000]
 
-# Local Window size
-LocalMapping.LocalWindowSize: 20
+# Local Window size: JW is 20
+LocalMapping.LocalWindowSize: 10
 
 #--------------------------------------------------------------------------------------------
 # Camera Parameters. Adjust them!

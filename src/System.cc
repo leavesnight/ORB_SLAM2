@@ -39,13 +39,43 @@
 
 namespace ORB_SLAM2
 {
-
 cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
   cv::Mat Tcw=mpTracker->CacheOdom(timestamp,odomdata,mode);
   
   return Tcw;
 }
 
+void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc){
+    cout << endl << "Saving keyframe NavState to " << filename << " ..." << endl;
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+
+    // Transform all keyframes so that the first keyframe is at the origin.
+    // After a loop closure the first keyframe might not be at the origin.
+    //cv::Mat Two = vpKFs[0]->GetPoseInverse();
+
+    ofstream f;f.open(filename.c_str());f<<fixed;
+    
+    for(size_t i=0; i<vpKFs.size(); i++){
+      KeyFrame* pKF = vpKFs[i];
+      // pKF->SetPose(pKF->GetPose()*Two);
+
+      if(pKF->isBad()) continue;
+
+      //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
+      if (bUseTbc) pKF->UpdateNavStatePVRFromTcw();//for Monocular
+      NavState ns=pKF->GetNavState();
+      Eigen::Quaterniond q=ns.mRwb.unit_quaternion();//qwb from Rwb
+      Eigen::Vector3d t=ns.mpwb;//twb
+      Eigen::Vector3d v=ns.mvwb,bg=ns.mbg+ns.mdbg,ba=ns.mba+ns.mdba;
+      f<<setprecision(6)<<pKF->mTimeStamp<<setprecision(7)<<" "<<t(0)<<" "<< t(1)<<" "<<t(2)
+      <<" "<<q.x()<<" "<<q.y()<<" "<<q.z()<<" "<<q.w()
+      <<" "<<v(0)<<" "<<v(1)<<" "<<v(2)<<" "<<bg(0)<<" "<<bg(1)<<" "<<bg(2)<<" "<<ba(0)<<" "<<ba(1)<<" "<<ba(2)<<endl;
+    }
+    
+    f.close();
+    cout << endl << "NavState trajectory saved!" << endl;
+}
 void System::SaveMap(const string &filename){//maybe can be rewritten in Tracking.cc
   //typedef
   typedef pcl::PointXYZRGB PointT;

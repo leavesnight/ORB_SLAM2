@@ -212,8 +212,8 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
   // Set IMU/KF-KF/PRV(B)+B edges, here (B) means it's not included in error but used to calculate the error
   vector<g2o::EdgeNavStatePRV*> vpEdgesNavStatePRV;vector<g2o::EdgeNavStateBias*> vpEdgesNavStateBias;//PRVB/IMU & B/RandomWalk edge
   //what does this 10(sigma) mean??? better result?
-  const float thHuberNavStatePRV = sqrt(100*21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF
-  const float thHuberNavStateBias = sqrt(100*16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF
+  const float thHuberNavStatePRV = sqrt(21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF, but JingWang uses 100*21.666
+  const float thHuberNavStateBias = sqrt(16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF, but JW uses 100*16.812
   Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
@@ -248,7 +248,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
     optimizer.addEdge(ebias);
     vpEdgesNavStateBias.push_back(ebias);
   }
-  
+
   // Set MapPoint vertices && MPs-KFs' edges
   const int nExpectedSize = (lLocalKeyFrames.size()+lFixedCameras.size())*lLocalMapPoints.size();//max edges' size
 
@@ -269,7 +269,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
   const float thHuberMono = sqrt(5.991);//sqrt(e_block)<=sqrt(chi2(0.05,2)) allow power 2 increasing(1/2*e_block), e_block=e'*Omiga*e like e_square
   const float thHuberStereo = sqrt(7.815);//chi2(0.05,3)
 
-  for(list<MapPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++)
+  for(list<MapPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; ++lit)
   {
       //Set MP vertices
       MapPoint* pMP = *lit;
@@ -283,10 +283,10 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
       const map<KeyFrame*,size_t> observations = pMP->GetObservations();
 
       //Set edges
-      for(map<KeyFrame*,size_t>::const_iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
+      for(map<KeyFrame*,size_t>::const_iterator mit=observations.begin(), mend=observations.end(); mit!=mend; ++mit)
       {
 	  KeyFrame* pKFi = mit->first;
-
+	  
 	  if(!pKFi->isBad())//good pKFobserv then connect it with pMP by an edge
 	  {                
 	      const cv::KeyPoint &kpUn = pKFi->mvKeysUn[mit->second];
@@ -299,7 +299,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
 
 		  g2o::EdgeNavStatePRPointXYZ* e = new g2o::EdgeNavStatePRPointXYZ();
 		  e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));//0 Xw, VertexSBAPointXYZ* corresponding to pMP->mWorldPos
-		  e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKFi->mnId)));//1 Tbw, VertexNavStatePR* corresponding to pKF->mNavState
+		  e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKFi->mnId)));//1 Tbw, VertexNavStatePR* corresponding to pKF->mNavState, if u use 2 localBA(), notice this vertex should exist!
 		  e->setMeasurement(obs);
 		  const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
 		  e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);//Omiga=Sigma^(-1), here 2*2 for e_block=e'*Omiga*e
@@ -389,6 +389,21 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
 
 	e->setRobustKernel(0);
     }
+    
+/*    for(size_t i=0, iend=vpEdgesNavStatePRV.size(); i<iend;i++){
+	g2o::EdgeNavStatePRV* e = vpEdgesNavStatePRV[i];
+	if(e->chi2()>21.666){//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+	  e->setLevel(1);
+	}
+	e->setRobustKernel(0);//cancel RobustKernel
+    }
+    for(size_t i=0, iend=vpEdgesNavStateBias.size(); i<iend;i++){
+	g2o::EdgeNavStateBias* e = vpEdgesNavStateBias[i];
+	if(e->chi2()>16.812){//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+	  e->setLevel(1);
+	}
+	e->setRobustKernel(0);//cancel RobustKernel
+    }*/
 
     // Optimize again without the outliers
 
@@ -427,6 +442,26 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
 	  vToErase.push_back(make_pair(pKFi,pMP));//ready to erase outliers of pKFi && pMP in stereo edges
       }
   }
+  
+#ifndef NDEBUG
+  for(size_t i=0, iend=vpEdgesNavStatePRV.size(); i<iend;i++){
+      g2o::EdgeNavStatePRV* e = vpEdgesNavStatePRV[i];
+
+      if(e->chi2()>21.666)//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+      {
+	  cout<<"2 PRVedge "<<i<<", chi2 "<<e->chi2()<<". ";
+      }
+  }
+  for(size_t i=0, iend=vpEdgesNavStateBias.size(); i<iend;i++){
+      g2o::EdgeNavStateBias* e = vpEdgesNavStateBias[i];
+
+      if(e->chi2()>16.812)//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+      {
+	  cout<<"2 Biasedge "<<i<<", chi2 "<<e->chi2()<<". ";
+      }
+  }
+  cout<<endl;
+#endif
 
   // Get Map Mutex
   unique_lock<mutex> lock(pMap->mMutexMapUpdate);
@@ -1442,6 +1477,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mnId));
         g2o::SE3Quat SE3quat = vSE3->estimate();
         pKF->SetPose(Converter::toCvMat(SE3quat));//pKF->SetPose(optimized Tcw)
+        //pKF->UpdateNavStatePVRFromTcw();
     }
 
     //Points update(Position, normal), no need to update descriptor for unchanging pMP->mObservations except for the ones having outliers' edges?

@@ -49,7 +49,7 @@ class Optimizer
 {
 public:
   template<class KeyFrame>
-  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false,const bool bFixedLast=true);//2 frames' motion-only BA, fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
+  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false, bool bFixedLast=true);//2 frames' motion-only BA, fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
   template<class KeyFrame>
   static void PoseOptimizationAddEdge(KeyFrame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
 			       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastKFPVRId){}//we specialize the Frame version
@@ -99,8 +99,9 @@ public:
 //created by zzh
 using namespace Eigen;
 template <class KeyFrame>
-int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg,const bool bFixedLast){
-  cout<<"Enter PoseOpt... curFrameId="<<pFrame->mnId<<endl;
+int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg, bool bFixedLast){
+//   cout<<"Enter PoseOpt... curFrameId="<<pFrame->mnId<<endl;
+//   if (pLastKF->mMargCovInv==Matrix<double,15,15>::Zero()) bFixedLast=true;
   // Extrinsics
   Matrix3d Rcb = pFrame->meigRcb;
   Vector3d tcb = pFrame->meigtcb;
@@ -274,7 +275,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};//chi2(0.05,3), error_block limit(over will be outliers,here also lead to turning point in RobustKernelHuber)
   const int its[4]={10,10,10,10};    
 
-  int nBad=0;
+  int nBad=0;int nBadIMU=0;
   for(size_t it=0; it<4; it++)//4 optimizations, each 10 steps, initial value is the same, but inliers are different
   {
       // Reset estimate for vertexj
@@ -372,9 +373,33 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	  if(it==2)
 	      e->setRobustKernel(0);//let the final(it==3) optimization use no RobustKernel; this function will delete _robustkernel first
       }
-
+      
       if(optimizer.edges().size()<10)//it outliers+inliers(/_edges) number<10 only optimize once with RobustKernelHuber
 	  break;
+      
+/*      if (it<3){
+      nBadIMU=0;
+      {
+	g2o::EdgeNavStatePVR* e=eNSPVR;
+	if(e->chi2()>21.666){//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+	  e->setLevel(1);++nBadIMU;
+	}else e->setLevel(0);
+	if (it==2) e->setRobustKernel(0);//cancel RobustKernel
+      }
+      {
+	g2o::EdgeNavStateBias* e=eNSBias;
+	if(e->chi2()>16.812){//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+	  e->setLevel(1);++nBadIMU;
+	}else e->setLevel(0);
+	if (it==2) e->setRobustKernel(0);//cancel RobustKernel
+      }
+      if (eNSPrior!=NULL){
+	g2o::EdgeNavStatePriorPVRBias* e=eNSPrior;
+	if(e->chi2()>30.5779){//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+	  e->setLevel(1);++nBadIMU;
+	}else e->setLevel(0);
+	if (it==2) e->setRobustKernel(0);//cancel RobustKernel
+      }}*/
   }
 
   // Recover optimized pose and return number of inliers
@@ -387,9 +412,9 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   pFrame->UpdatePoseFromNS();//update posematrices of pFrame
 
   // Compute marginalized Hessian H and B, H*x=B, H/B can be used as prior for next optimization in PoseOptimization, dx'Hdx should be small then next optimized result is appropriate for former BA
-  if(bComputeMarg)
-  {
-    cout<<"Optimized OK. now computeMarginals..."<<endl;
+  if(bComputeMarg){
+//     if (nBadIMU>0){ pFrame->mMargCovInv=Matrix<double,15,15>::Zero();}else{
+//     cout<<"Optimized OK. now computeMarginals..."<<endl;
     std::vector<g2o::OptimizableGraph::Vertex*> margVertices;
     margVertices.push_back(optimizer.vertex(FramePVRId));
     margVertices.push_back(optimizer.vertex(FrameBiasId));
@@ -411,6 +436,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
       margCov.bottomRightCorner(6,6) = spinv.block(1,1)->eval();
       pFrame->mMargCovInv = margCov.inverse();
     }
+//     }
     pFrame->mNavStatePrior=nsj;//pLastF->mNavStatePrior is needed for this func. will be called twice and pLastF->mNavState will also be optimized
   }
 
