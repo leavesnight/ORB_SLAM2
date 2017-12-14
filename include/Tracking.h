@@ -319,8 +319,9 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	  miterLastEnc=iter;//update miterLastEnc pointing to the last one of this frame/begin for next frame
 	else
 	  miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX
+	
+	pCurF->PreIntegration<EncData>(pLastF);//it can be optimized without copy
       }
-      pCurF->PreIntegration<EncData>(pLastF);//it can be optimized without copy
       break;}
     case 2:
       //PreIntegration between 2 KFs & cull 2 odom lists: erase all the data whose tm<=mpReferenceKF(curKF)->mTimeStamp but keep the last one
@@ -340,8 +341,9 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	}
 	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the last EncData used to calculate the Enc PreIntegration
 	miterLastEnc=mlOdomEnc.begin();//maybe end() but we handle it in the CacheOdom()
+	
+	mpReferenceKF->PreIntegration<EncData>(mpLastKeyFrame);//mpLastKeyFrame cannot be bad here for mpReferenceKF hasn't been inserted (SetBadFlag only for before KFs)
       }
-      mpReferenceKF->PreIntegration<EncData>(mpLastKeyFrame);//mpLastKeyFrame cannot be bad here for mpReferenceKF hasn't been inserted (SetBadFlag only for before KFs)
       break;
     case 3:{
       //PreIntegration between lastKF & curF
@@ -377,8 +379,9 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 // 	  for (typename list<EncData>::iterator iterShow=iteri;iterShow!=miterLastEnc;++iterShow){cout<<iterShow->mtm<<" ";}cout<<endl;
 	  mCurrentFrame.SetPreIntegrationList<EncData>(iteri,miterLastEnc);//it can be optimized without copy
 	}
+	
+	mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame);//it can be optimized without copy, Notice here should start from last KF!
       }
-      mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame);//it can be optimized without copy, Notice here should start from last KF!
       break;}
   }
 }

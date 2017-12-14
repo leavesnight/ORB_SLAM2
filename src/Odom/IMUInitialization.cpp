@@ -270,6 +270,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 	  usleep(1000);
 	}
 
+	unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
+	unique_lock<mutex> lockScale2(mpMap->mMutexScaleUpdateGBA);
 	unique_lock<mutex> lock(mpMap->mMutexMapUpdate);// Get Map Mutex
 	//Update KFs' PRVB
 	//update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped

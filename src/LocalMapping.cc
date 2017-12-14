@@ -37,7 +37,7 @@ LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSet
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
   if (fnSize.empty()){
     mnLocalWindowSize=0;
-    cout<<"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<endl;
+    cout<<red"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<white<<endl;
   }else{
     mnLocalWindowSize=fnSize;
   }
@@ -102,8 +102,8 @@ void LocalMapping::Run()
                 KeyFrameCulling();
             }
 	    
-	    if(mpIMUInitiator->GetInitGBAFinish())
-            mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
+	    //if(mpIMUInitiator->GetInitGBAFinish())
+	    mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
         }
         else if(Stop())
         {
@@ -199,8 +199,7 @@ void LocalMapping::ProcessNewKeyFrame()
     //I think I can just use timestamp of last Nth KF to reduce the mlLocalKeyFrames
     //DeleteBadInLocalWindow
     std::list<KeyFrame*>::iterator lit = mlLocalKeyFrames.begin();
-    while(lit != mlLocalKeyFrames.end())
-    {
+    while(lit != mlLocalKeyFrames.end()){
         KeyFrame* pKF = *lit;
         //Test log
         assert(pKF&&"pKF null?");
@@ -715,14 +714,14 @@ void LocalMapping::KeyFrameCulling()
     vector<KeyFrame*> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();//get all 1st layer covisibility KFs as localKFs, notice no mpCurrentKeyFrame
     
     KeyFrame* pOldestLocalKF = mlLocalKeyFrames.front();
-    KeyFrame* pPrevLocalKF = pOldestLocalKF->GetPrevKeyFrame();
+    KeyFrame* pPrevLocalKF = pOldestLocalKF==NULL? NULL:pOldestLocalKF->GetPrevKeyFrame();
     KeyFrame* pNewestLocalKF = mlLocalKeyFrames.back();
 
     for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; vit++)
     {
         KeyFrame* pKF = *vit;
-        if(pKF->mnId==0)//cannot erase the initial KF
-            continue;
+        if(pKF->mnId==0) continue;//cannot erase the initial KF
+	{
 	//added by JingWang
 	// Don't cull the oldest KF in LocalWindow,
         // And the KF before this KF
@@ -754,6 +753,7 @@ void LocalMapping::KeyFrameCulling()
                 continue;
         }
         //end
+	}
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
 
         int nObs = 3;

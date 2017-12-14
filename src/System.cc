@@ -29,6 +29,8 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <opencv2/core/eigen.hpp>
 
+#include "Optimizer.h"
+
 //created by zzh over.
 
 #include "System.h"
@@ -529,6 +531,11 @@ void System::Shutdown()
     while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA() || !mpIMUInitiator->GetFinish()){//changed by zzh
       usleep(5000);
     }
+    
+    if (mpIMUInitiator->GetSensorIMU())//zzh, full BA
+      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,NULL,0,false);
+    else
+      Optimizer::GlobalBundleAdjustment(mpMap,15,NULL,0,false);
 
     if(mpViewer)
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");

@@ -44,6 +44,9 @@ class Map
   int mnChangeIdx;// Index related to any change when mMutexMapUpdate is locked && current KF's Pose is changed
   
 public:
+  //for scale updation in IMU Initialization thread
+  std::mutex mMutexScaleUpdateGBA,mMutexScaleUpdateLoopClosing;
+  
   void InformNewChange(){
     unique_lock<std::mutex> lock(mMutexMap);
     ++mnChangeIdx;

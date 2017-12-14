@@ -100,7 +100,6 @@ public:
 using namespace Eigen;
 template <class KeyFrame>
 int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg, bool bFixedLast){
-//   cout<<"Enter PoseOpt... curFrameId="<<pFrame->mnId<<endl;
 //   if (pLastKF->mMargCovInv==Matrix<double,15,15>::Zero()) bFixedLast=true;
   // Extrinsics
   Matrix3d Rcb = pFrame->meigRcb;
@@ -404,7 +403,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 
   // Recover optimized pose and return number of inliers
   g2o::VertexNavStatePVR* vNSPVR_recov = static_cast<g2o::VertexNavStatePVR*>(optimizer.vertex(FramePVRId));
-  cout<<"recovered pwb="<<vNSPVR_recov->estimate().mpwb.transpose()<<" & matches by motion-only BA:"<<nInitialCorrespondences-nBad<<", before Optimized:"<<nInitialCorrespondences<<endl;
+//   cout<<"recovered pwb="<<vNSPVR_recov->estimate().mpwb.transpose()<<" & matches by motion-only BA:"<<nInitialCorrespondences-nBad<<", before Optimized:"<<nInitialCorrespondences<<endl;
   nsj=vNSPVR_recov->estimate();
   g2o::VertexNavStateBias* vNSBias_recov = static_cast<g2o::VertexNavStateBias*>(optimizer.vertex(FrameBiasId));
   const NavState& nsBias_recov = vNSBias_recov->estimate();
@@ -414,7 +413,6 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   // Compute marginalized Hessian H and B, H*x=B, H/B can be used as prior for next optimization in PoseOptimization, dx'Hdx should be small then next optimized result is appropriate for former BA
   if(bComputeMarg){
 //     if (nBadIMU>0){ pFrame->mMargCovInv=Matrix<double,15,15>::Zero();}else{
-//     cout<<"Optimized OK. now computeMarginals..."<<endl;
     std::vector<g2o::OptimizableGraph::Vertex*> margVertices;
     margVertices.push_back(optimizer.vertex(FramePVRId));
     margVertices.push_back(optimizer.vertex(FrameBiasId));
