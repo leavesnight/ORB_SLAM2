@@ -2,25 +2,38 @@
 Now this project is revised by zzh
 
 1.Some annotations and elimination are done
+
 2.VIORBSLAM is implemented like the VIORBSLAM paper[Visual-Inertial Monocular SLAM with Map Reuse](https://arxiv.org/pdf/1610.05949.pdf), especially thanks to OnManifold Preintegration paper[On-Manifold Preintegration for Real-Time](https://arxiv.org/pdf/1512.02363.pdf) and [JingWang's initial version](https://github.com/jingpang/LearnVIORB)
+
 3.It's a real-time code with full ba at last, PoseOptimization uses PVR vertex while localBA/GlobalBA use PR-V, No inverse depth parameterization, Loading uses .bin vocabulary, Some other related changes
+
 4.A Stereo/RGBD version with Encoder+IMU will soon come
 
 
 Dec. 14
 ----------------------------------------
 Tested on:
+
 EuRoC ASL Dataset Format: V101,V202,V203,MH04.
 
+
 Usage:
+
 Build with build.sh. Notice the version requirement of Eigen3 & OpenCV in CMakeLists.txt.
+
 Modify the path in Examples/Monocular/EuRoC_VIO.yaml
 
+
 Normally use it like: 
+
   cd ~/zzh/ORB_SLAM2/Examples/Monocular 
+  
   VIO:
+  
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt ~/dataset/EuRoC/V202medium/mav0/imu0/data.csv 
+    
   ORBSLAM2:(you can also use ./EuRoC.yaml with Tbc is default I)
+  
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt 
 
 
