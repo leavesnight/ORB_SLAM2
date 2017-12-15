@@ -61,7 +61,7 @@ class IMUInitialization{//designed for multi threads
   CREATOR_VAR_MULTITHREADS(CopyInitKFs,bool,b)//for copying/cache KFs in IMU initialization thread avoiding KeyFrameCulling()
   
   //CREATOR_VAR_MULTITHREADS(UpdatingInitPoses,bool,b)//for last propagation in IMU Initialization to stop adding new KFs in Tracking thread, useless for LocalMapping is stopped
-  CREATOR_VAR_MULTITHREADS(InitGBAFinish,bool,b)//for last GBA(include propagation) in IMU Initialization, LoopClosing is initially suspended when it's false
+  CREATOR_VAR_MULTITHREADS(InitGBA,bool,b)//for last GBA(include propagation) required by IMU Initialization, LoopClosing always creates new GBA thread when it's true
   
   //like the part of LocalMapping
   CREATOR_VAR_MULTITHREADS(CurrentKeyFrame,KeyFrame*,p)//updated by LocalMapping thread
@@ -84,7 +84,8 @@ class IMUInitialization{//designed for multi threads
       //reset relevant variables
       mdStartTime=-1;SetCurrentKeyFrame(NULL);//SetSensorIMU(false);
       SetVINSInited(false);//usually this 3 variables are false when LOST then this func. will be called
-      SetInitGBAFinish(false);//if it's true, won't be automatically reset
+      SetInitGBA(false);//if it's true, won't be automatically reset
+      
       SetFirstVINSInited(false);
       
       SetReset(false);
@@ -97,8 +98,8 @@ public:
     mdStartTime=-1;mbSensorIMU=false;mpCurrentKeyFrame=NULL;
     mbVINSInited=false;
     mbCopyInitKFs=false;
-
-    mbInitGBAFinish = false;
+    mbInitGBA = false;
+    
     mbFirstVINSInited = false;//maybe dedundant
     
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);

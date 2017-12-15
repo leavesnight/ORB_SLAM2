@@ -28,6 +28,7 @@ endif()
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
+set(OpenCV_DIR "/usr/local/opencv320/share/OpenCV") 
 find_package(OpenCV 3.2 QUIET)
 if(NOT OpenCV_FOUND)
    find_package(OpenCV 2.4.3 QUIET)
@@ -42,6 +43,7 @@ find_package(Cholmod REQUIRED)#added for cholmod linear solver
 
 find_package(PCL REQUIRED COMPONENT common io filters)
 
+message(STATUS "OpenCV_INCLUDE_DIRS=${OpenCV_INCLUDE_DIRS}; LIBS=${OpenCV_LIBS}!")
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/include
@@ -50,6 +52,7 @@ ${Pangolin_INCLUDE_DIRS}
 
 ${PROJECT_SOURCE_DIR}/src/Odom
 ${CHOLMOD_INCLUDE_DIR}
+${OpenCV_INCLUDE_DIRS}
 ${PCL_INCLUDE_DIRS}
 )
 

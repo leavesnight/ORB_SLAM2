@@ -218,7 +218,7 @@ int main(int argc, char **argv)
     // Save camera trajectory
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
-    SLAM.SaveTrajectoryTUM("FrameTrajectory.txt");
+    //SLAM.SaveTrajectoryTUM("FrameTrajectory.txt");
     //SLAM.SaveMap("Map.pcd");//zzh
     //wait for pOdomThread finished
     if (pOdomThread!=NULL)//zzh

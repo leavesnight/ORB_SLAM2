@@ -48,6 +48,11 @@ class KeyFrameDatabase;
 class LoopClosing
 {
 public:
+  void CreateGBA();
+  
+//created by zzh
+  
+public:
 
     typedef pair<set<KeyFrame*>,int> ConsistentGroup;//pair<loop candidate KF's group,this group's consistency counter(has consecutive new KFs condition)>
     typedef map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,

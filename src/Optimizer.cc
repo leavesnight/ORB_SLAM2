@@ -560,8 +560,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   
   // Set IMU/KF-KF/PRV(B)+B edges
   //what does this 10(sigma) mean??? better result?
-  const float thHuberNavStatePRV = sqrt(100*21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF
-  const float thHuberNavStateBias = sqrt(100*16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF
+  const float thHuberNavStatePRV = sqrt(21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF; 100*
+  const float thHuberNavStateBias = sqrt(16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF; 100*
   Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE

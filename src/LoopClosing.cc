@@ -40,6 +40,22 @@
 
 namespace ORB_SLAM2
 {
+void LoopClosing::CreateGBA()
+{
+  mpIMUInitiator->SetInitGBA(false);//we should avoid entering this func. twice
+  
+  // If a Global Bundle Adjustment is running, abort it
+  if(isRunningGBA()){
+    //do nothing, for it must be the one just after IMU Initialization
+  }else{
+    // Launch a new thread to perform Global Bundle Adjustment
+    mbRunningGBA = true;
+    assert(!mbStopGBA);//it's already false
+    mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment,this,mpCurrentKF->mnId);
+  }
+}
+  
+//created by zzh
 
 LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
@@ -74,11 +90,14 @@ void LoopClosing::Run()
 	    // Compute similarity transformation [sR|t] 
 	    // In the stereo/RGBD case s=1
 	    unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
-	    if(ComputeSim3())
-	    {
-		// Perform loop fusion and pose graph optimization
-		CorrectLoop();
+	    if(ComputeSim3()){
+	      // Perform loop fusion and pose graph optimization
+	      CorrectLoop();
 	    }
+	  }
+	  
+	  if (mpIMUInitiator->GetInitGBA()){
+	    CreateGBA();
 	  }
         }       
 
@@ -674,6 +693,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     bool bUseGBAPRV=false;
     int idx =  mnFullBAIdx;
     unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA!
+    mpIMUInitiator->SetInitGBA(false);
     if (mpIMUInitiator->GetVINSInited()){
       Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),10,&mbStopGBA,nLoopKF,false);
       bUseGBAPRV=true;

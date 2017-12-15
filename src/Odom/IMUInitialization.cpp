@@ -253,179 +253,89 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 
   //if VIO is initialized with appropriate bg*,s*,gw*,ba*, update the map(MPs' P,KFs' PRVB) like GBA/CorrrectLoop()
   if(bVIOInited){
-      // Set NavState , scale and bias for all KeyFrames
-      double scale=s_;
-      // gravity vector in world frame
-      cv::Mat gw;
-      {
-	unique_lock<mutex> lock(mMutexInitIMU);
-	mGravityVec=Rwi_*GI;gw=mGravityVec.clone();
-      }
-      Vector3d gweig = Converter::toVector3d(gw);
+    // Set NavState , scale and bias for all KeyFrames
+    double scale=s_;
+    // gravity vector in world frame
+    cv::Mat gw;
+    {
+      unique_lock<mutex> lock(mMutexInitIMU);
+      mGravityVec=Rwi_*GI;gw=mGravityVec.clone();
+    }
+    Vector3d gweig = Converter::toVector3d(gw);
 
-      {// Update the Map needs mutex lock: Stop local mapping, like RunGlobalBundleAdjustment() in LoopClosing.cc
-	mpLocalMapper->RequestStop();//same as CorrectLoop(), suspend/stop/freeze LocalMapping thread
-	// Wait until Local Mapping has effectively stopped
-	while(!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished()){//if LocalMapping is killed by System::Shutdown(), don't wait any more
-	  usleep(1000);
-	}
-
-	unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
-	unique_lock<mutex> lockScale2(mpMap->mMutexScaleUpdateGBA);
-	unique_lock<mutex> lock(mpMap->mMutexMapUpdate);// Get Map Mutex
-	//Update KFs' PRVB
-	//update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped
-	vScaleGravityKF=mpMap->GetAllKeyFrames();
-	pNewestKF=GetCurrentKeyFrame();
-	assert(pNewestKF==vScaleGravityKF.back());//they must be same for we change the set less func. in Map.h
-	//recover right scaled Twc&NavState from old unscaled Twc with scale
-	for(vector<KeyFrame*>::const_iterator vit=vScaleGravityKF.begin(), vend=vScaleGravityKF.end(); vit!=vend; ++vit){
-	  KeyFrame* pKF = *vit;
-	  if(pKF->isBad()) continue;
-	  //we can SetPose() first even no IMU data
-	  cv::Mat Tcw=pKF->GetPose(),Twc=pKF->GetPoseInverse();//we must cache Twc first!
-	  cv::Mat tcw=Tcw.rowRange(0,3).col(3)*scale;//right scaled pwc
-	  tcw.copyTo(Tcw.rowRange(0,3).col(3));pKF->SetPose(Tcw);//manually SetPose(right scaled Tcw)
-	  // Position and rotation of visual SLAM
-	  cv::Mat wPc = Twc.rowRange(0,3).col(3);                   // wPc/twc
-	  cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);            // Rwc
-	  // Set position and rotation of navstate
-	  cv::Mat wPb = scale*wPc + Rwc*pcb;//right scaled pwb from right scaled pwc
-	  NavState ns;
-	  ns.mpwb=Converter::toVector3d(wPb);ns.setRwb(Converter::toMatrix3d(Rwc*Rcb));
-	  ns.mbg=bgest;ns.mba=bastareig;//bg* ba*
-	  ns.mdbg=ns.mdba=Vector3d::Zero();// Set delta_bias to zero. (only updated during optimization)
-	  // Step 4. / See IV-D/(18)/(3) in VOIRBSLAM paper with ba_bar=0,bg_bar=bgest=>dba=ba,dbg=0
-	  // compute velocity
-	  if(pKF!=vScaleGravityKF.back()){
-	    KeyFrame* pKFnext=pKF->GetNextKeyFrame();
-	    assert(pKFnext&&"pKFnext is NULL");
-	    if (pKFnext->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
-	    pKF->SetNavStateOnly(ns);//we must update the pKF->mbg&mba before pKFnext->PreIntegration()
-	    pKFnext->PreIntegration<IMUData>(pKF);//it's originally based on bi_bar=0, but now it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
-	    const IMUPreintegrator imupreint=pKFnext->GetIMUPreInt();//IMU pre-int between pKF ~ pKFnext, though the paper seems to use the vKFInit[k].mOdomPreIntIMU so its dbgi=0 but its dbai=bai, we use more precise bi_bar here
-	    double dt=imupreint.mdeltatij;                                		// deltati_i+1
-	    cv::Mat dp=Converter::toCvMat(imupreint.mpij);       			// deltapi_i+1
-	    //cv::Mat Japij=Converter::toCvMat(imupreint.mJapij);    			// Ja_deltap
-	    cv::Mat wPcnext=pKFnext->GetPoseInverse().rowRange(0,3).col(3);		// wPci+1
-	    cv::Mat Rwcnext=pKFnext->GetPoseInverse().rowRange(0,3).colRange(0,3);	// Rwci+1
-	    cv::Mat vwbi=-1./dt*(scale*(wPc-wPcnext)+(Rwc-Rwcnext)*pcb+dt*dt/2*gw+Rwc*Rcb*(dp));//-1/dt*(pwbi-pwbj+1/2*gw*dt^2+Rwbi*(dp+Japij*dbai)), pwbi=s*pwc+Rwc*pcb, s=sw=swRightScaled_wNow
-	    ns.mvwb=Converter::toVector3d(vwbi);
-	  }else{
-	    // If this is the last KeyFrame, no 'next' KeyFrame exists, use (3) in VOIRBSLAM paper with ba_bar=0,bg_bar=bgest=>dba=ba,dbg=0
-	    if (pKF->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
-	    KeyFrame* pKFprev=pKF->GetPrevKeyFrame();
-	    assert(pKFprev&&"pKFnext is NULL");
-	    const IMUPreintegrator imupreint=pKF->GetIMUPreInt();//notice it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
-	    double dt=imupreint.mdeltatij;
-	    NavState nsprev=pKFprev->GetNavState();
-	    ns.mvwb=nsprev.mvwb+gweig*dt+nsprev.mRwb*(imupreint.mvij);//vwbj=vwbi+gw*dt+Rwbi*(dvij+Javij*dbai)
-	  }
-	  pKF->SetNavStateOnly(ns);//now ns also has the right mvwb
-	}
-	//Update MPs' Position
-	vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();//we don't change the vpMPs[i] but change the *vpMPs[i]
-	for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; ++vit) (*vit)->UpdateScale(scale);
-	//Now every thing in Map is right scaled & mGravityVec is got
-	SetVINSInited(true);
-	SetFirstVINSInited(true);
-	
-	mpMap->InformNewBigChange();//used to check the SLAM's state
-	mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
-	std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
+    {// Update the Map needs mutex lock: Stop local mapping, like RunGlobalBundleAdjustment() in LoopClosing.cc
+      mpLocalMapper->RequestStop();//same as CorrectLoop(), suspend/stop/freeze LocalMapping thread
+      // Wait until Local Mapping has effectively stopped
+      while(!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished()){//if LocalMapping is killed by System::Shutdown(), don't wait any more
+	usleep(1000);
       }
 
-      // Run global BA after inited
-      unsigned long nLoopKF=pNewestKF->mnId;//does it need to be set noterase?
-      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mGravityVec,10,NULL,nLoopKF,false);
-      cerr<<red<<"finish global BA after vins init"<<white<<endl;
+      unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
+      unique_lock<mutex> lockScale2(mpMap->mMutexScaleUpdateGBA);
+      unique_lock<mutex> lock(mpMap->mMutexMapUpdate);// Get Map Mutex
+      //Update KFs' PRVB
+      //update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped
+      vScaleGravityKF=mpMap->GetAllKeyFrames();
+      pNewestKF=GetCurrentKeyFrame();
+      assert(pNewestKF==vScaleGravityKF.back());//they must be same for we change the set less func. in Map.h
+      //recover right scaled Twc&NavState from old unscaled Twc with scale
+      for(vector<KeyFrame*>::const_iterator vit=vScaleGravityKF.begin(), vend=vScaleGravityKF.end(); vit!=vend; ++vit){
+	KeyFrame* pKF = *vit;
+	if(pKF->isBad()) continue;
+	//we can SetPose() first even no IMU data
+	cv::Mat Tcw=pKF->GetPose(),Twc=pKF->GetPoseInverse();//we must cache Twc first!
+	cv::Mat tcw=Tcw.rowRange(0,3).col(3)*scale;//right scaled pwc
+	tcw.copyTo(Tcw.rowRange(0,3).col(3));pKF->SetPose(Tcw);//manually SetPose(right scaled Tcw)
+	// Position and rotation of visual SLAM
+	cv::Mat wPc = Twc.rowRange(0,3).col(3);                   // wPc/twc
+	cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);            // Rwc
+	// Set position and rotation of navstate
+	cv::Mat wPb = scale*wPc + Rwc*pcb;//right scaled pwb from right scaled pwc
+	NavState ns;
+	ns.mpwb=Converter::toVector3d(wPb);ns.setRwb(Converter::toMatrix3d(Rwc*Rcb));
+	ns.mbg=bgest;ns.mba=bastareig;//bg* ba*
+	ns.mdbg=ns.mdba=Vector3d::Zero();// Set delta_bias to zero. (only updated during optimization)
+	// Step 4. / See IV-D/(18)/(3) in VOIRBSLAM paper with ba_bar=0,bg_bar=bgest=>dba=ba,dbg=0
+	// compute velocity
+	if(pKF!=vScaleGravityKF.back()){
+	  KeyFrame* pKFnext=pKF->GetNextKeyFrame();
+	  assert(pKFnext&&"pKFnext is NULL");
+	  if (pKFnext->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
+	  pKF->SetNavStateOnly(ns);//we must update the pKF->mbg&mba before pKFnext->PreIntegration()
+	  pKFnext->PreIntegration<IMUData>(pKF);//it's originally based on bi_bar=0, but now it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
+	  const IMUPreintegrator imupreint=pKFnext->GetIMUPreInt();//IMU pre-int between pKF ~ pKFnext, though the paper seems to use the vKFInit[k].mOdomPreIntIMU so its dbgi=0 but its dbai=bai, we use more precise bi_bar here
+	  double dt=imupreint.mdeltatij;                                		// deltati_i+1
+	  cv::Mat dp=Converter::toCvMat(imupreint.mpij);       			// deltapi_i+1
+	  //cv::Mat Japij=Converter::toCvMat(imupreint.mJapij);    			// Ja_deltap
+	  cv::Mat wPcnext=pKFnext->GetPoseInverse().rowRange(0,3).col(3);		// wPci+1
+	  cv::Mat Rwcnext=pKFnext->GetPoseInverse().rowRange(0,3).colRange(0,3);	// Rwci+1
+	  cv::Mat vwbi=-1./dt*(scale*(wPc-wPcnext)+(Rwc-Rwcnext)*pcb+dt*dt/2*gw+Rwc*Rcb*(dp));//-1/dt*(pwbi-pwbj+1/2*gw*dt^2+Rwbi*(dp+Japij*dbai)), pwbi=s*pwc+Rwc*pcb, s=sw=swRightScaled_wNow
+	  ns.mvwb=Converter::toVector3d(vwbi);
+	}else{
+	  // If this is the last KeyFrame, no 'next' KeyFrame exists, use (3) in VOIRBSLAM paper with ba_bar=0,bg_bar=bgest=>dba=ba,dbg=0
+	  if (pKF->GetIMUPreInt().mdeltatij==0){cout<<"time 0"<<endl;continue;}
+	  KeyFrame* pKFprev=pKF->GetPrevKeyFrame();
+	  assert(pKFprev&&"pKFnext is NULL");
+	  const IMUPreintegrator imupreint=pKF->GetIMUPreInt();//notice it's based on bi_bar=[bg* ba*], so dbgi=dbai=0
+	  double dt=imupreint.mdeltatij;
+	  NavState nsprev=pKFprev->GetNavState();
+	  ns.mvwb=nsprev.mvwb+gweig*dt+nsprev.mRwb*(imupreint.mvij);//vwbj=vwbi+gw*dt+Rwbi*(dvij+Javij*dbai)
+	}
+	pKF->SetNavStateOnly(ns);//now ns also has the right mvwb
+      }
+      //Update MPs' Position
+      vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();//we don't change the vpMPs[i] but change the *vpMPs[i]
+      for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; ++vit) (*vit)->UpdateScale(scale);
+      //Now every thing in Map is right scaled & mGravityVec is got
+      SetVINSInited(true);
+      SetFirstVINSInited(true);
       
-      {//the same as LoopClosing::RunGlobalBundleAdjustment()
-	mpLocalMapper->RequestStop();//same as CorrectLoop(), suspend/stop/freeze LocalMapping thread
-	// Wait until Local Mapping has effectively stopped
-	while(!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished())//if LocalMapping is killed by System::Shutdown(), don't wait any more
-	{
-	    usleep(1000);
-	}
-	
-	// Get Map Mutex
-	unique_lock<mutex> lock(mpMap->mMutexMapUpdate);
-	// Correct keyframes starting at map first keyframe(id 0)
-	list<KeyFrame*> lpKFtoCheck(mpMap->mvpKeyFrameOrigins.begin(),mpMap->mvpKeyFrameOrigins.end());
-	//propagate the correction through the spanning tree(root is always id0 KF)
-	while(!lpKFtoCheck.empty())//if the propagation is not over (notice mpMap cannot be reset for LocalMapping is stopped)
-	{
-	    KeyFrame* pKF = lpKFtoCheck.front();//for RGBD, lpKFtoCheck should only have one KF initially
-	    const set<KeyFrame*> sChilds = pKF->GetChilds();
-	    cv::Mat Twc = pKF->GetPoseInverse();
-	    for(set<KeyFrame*>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
-	    {
-		KeyFrame* pChild = *sit;
-		if(pChild->mnBAGlobalForKF!=nLoopKF)//if child is not GBA optimized by mpCurrentKF/it must be the new KFs created by LocalMapping thread during GBA
-		{
-		    cv::Mat Tchildc = pChild->GetPose()*Twc;//Tchildw*Tw0=Tchild0
-		    pChild->mTcwGBA = Tchildc*pKF->mTcwGBA;//*Tcorc*pKF->mTcwGBA; Tchild0*T0w(corrected)=Tchildw(corrected)
-		    pChild->mnBAGlobalForKF=nLoopKF;//so now its child KF' Pose can seem to be corrected by GBA
-
-		    // Set NavStateGBA and correct the PR&V
-		    pChild->mNavStateGBA = pChild->GetNavState();//Tb_old_w
-		    Matrix3d Rw1 = pChild->mNavStateGBA.getRwb();Vector3d Vw1 = pChild->mNavStateGBA.mvwb;//Rwb_old&wVwb_old
-		    cv::Mat TwbGBA = Converter::toCvMatInverse(Frame::mTbc*pChild->mTcwGBA);//TbwGBA.t()
-		    Matrix3d RwbGBA=Converter::toMatrix3d(TwbGBA.rowRange(0,3).colRange(0,3));
-		    pChild->mNavStateGBA.setRwb(RwbGBA);
-		    pChild->mNavStateGBA.mpwb=Converter::toVector3d(TwbGBA.rowRange(0,3).col(3));
-		    pChild->mNavStateGBA.mvwb=RwbGBA*Rw1.transpose()*Vw1;//Vwb_new=wVwb_new=Rwb_new*bVwb=Rwb_new*Rb_old_w*wVwb_old=Rwb2*Rwb1.t()*wV1
-		}//now the child is optimized by GBA
-		lpKFtoCheck.push_back(pChild);
-	    }
-
-	    pKF->mTcwBefGBA = pKF->GetPose();//record the old Tcw
-	    pKF->SetNavState(pKF->mNavStateGBA);//update all KFs' Pose to GBA optimized Tbw&Tcw, including UpdatePoseFromNS()&&SetPose(pKF->mTcwGBA), not necessary to update mNavStateBefGBA for unused in MapPoints' correction
-	    lpKFtoCheck.pop_front();
-	}
-
-	// Correct MapPoints
-	const vector<MapPoint*> vpMPs = mpMap->GetAllMapPoints();
-	for(size_t i=0; i<vpMPs.size(); i++)//all MPs in mpMap
-	{
-	    MapPoint* pMP = vpMPs[i];
-
-	    if(pMP->isBad())
-		continue;
-
-	    if(pMP->mnBAGlobalForKF==nLoopKF)//if this MP is GBA optimized
-	    {
-		// If optimized by Global BA, just update
-		pMP->SetWorldPos(pMP->mPosGBA);//update all (old)MPs' Pos to GBA optimized Pos
-	    }
-	    else//new MPs created by Tracking/LocalMapping thread during GBA
-	    {
-		// Update according to the correction of its reference keyframe
-		KeyFrame* pRefKF = pMP->GetReferenceKeyFrame();
-
-		if(pRefKF->mnBAGlobalForKF!=nLoopKF)//I think it should be false for it's propagated through spanning tree,need test
-		    continue;
-
-		// Map to non-corrected camera
-		cv::Mat Rcw = pRefKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);//old Rcw
-		cv::Mat tcw = pRefKF->mTcwBefGBA.rowRange(0,3).col(3);//old tcw
-		cv::Mat Xc = Rcw*pMP->GetWorldPos()+tcw;//Xc=(Tcw(old)*Pw(old))(0:2)
-
-		// Backproject using corrected camera
-		cv::Mat Twc = pRefKF->GetPoseInverse();//new Twc
-		cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);//new Rwc
-		cv::Mat twc = Twc.rowRange(0,3).col(3);//new twc
-
-		pMP->SetWorldPos(Rwc*Xc+twc);//update all (new)MPs' Pos to GBA optimized Pos/Pw(new)=Twc(new)*Pc
-	    }
-	}       
-
-	mpMap->InformNewBigChange();//used to check the SLAM's state
-	mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
-	
-	cout <<red<< "Map updated in IMU Initialization!" << white<<endl;//if Initial GBA/loop correction successed, this word should appear!
-	SetInitGBAFinish(true);//allow LoopClosing to start
-      }
+      mpMap->InformNewBigChange();//used to check the SLAM's state
+      mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
+      std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
+      // Run global BA after inited, we use LoopClosing thread to do this job for safety!
+      SetInitGBA(true);
+    }
   }
 
   for(int i=0;i<N;i++){//delete the newed pointer
