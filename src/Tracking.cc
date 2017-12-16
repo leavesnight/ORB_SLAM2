@@ -154,16 +154,13 @@ bool Tracking::TrackWithIMU(bool bMapUpdated){
         return false;
 
     // Pose optimization. false: no need to compute marginalized for current Frame(motion-only), see VIORBSLAM paper (4)~(8)
-    if(mpIMUInitiator->GetFirstVINSInited() || bMapUpdated){//we call this 2 frames'(FKF/FF) motion-only BA
+    if(bMapUpdated){//we call this 2 frames'(FKF/FF) motion-only BA
       //not use Hessian matrix, it's ok
       Optimizer::PoseOptimization(&mCurrentFrame,mpLastKeyFrame,mpIMUInitiator->GetGravityVec(),false);//fixing lastKF(i), optimize curF(j)
     }else{
-      if (mLastFrame.mOdomPreIntIMU.mdeltatij!=0)//if Hessian matrix exists
-	Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),false,false);//using prior Hessian to keep lastF(j)'s Pose stable, optimize j&j+1
-      else{
-	cout<<red"lastF.deltatij==0!In TrackWithIMU(), Check!"<<white<<endl;
-	Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),false);//fix lastF(i), optmize curF(j)
-      }
+      assert(mLastFrame.mbPrior==true||mLastFrame.mbPrior==false&&(mCurrentFrame.mnId==mnLastRelocFrameId+20||mnLastRelocFrameId==0));
+      //unfix lastF(j): Hessian matrix exists, use prior Hessian to keep lastF(j)'s Pose stable, optimize j&j+1; fix lastF(j): optimize curF(j+1)
+      Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),false);//last F unfixed/fixed when lastF.mOdomPreIntIMU.deltatij==0 or RecomputeIMUBiasAndCurrentNavstate(), save its Hessian
     }
 
     // Discard outliers
@@ -196,12 +193,12 @@ bool Tracking::TrackWithIMU(bool bMapUpdated){
     return nmatchesMap>=6;//10;//Track ok when enough inlier MapPoints, changed by JingWang
 }
 bool Tracking::PredictNavStateByIMU(bool bMapUpdated){
-  if(!mpIMUInitiator->GetVINSInited()) cerr<<"mpLocalMapper->GetVINSInited() not, shouldn't in PredictNavStateByIMU"<<endl;//Debug log
+  assert(mpIMUInitiator->GetVINSInited());
   
   //Initialize NavState of mCurrentFrame
   // Map updated, optimize with last KeyFrame
   NavState &ns=mCurrentFrame.mNavState;
-  if(mpIMUInitiator->GetFirstVINSInited() || bMapUpdated){
+  if(bMapUpdated){
     // Get initial NavState&pose from Last KeyFrame
     ns=mpLastKeyFrame->GetNavState();
     PreIntegration(3);//preintegrate from LastKF to curF
@@ -257,15 +254,12 @@ bool Tracking::TrackLocalMapWithIMU(bool bMapUpdated){
     mCurrentFrame.UpdateNavStatePVRFromTcw();//here is the imu data empty condition after imu's initialized, we must update NavState to keep continuous right Tbw after imu's initialized
   }else{
     // 2 frames' motion-only BA, for added matching MP&&KeyPoints in SearchLocalPoints();
-    if(mpIMUInitiator->GetFirstVINSInited() || bMapUpdated){
+    if(bMapUpdated){
       Optimizer::PoseOptimization(&mCurrentFrame,mpLastKeyFrame,mpIMUInitiator->GetGravityVec(),true);//fixed last KF, save its Hessian
     }else{
-      if (mLastFrame.mOdomPreIntIMU.mdeltatij!=0)
-	Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),true,false);//last F unfixed, save its Hessian
-      else{
-	cout<<red"LastF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<white<<endl;
-	Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),true);//fixed last F, save its Hessian
-      }
+      assert(mLastFrame.mbPrior==true||mLastFrame.mbPrior==false&&(mCurrentFrame.mnId==mnLastRelocFrameId+20||mnLastRelocFrameId==0));
+      Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),true);//last F unfixed/fixed when lastF.mOdomPreIntIMU.deltatij==0 or RecomputeIMUBiasAndCurrentNavstate(), save its Hessian
+      if (mLastFrame.mOdomPreIntIMU.mdeltatij==0) cout<<red"LastF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<white<<endl;
     }
   }
   //after IMU motion-only BA, we don't change bi to bi+dbi for reason that next Frame may(if imu data exists) still optimize dbi, so it's not necessary to update bi
@@ -296,7 +290,7 @@ bool Tracking::TrackLocalMapWithIMU(bool bMapUpdated){
 
   // Decide if the tracking was succesful
   // More restrictive if there was a relocalization recently (recent 1s)
-  if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<10)//50)
+  if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && (mnMatchesInliers<10||mCurrentFrame.mOdomPreIntIMU.mdeltatij==0&&mnMatchesInliers<50))//50)
       return false;
 
   if(mnMatchesInliers<6)//30)//notice it's a class data member, changed by JingWang
@@ -405,7 +399,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(false), mbVO(false), mpORBVocabulary(pVoc),
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0),
-    mtimestampOdom(-1),mbRelocBiasPrepare(false),mbCreateNewKFAfterReloc(false)//zzh
+    mtimestampOdom(-1),mbRelocBiasPrepare(false)//zzh
 {   
     // Load camera parameters from settings file
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
@@ -710,8 +704,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
     static int premapid=0;
     int curmapid=mpMap->GetLastChangeIdx();
     if (curmapid!=premapid){premapid=curmapid;bMapUpdated=true;}
-    //I may try an infinite Hessian matrix(but before it, I may try fixing last KF), JingWang uses bMapUpdated strategy for no prior Frames's IMU Hessian matrix
-    if(mCurrentFrame.mnId == mnLastRelocFrameId + 20){bMapUpdated=true;}//20 frames for bias calculation when relocalized, maybe we can rectify it to ...>=... &&!mbCreateNewKFAfterReloc && !mbEntered {mbEntered=true;...} and add mbEntered=false in reloc.
 
     if(mState==NOT_INITIALIZED)
     {
@@ -893,10 +885,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		  mbRelocBiasPrepare=false;
 		  for (int i=0;i<mv20pFramesReloc.size();++i) delete mv20pFramesReloc[i];
 		  mv20pFramesReloc.clear();
-
-		  mpLocalMapper->Release();// Release LocalMapping. To ensure to insert new keyframe.//I think there maybe a strange problem here?
-		  // Create new KeyFrame
-		  mbCreateNewKFAfterReloc = true;
                 }
             }
 	}else{//we shouldn't make it LOST for robustness
@@ -984,7 +972,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             mlpTemporalPoints.clear();
 
             // Check if we need to insert a new keyframe!!
-            if(NeedNewKeyFrame()){//add mbCreateNewKFAfterReloc into it!?
+            if(NeedNewKeyFrame()){
                 CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
 		/*unique_lock<std::mutex> lock(mpSystem->mMutexPose);
 		static double stlastUpdateSysTOdomStamp=-1;
@@ -1006,10 +994,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                     mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
             }
             
-            // Clear First-Init flag: for the 1st frame's tracking strategy after IMU initialized(notice no prior IMU Hessian matrix), JingWang choose tracking with lastKF
-            if(mpIMUInitiator->GetFirstVINSInited()){//if the transition frame's tracking is unstable, we can improve it through our no Hessian matrix strategy~
-	      mpIMUInitiator->SetFirstVINSInited(false);
-            }
+            //For the 1st frame's tracking strategy after IMU initialized(notice no prior IMU Hessian matrix), JingWang chooses tracking with lastKF, \
+            If the transition frame's tracking is unstable, we can improve it through our no Hessian matrix strategy~
         }else if (mState==ODOMOK){//if it's lost in Camera mode we use Odom mode
 	    // not necessary to update motion model for mVelocity is already got through odom data
 	    
@@ -1036,7 +1022,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	  }
         }
 
-        if(!mCurrentFrame.mpReferenceKF)//useless here?need test
+        if(!mCurrentFrame.mpReferenceKF)//when mCurrentFrame is not KF but it cannot see common MPs in local MPs(e.g. it has all new MPs but it's not inserted as new KF & you can get its mTcw through other odometry)
             mCurrentFrame.mpReferenceKF = mpReferenceKF;
 
         //mLastFrame = Frame(mCurrentFrame);//copy constructor for some Mat.clone() and vec<>[][] deep copy
@@ -1548,7 +1534,7 @@ bool Tracking::TrackLocalMap()
 
 
 bool Tracking::NeedNewKeyFrame()
-{
+{   
     if(mbOnlyTracking)
         return false;
 
@@ -1558,17 +1544,12 @@ bool Tracking::NeedNewKeyFrame()
 
     const int nKFs = mpMap->KeyFramesInMap();
 
-    if (mbCreateNewKFAfterReloc){
-      mbCreateNewKFAfterReloc=false;
-      return true;//added by JingWang
-    }
     // Do not insert keyframes if not enough frames have passed from last relocalisation
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && nKFs>mMaxFrames)//the settings fps used here, if at initial step add new KF quickly while at relocalisation step add it slowly
         return false;
     
-    // Do not insert keyframes if bias is not computed in VINS mode
-    if(mbRelocBiasPrepare/* && mpLocalMapper->GetVINSInited()*/)
-        return false;
+    // Do not insert keyframes if bias is not computed in VINS mode, maybe we can change localBA to pure-vision when mbRelocBiasPrepare=true and create a thread to RecomputeIMUBiasAndCurrentNavstate() like IMU Initialization!
+    if(mbRelocBiasPrepare) return false;
 
     // Tracked MapPoints in the reference keyframe
     int nMinObs = 3;
@@ -1604,16 +1585,13 @@ bool Tracking::NeedNewKeyFrame()
         thRefRatio = 0.4f;
 
     if(mSensor==System::MONOCULAR)
-        thRefRatio = 0.8f;//0.9f;//changed by JingWang
+        thRefRatio = 0.9f;//JingWang uses 0.8f
         
-    double timegap = 0.1;
-    if(mpIMUInitiator->GetVINSInited())
-        timegap = 0.5;
-    //const bool cTimeGap = (fabs(mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp)>=0.3 && mnMatchesInliers>15);
-    const bool cTimeGap =false;// ((mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+    double timegap = 0.5;
+    bool cTimeGap =false;
+    if (mpIMUInitiator->GetSensorIMU()) cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
 
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-    //const bool c1a = mCurrentFrame.mTimeStamp>=mpLastKeyFrame->mTimeStamp+3.0;//timestamp span too long, changed by JingWang, 3s is from VIORBSLAM paper III-B
     const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;//time span too long(1s)
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);//for minF=0, if LocalMapper is idle
@@ -2131,7 +2109,7 @@ void Tracking::Reset()
     
     //zzh: Reset IMU Initialization, must after mpLocalMapper&mpLoopClosing->RequestReset()! for no updation of mpCurrentKeyFrame& no use of mbVINSInited in IMUInitialization thread
     cout<<"Resetting IMU Initiator...";mpIMUInitiator->RequestReset();cout<<" done"<<endl;
-    mtimestampOdom=-1,mbRelocBiasPrepare=false,mbCreateNewKFAfterReloc=false;
+    mtimestampOdom=-1,mbRelocBiasPrepare=false;
     mnLastRelocFrameId=0;
 
     // Clear BoW Database

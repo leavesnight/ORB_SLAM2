@@ -53,7 +53,6 @@ class IMUInitialization{//designed for multi threads
   
   CREATOR_VAR_MULTITHREADS(SensorIMU,bool,b);//for auto reset judgement of this system, automatically check if IMU exists, for it needs initialization with a quite long period of tracking without LOST
   CREATOR_VAR_MULTITHREADS(VINSInited,bool,b)//if IMU initialization is over
-  CREATOR_VAR_MULTITHREADS(FirstVINSInited,bool,b)//is this useless???
   cv::Mat mGravityVec; // gravity vector in world frame
   std::mutex mMutexInitIMU;//for mGravityVec, improved by zzh
   //double mnVINSInitScale; //scale estimation for Mono, not necessary here
@@ -86,8 +85,6 @@ class IMUInitialization{//designed for multi threads
       SetVINSInited(false);//usually this 3 variables are false when LOST then this func. will be called
       SetInitGBA(false);//if it's true, won't be automatically reset
       
-      SetFirstVINSInited(false);
-      
       SetReset(false);
     }
   }
@@ -99,8 +96,6 @@ public:
     mbVINSInited=false;
     mbCopyInitKFs=false;
     mbInitGBA = false;
-    
-    mbFirstVINSInited = false;//maybe dedundant
     
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
     cv::FileNode fnStr=fSettings["test.InitVIOTmpPath"];

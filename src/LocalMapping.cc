@@ -40,6 +40,7 @@ LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSet
     cout<<red"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<white<<endl;
   }else{
     mnLocalWindowSize=fnSize;
+    if (mnLocalWindowSize<1){ mnLocalWindowSize=10;cout<<red"mnLocalWindowSize>=1, we change it to the default 10!"<<white<<endl;}
   }
   
 }
@@ -93,8 +94,8 @@ void LocalMapping::Run()
 		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
 		    //Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
-		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
-		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mlLocalKeyFrames,&mbAbortBA, mpMap, mGravityVec);
+		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
+		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);
 		  }
 		}
 
@@ -195,38 +196,6 @@ void LocalMapping::ProcessNewKeyFrame()
     mpCurrentKeyFrame->UpdateConnections();
     //if (mpCurrentKeyFrame->getState()==(char)Tracking::OK)
     mpLastKF=mpCurrentKeyFrame;
-    
-    //I think I can just use timestamp of last Nth KF to reduce the mlLocalKeyFrames
-    //DeleteBadInLocalWindow
-    std::list<KeyFrame*>::iterator lit = mlLocalKeyFrames.begin();
-    while(lit != mlLocalKeyFrames.end()){
-        KeyFrame* pKF = *lit;
-        //Test log
-        assert(pKF&&"pKF null?");
-        if(pKF->isBad())
-        {
-            lit = mlLocalKeyFrames.erase(lit);
-        }
-        else
-        {
-            lit++;
-        }
-    }
-    //AddToLocalWindow
-    mlLocalKeyFrames.push_back(mpCurrentKeyFrame);
-    if(mlLocalKeyFrames.size() > mnLocalWindowSize)
-    {
-        mlLocalKeyFrames.pop_front();
-    }
-    else
-    {
-        KeyFrame* pKF0 = mlLocalKeyFrames.front();
-        while(mlLocalKeyFrames.size() < mnLocalWindowSize && pKF0->GetPrevKeyFrame()!=NULL)
-        {
-            pKF0 = pKF0->GetPrevKeyFrame();
-            mlLocalKeyFrames.push_front(pKF0);
-        }
-    }
 
     // Insert Keyframe in Map
     mpMap->AddKeyFrame(mpCurrentKeyFrame);
@@ -712,50 +681,48 @@ void LocalMapping::KeyFrameCulling()
     // in at least other 3 keyframes (in the same or finer scale)
     // We only consider close stereo points
     vector<KeyFrame*> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();//get all 1st layer covisibility KFs as localKFs, notice no mpCurrentKeyFrame
-    
-    KeyFrame* pOldestLocalKF = mlLocalKeyFrames.front();
-    KeyFrame* pPrevLocalKF = pOldestLocalKF==NULL? NULL:pOldestLocalKF->GetPrevKeyFrame();
-    KeyFrame* pNewestLocalKF = mlLocalKeyFrames.back();
 
-    for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; vit++)
+    //get last Nth KF or the front KF of the local window
+    KeyFrame* pLastNthKF=mpCurrentKeyFrame;
+    double tmNthKF=-1;//pLastNthKF==NULL then -1
+    vector<bool> vbEntered;
+    int nRestrict=1;//for not VIO mode
+    if (mpIMUInitiator->GetSensorIMU()){
+      int Nlocal=mnLocalWindowSize;
+      while (--Nlocal>0&&pLastNthKF!=NULL){//maybe less than N KFs in pMap
+	pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+      }
+      if (pLastNthKF!=NULL) tmNthKF=pLastNthKF->mTimeStamp;//N starts from 1 & notice mTimeStamp>=0
+      
+      vbEntered.resize(vpLocalKeyFrames.size(),false);
+      nRestrict=2;
+    }
+    
+    for (int k=0;k<nRestrict;++k){//k==0 for strict restriction then k==1 do loose restriction only for outer LocalWindow KFs
+    int vi=0;
+    for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; ++vit,++vi)
     {
         KeyFrame* pKF = *vit;
         if(pKF->mnId==0) continue;//cannot erase the initial KF
-	{
-	//added by JingWang
-	// Don't cull the oldest KF in LocalWindow,
-        // And the KF before this KF
-        if(pKF == pOldestLocalKF || pKF == pPrevLocalKF)
-            continue;
-
-        // Check time between Prev/Next Keyframe, if larger than 0.5s(for local)/3s(others), don't cull
-        // Note, the KF just out of Local is similarly considered as Local
-        KeyFrame* pPrevKF = pKF->GetPrevKeyFrame();
-        KeyFrame* pNextKF = pKF->GetNextKeyFrame();
-        if(pPrevKF && pNextKF && !mpIMUInitiator->GetVINSInited())
-        {
-            if(fabs(pNextKF->mTimeStamp - pPrevKF->mTimeStamp) > /*0.2*/0.5)
-                continue;
-        }
-        // Don't drop the KF before current KF
-        if(pKF->GetNextKeyFrame() == mpCurrentKeyFrame)
-            continue;
-        if(pKF->mTimeStamp >= mpCurrentKeyFrame->mTimeStamp - 0.11)
-            continue;
-
-        if(pPrevKF && pNextKF)
-        {
-            double timegap=0.51;
-            if(mpIMUInitiator->GetVINSInited() && pKF->mTimeStamp < mpCurrentKeyFrame->mTimeStamp - 4.0)
-                timegap = 3.01;
-
-            if(fabs(pNextKF->mTimeStamp - pPrevKF->mTimeStamp) > timegap)
-                continue;
-        }
-        //end
+        
+        //timespan restriction is implemented as the VIORBSLAM paper III-B
+        double tmNext=-1;
+	if (k==0){
+	  if (nRestrict==2){//restriction is only for VIO
+	    assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);
+	    tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
+	    if (tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>0.5) continue;
+	    else vbEntered[vi]=true;
+	  }
+	}else{//loose restriction when k==1
+	  if (vbEntered[vi]) continue;
+	  assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);
+	  tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
+	  if (tmNext>tmNthKF||//this KF is in next time's local window or N+1th
+	    tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>3) continue;//normal restriction to perform full BA
 	}
+	
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
-
         int nObs = 3;
         const int thObs=nObs;//can directly use const 3
         int nRedundantObservations=0;//the number of redundant(seen also by at least 3 other KFs) close stereo MPs seen by pKF
@@ -809,8 +776,14 @@ void LocalMapping::KeyFrameCulling()
 	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
 // 	    cout<<red"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
             pKF->SetBadFlag();
-// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<endl;
+// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<" pKF->mnId:"<<pKF->mnId<<endl;
+	    
+	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
+	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
+	    }
 	}
+    }
     }
     
     mpIMUInitiator->SetCopyInitKFs(false);
@@ -849,8 +822,6 @@ void LocalMapping::ResetIfRequested()
         mlNewKeyFrames.clear();
         mlpRecentAddedMapPoints.clear();
         mbResetRequested=false;
-	
-	mlLocalKeyFrames.clear();//added by zzh
     }
 }
 

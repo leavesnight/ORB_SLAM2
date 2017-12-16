@@ -47,8 +47,7 @@ class LocalMapping
   unsigned long mnLastOdomKFId;
   
   //Local Window size
-  int mnLocalWindowSize;//default 20
-  std::list<KeyFrame*> mlLocalKeyFrames;
+  int mnLocalWindowSize;//default 10, JW uses 20
 
 //created by zzh over.
   

@@ -58,6 +58,7 @@ public:
   // For pose optimization/motion-only BA, use as prior and prior information(inverse covariance)
   Matrix<double,15,15> mMargCovInv;//Sigmap in VIORBSLAM paper/prior Hessian matrix for next Frame, notice it's unintialized(to infinity/fixedlast)
   NavState mNavStatePrior;//needed by PoseOptimization twice, notice if no imu data, it's unintialized
+  bool mbPrior;//meaning if mNavStatePrior&mMargCovInv exist
   
   const NavState& GetNavState(void){//cannot use const &(make mutex useless)
     return mNavState;//don't call copy constructor, just for template of PoseOptimization() & PreIntegration

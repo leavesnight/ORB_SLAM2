@@ -49,12 +49,12 @@ class Optimizer
 {
 public:
   template<class KeyFrame>
-  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false, bool bFixedLast=true);//2 frames' motion-only BA, fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
+  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false);//2 frames' motion-only BA, automatically fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
   template<class KeyFrame>
   static void PoseOptimizationAddEdge(KeyFrame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
 			       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastKFPVRId){}//we specialize the Frame version
-  void static LocalBAPRVIDP(KeyFrame *pKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool* pbStopFlag, Map* pMap, cv::Mat &gw);
-  void static LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool *pbStopFlag, Map *pMap, cv::Mat gw);
+  void static LocalBAPRVIDP(KeyFrame *pKF, int Nlocal, bool* pbStopFlag, Map* pMap, cv::Mat &gw);
+  void static LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool *pbStopFlag, Map *pMap, cv::Mat gw);//Nlocal>=1(if <1 it's 1)
   void static GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations=5, bool *pbStopFlag=NULL,
 				    const unsigned long nLoopKF=0, const bool bRobust = true);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA
   
@@ -99,8 +99,10 @@ public:
 //created by zzh
 using namespace Eigen;
 template <class KeyFrame>
-int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg, bool bFixedLast){
-//   if (pLastKF->mMargCovInv==Matrix<double,15,15>::Zero()) bFixedLast=true;
+int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg){
+  //automatically judge if fix lastF/KF(always fixed)
+  bool bFixedLast=true;
+  if (pLastKF->mbPrior) bFixedLast=false;
   // Extrinsics
   Matrix3d Rcb = pFrame->meigRcb;
   Vector3d tcb = pFrame->meigtcb;
@@ -146,7 +148,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   eNSPVR->setMeasurement(imupreint);//set delta~PVRij/delta~pij,delta~vij,delta~Rij
   eNSPVR->setInformation(imupreint.mSigmaij.inverse());
   eNSPVR->SetParams(GravityVec);
-  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eNSPVR->setRobustKernel(rk);rk->setDelta(sqrt(21.666));//thHuberNavStatePVR:chi2(0.01,9), try ch2(0.05,9)=16.92
+  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eNSPVR->setRobustKernel(rk);rk->setDelta(sqrt(16.919));//chi2(0.05/0.01,9), 16.919/21.666 for 0.95/0.99 9DoF, but JingWang uses 100*21.666
   optimizer.addEdge(eNSPVR);
   // Set IMU_RW/Bias edge(binary edge) between LastKF-Frame
   g2o::EdgeNavStateBias* eNSBias = new g2o::EdgeNavStateBias();
@@ -157,7 +159,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
   eNSBias->setInformation(InvCovBgaRW/imupreint.mdeltatij);// see Manifold paper (47), notice here is Omega_d/Sigma_d.inverse()
-  rk = new g2o::RobustKernelHuber;eNSBias->setRobustKernel(rk);rk->setDelta(sqrt(16.812));//thHuberNavStateBias:chi2(0.01,6), try chi2(0.05,6)=12.59
+  rk = new g2o::RobustKernelHuber;eNSBias->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05/0.01,6), 12.592/16.812 for 0.95/0.99 6DoF, but JW uses 16.812
   optimizer.addEdge(eNSBias);
   // Set Prior edge(binary edge) for Last Frame, from mMargCovInv
   g2o::EdgeNavStatePriorPVRBias* eNSPrior=NULL;
@@ -166,7 +168,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
     eNSPrior->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(LastKFPVRId)));
     eNSPrior->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(LastKFBiasId)));
     eNSPrior->setMeasurement(pLastKF->mNavStatePrior);eNSPrior->setInformation(pLastKF->mMargCovInv);
-    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eNSPrior->setRobustKernel(rk);rk->setDelta(sqrt(30.5779));//thHuberNavState:chi2(0.01,15), try chi2(0.05,15)=25
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eNSPrior->setRobustKernel(rk);rk->setDelta(sqrt(25));//thHuberNavState:chi2(0.05,15)=25 or chi2(0.01,15)=30.5779
     optimizer.addEdge(eNSPrior);
   }
 
@@ -412,7 +414,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 
   // Compute marginalized Hessian H and B, H*x=B, H/B can be used as prior for next optimization in PoseOptimization, dx'Hdx should be small then next optimized result is appropriate for former BA
   if(bComputeMarg){
-//     if (nBadIMU>0){ pFrame->mMargCovInv=Matrix<double,15,15>::Zero();}else{
+//     if (nBadIMU>0){}else{
     std::vector<g2o::OptimizableGraph::Vertex*> margVertices;
     margVertices.push_back(optimizer.vertex(FramePVRId));
     margVertices.push_back(optimizer.vertex(FrameBiasId));
@@ -434,8 +436,9 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
       margCov.bottomRightCorner(6,6) = spinv.block(1,1)->eval();
       pFrame->mMargCovInv = margCov.inverse();
     }
-//     }
     pFrame->mNavStatePrior=nsj;//pLastF->mNavStatePrior is needed for this func. will be called twice and pLastF->mNavState will also be optimized
+    pFrame->mbPrior=true;//let next tracking uses unfixed lastF mode!
+//     }
   }
 
   return nInitialCorrespondences-nBad;//number of inliers

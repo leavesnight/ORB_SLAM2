@@ -99,7 +99,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
     mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap),
-    mState(state)//zzh
+    mState(state),mbPrior(false)//zzh
 {
     if(pPrevKF)
       pPrevKF->SetNextKeyFrame(this);
@@ -108,6 +108,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
     // Set bias as bias+delta_bias, and reset the delta_bias term
     mNavState.mbg+=mNavState.mdbg;mNavState.mba+=mNavState.mdba;
     mNavState.mdbg=mNavState.mdba=Eigen::Vector3d::Zero();//update bi (bi=bi+dbi) for a better PreIntegration of nextKF(localBA) & fixedlastKF motion-only BA of next Frame(this won't optimize lastKF.mdbi any more)
+//created by zzh over
   
     mnId=nNextId++;
 

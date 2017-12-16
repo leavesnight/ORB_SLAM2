@@ -328,9 +328,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; ++vit) (*vit)->UpdateScale(scale);
       //Now every thing in Map is right scaled & mGravityVec is got
       SetVINSInited(true);
-      SetFirstVINSInited(true);
+      mpMap->InformNewChange();//used to notice Tracking thread bMapUpdated
       
-      mpMap->InformNewBigChange();//used to check the SLAM's state
       mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
       std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
       // Run global BA after inited, we use LoopClosing thread to do this job for safety!

@@ -91,12 +91,10 @@ void Optimizer::PoseOptimizationAddEdge<Frame>(Frame* pFrame,vector<g2o::EdgeNav
   }
 }
 
-void Optimizer::LocalBAPRVIDP(KeyFrame *pCurKF, const std::list<KeyFrame*> &lLocalKeyFrames, bool* pbStopFlag, Map* pMap, cv::Mat& gw){
+void Optimizer::LocalBAPRVIDP(KeyFrame *pCurKF, int Nlocal, bool* pbStopFlag, Map* pMap, cv::Mat& gw){
   
 }
-void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<KeyFrame*> &lLocalKeyFramesRef, bool *pbStopFlag, Map *pMap, cv::Mat gw){
-  cout<<blue<<"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFramesRef.size()<<white<<endl;
-  assert(pKF==lLocalKeyFramesRef.back()&&"pCurKF != lLocalKeyFramesRef.back. check");//I think it cannot be true, just use it for debugging
+void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool *pbStopFlag, Map *pMap, cv::Mat gw){
   // Extrinsics
   Matrix3d Rcb = Frame::meigRcb;
   Vector3d tcb = Frame::meigtcb;
@@ -105,15 +103,17 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
 
   //strategy refering the VIORBSLAM paper Fig.3.
   list<KeyFrame*> lLocalKeyFrames;
-  // All KeyFrames in Local window are optimized
-  for(list<KeyFrame*>::const_iterator lit=lLocalKeyFramesRef.begin(), lend=lLocalKeyFramesRef.end(); lit!=lend; ++lit){
-    KeyFrame* pKFi = *lit;
-    assert(pKFi&&!pKFi->isBad()&&"!pKFi. why??????");//I think it cannot be false, just use it for debugging
-    if (!pKFi->isBad()){
-      pKFi->mnBALocalForKF=pKF->mnId;
-      lLocalKeyFrames.push_back(pKFi);
-    }
-  }
+  // All KeyFrames in Local window are optimized, get N last KFs as Local Window
+  const int NlocalIni=Nlocal;//for assert
+  KeyFrame* pKFlocal=pKF;
+  do{
+    assert(pKFlocal&&!pKFlocal->isBad()&&"!pKFi. why??????");
+    pKFlocal->mnBALocalForKF=pKF->mnId;//avoid adding it into lFixedCameras
+    lLocalKeyFrames.push_front(pKFlocal);//notice the order is opposite
+    pKFlocal=pKFlocal->GetPrevKeyFrame();
+  }while (--Nlocal>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
+  cout<<blue<<"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<white<<endl;
+  assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
   
   // Local MapPoints seen in Local KeyFrames
   list<MapPoint*> lLocalMapPoints;
@@ -137,7 +137,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
   2nd layer fixed neighbors(don't optimize them but contribute to the target min funcation)
   list<KeyFrame*> lFixedCameras;
   //the last N+1th KF / Add the KeyFrame before local window.
-  KeyFrame* pKFPrevLocal = lLocalKeyFrames.front()->GetPrevKeyFrame();
+  KeyFrame* pKFPrevLocal = pKFlocal;//lLocalKeyFrames.front()->GetPrevKeyFrame();
   if(pKFPrevLocal)
   {
       assert(!pKFPrevLocal->isBad()&&pKFPrevLocal->mnBALocalForKF!=pKF->mnId && pKF->mnBAFixedForKF!=pKF->mnId);
@@ -219,8 +219,8 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, const std::list<
   // Set IMU/KF-KF/PRV(B)+B edges, here (B) means it's not included in error but used to calculate the error
   vector<g2o::EdgeNavStatePRV*> vpEdgesNavStatePRV;vector<g2o::EdgeNavStateBias*> vpEdgesNavStateBias;//PRVB/IMU & B/RandomWalk edge
   //what does this 10(sigma) mean??? better result?
-  const float thHuberNavStatePRV = sqrt(21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF, but JingWang uses 100*21.666
-  const float thHuberNavStateBias = sqrt(16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF, but JW uses 100*16.812
+  const float thHuberNavStatePRV = sqrt(16.919);//chi2(0.05/0.01,9), 16.919/21.666 for 0.95/0.99 9DoF, but JingWang uses 100*21.666
+  const float thHuberNavStateBias = sqrt(12.592);//chi2(0.05/0.01,6), 12.592/16.812 for 0.95/0.99 6DoF, but JW uses 100*16.812
   Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
@@ -560,8 +560,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   
   // Set IMU/KF-KF/PRV(B)+B edges
   //what does this 10(sigma) mean??? better result?
-  const float thHuberNavStatePRV = sqrt(21.666);//chi2(0.01,9), 16.919/21.666 for 0.95/0.99 9DoF; 100*
-  const float thHuberNavStateBias = sqrt(16.812);//chi2(0.01,6), 12.592/16.812 for 0.95/0.99 6DoF; 100*
+  const float thHuberNavStatePRV = sqrt(16.919);//chi2(0.05/0.01,9), 16.919/21.666 for 0.95/0.99 9DoF; 100*
+  const float thHuberNavStateBias = sqrt(12.592);//chi2(0.05/0.01,6), 12.592/16.812 for 0.95/0.99 6DoF; 100*
   Matrix<double,6,6> InvCovBgaRW = Matrix<double,6,6>::Identity();
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE

@@ -76,7 +76,6 @@ class Tracking
   
   // Flags for relocalization. Create new KF once bias re-computed & flag for preparation for bias re-compute
   bool mbRelocBiasPrepare;//true means preparing/not prepared
-  bool mbCreateNewKFAfterReloc;//when 19th Frame after reloc, IMU connection is established(bias calculated) then insert this F as KF, but maybe not so important?
   // 20 Frames are used to compute bias
   vector<Frame*> mv20pFramesReloc;
   

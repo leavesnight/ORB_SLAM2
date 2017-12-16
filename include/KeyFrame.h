@@ -62,6 +62,7 @@ class KeyFrame
 public:
   NavState mNavStateGBA;//like mTcwGBA, for LoopClosing, set and used in the same thread(LoopClosing or IMUInitialization)
   NavState mNavStatePrior;Matrix<double,15,15> mMargCovInv;std::vector<bool> mvbOutlier;//empty, just for template of PoseOptimization()
+  const bool mbPrior;//always false
   //PCL used image
   cv::Mat Img[2];//0 is color,1 is depth
   
