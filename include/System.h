@@ -71,6 +71,7 @@ public:
   mode==0:Encoder data 2 vl,vr; 1:qIMU data 4 qxyzw; \
   2:Both 6 vl,vr,qxyzw; 3:Pure-IMU data 6 ax~z,wx~z(opposite of the order of EuRoc)
   cv::Mat TrackOdom(const double &timestamp, const double* odomdata, const char mode);
+  void FullBA(int nIterations=15,bool bRobust=false);//please call this after Shutdown()
   
   // TODO: Save/Load functions
   void SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc=true);//we will save filename(like "KeyFrameTrajectoryIMU.txt")(including t,q,v,bg,ba) from Tcw by using Tbc or directly from Twb

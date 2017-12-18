@@ -203,6 +203,9 @@ int main(int argc, char **argv)
 
     // Stop all threads
     SLAM.Shutdown();
+    
+    //zzh: fullBA
+    SLAM.FullBA(15,false);
 
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());

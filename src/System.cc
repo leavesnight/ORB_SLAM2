@@ -46,6 +46,12 @@ cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const
   
   return Tcw;
 }
+void System::FullBA(int nIterations,bool bRobust){
+  if (mpIMUInitiator->GetSensorIMU())//zzh, full BA
+    Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),nIterations,NULL,0,bRobust);
+  else
+    Optimizer::GlobalBundleAdjustment(mpMap,nIterations,NULL,0,bRobust);
+}
 
 void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc){
     cout << endl << "Saving keyframe NavState to " << filename << " ..." << endl;
@@ -531,11 +537,6 @@ void System::Shutdown()
     while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA() || !mpIMUInitiator->GetFinish()){//changed by zzh
       usleep(5000);
     }
-    
-    if (mpIMUInitiator->GetSensorIMU())//zzh, full BA
-      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,NULL,0,false);
-    else
-      Optimizer::GlobalBundleAdjustment(mpMap,15,NULL,0,false);
 
     if(mpViewer)
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");
