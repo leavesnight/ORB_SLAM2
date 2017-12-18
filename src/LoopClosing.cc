@@ -31,18 +31,12 @@
 #include<mutex>
 #include<thread>
 
-//zzh defined color cout, must after include opencv2
-#define red "\033[31m"
-#define green "\e[32m"
-#define blue "\e[34m"
-#define yellow "\e[33m"
-#define white "\e[37m"
-
 namespace ORB_SLAM2
 {
 void LoopClosing::CreateGBA()
 {
   mpIMUInitiator->SetInitGBA(false);//we should avoid entering this func. twice
+//   mbVIFBA=true;
   
   // If a Global Bundle Adjustment is running, abort it
   if(isRunningGBA()){
@@ -60,7 +54,8 @@ void LoopClosing::CreateGBA()
 LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), //mbFinishedGBA(true),
-    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0)
+    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0),
+    mbVIFBA(false),mpIMUInitiator(NULL)//zzh
 {
     mnCovisibilityConsistencyTh = 3;
 }
@@ -95,11 +90,11 @@ void LoopClosing::Run()
 	      CorrectLoop();
 	    }
 	  }
-	  
-	  if (mpIMUInitiator->GetInitGBA()){
-	    CreateGBA();
-	  }
-        }       
+        }
+        //for Full BA, zzh
+        if (mpIMUInitiator&&mpIMUInitiator->GetInitGBA()){
+	  CreateGBA();
+	}
 
         ResetIfRequested();
 
@@ -295,7 +290,7 @@ bool LoopClosing::ComputeSim3()
         int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);//rectify vpMatches12 by using pKF->mFeatVec to quickly match, \
 	corresponding to pKF1/mpCurrentKF in LoopClosing
 
-	cout<<red<<i<<": "<<nmatches<<endl;
+	cout<<redSTR<<i<<": "<<nmatches<<endl;
         if(nmatches<20)//same threshold in TrackWithMotionModel(), new 10
         {
             vbDiscarded[i] = true;
@@ -315,7 +310,7 @@ bool LoopClosing::ComputeSim3()
 
     // Perform alternatively RANSAC iterations for each candidate
     // until one is succesful or all fail
-    cout<<red<<nCandidates<<white<<endl;
+    cout<<redSTR<<nCandidates<<whiteSTR<<endl;
     while(nCandidates>0 && !bMatch)
     {
         for(int i=0; i<nInitialCandidates; i++)
@@ -336,7 +331,7 @@ bool LoopClosing::ComputeSim3()
             // If Ransac reachs max. iterations discard keyframe
             if(bNoMore)
             {
-	        cout<<red<<"NoMore"<<white<<endl;
+	        cout<<redSTR<<"NoMore"<<whiteSTR<<endl;
                 vbDiscarded[i]=true;
                 nCandidates--;
             }
@@ -364,7 +359,7 @@ bool LoopClosing::ComputeSim3()
 		BA outliers in vpMapPointMatches are erased
 
                 // If optimization is succesful stop ransacs and continue
-                cout<<red<<nInliers<<white<<endl;
+                cout<<redSTR<<nInliers<<whiteSTR<<endl;
                 if(nInliers>=20)//looser than Relocalization() inliers' demand
                 {
                     bMatch = true;
@@ -421,7 +416,7 @@ bool LoopClosing::ComputeSim3()
             nTotalMatches++;
     }
 
-    cout<<red<<nTotalMatches<<white<<endl;
+    cout<<redSTR<<nTotalMatches<<whiteSTR<<endl;
     if(nTotalMatches>=40)//similar to Relocalization() inliers' threshold
     {
         cout<<"ComputeSim3 clear!"<<endl;
@@ -688,17 +683,24 @@ void LoopClosing::ResetIfRequested()
 void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here is mpCurrentKF
 {
     std::chrono::steady_clock::time_point begin= std::chrono::steady_clock::now();
-    cout <<red "Starting Global Bundle Adjustment" << white<<endl;
+    cout <<redSTR "Starting Global Bundle Adjustment" << whiteSTR<<endl;
 
     bool bUseGBAPRV=false;
     int idx =  mnFullBAIdx;
     unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA!
     mpIMUInitiator->SetInitGBA(false);
     if (mpIMUInitiator->GetVINSInited()){
-      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),10,&mbStopGBA,nLoopKF,false);
+      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),20,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
       bUseGBAPRV=true;
-    }else
-      Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+    }else{
+//       if (!mbVIFBA)
+	Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+//       else{
+// 	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,&mbStopGBA,nLoopKF,false);
+// 	bUseGBAPRV=true;
+// 	mbVIFBA=false;
+//       }
+    }
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
     // not included in the Global BA and they are not consistent with the updated map.
@@ -804,7 +806,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
 
             mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
 
-            cout << red<<"Map updated!" <<white<< endl;//if GBA/loop correction successed, this word should appear!
+            cout << redSTR<<"Map updated!" <<whiteSTR<< endl;//if GBA/loop correction successed, this word should appear!
         }
 
         //mbFinishedGBA = true;

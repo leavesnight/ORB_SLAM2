@@ -34,13 +34,6 @@
 
 #include<mutex>
 
-//zzh defined color cout, must after include opencv2
-#define red "\033[31m"
-#define green "\e[32m"
-#define blue "\e[34m"
-#define yellow "\e[33m"
-#define white "\e[37m"
-
 namespace ORB_SLAM2
 {//changed a lot refering to the JingWang's code
 
@@ -112,7 +105,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
     lLocalKeyFrames.push_front(pKFlocal);//notice the order is opposite
     pKFlocal=pKFlocal->GetPrevKeyFrame();
   }while (--Nlocal>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
-  cout<<blue<<"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<white<<endl;
+  cout<<blueSTR"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<whiteSTR<<endl;
   assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
   
   // Local MapPoints seen in Local KeyFrames
@@ -764,7 +757,7 @@ void Optimizer::GlobalBundleAdjustment(Map* pMap, int nIterations, bool* pbStopF
 void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
                                  int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
-    cout<<red<<"Enter GBA"<<white<<endl;
+    cout<<redSTR<<"Enter GBA"<<whiteSTR<<endl;
     vector<bool> vbNotIncludedMP;//true means this MP can not be used to optimize some KFs' Pose/is not added into optimizer/is not optimized
     vbNotIncludedMP.resize(vpMP.size());
 

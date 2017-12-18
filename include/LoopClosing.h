@@ -48,6 +48,9 @@ class KeyFrameDatabase;
 class LoopClosing
 {
 public:
+  bool mbVIFBA;//if use Visual-Inertial FBA for pure-vision+IMU Initialization mode!
+  
+public:
   void CreateGBA();
   
 //created by zzh

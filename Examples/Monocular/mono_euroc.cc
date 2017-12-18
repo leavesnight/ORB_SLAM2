@@ -48,7 +48,7 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
   double timestamp,tmstpLast=-1;
   
   while (!g_pSLAM){//if it's NULL
-    sleep(0.1);//wait 0.1s
+    usleep(15000);//wait 15ms
   }
   while (!finOdomdata.eof()){
     string strTmp;
@@ -66,7 +66,8 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
     }
     for (int i=0;i<nTotalNum;++i){//we should change wxyz,axyz to the order of axyz,wxyz in odomdata
       int pos=strTmp.find(',',posLast);
-      double dtmp=atof(strTmp.substr(posLast,pos-posLast).c_str());
+      string::size_type posNum;if (pos!=string::npos) posNum=pos-posLast;else posNum=string::npos;
+      double dtmp=atof(strTmp.substr(posLast,posNum).c_str());
       if (i<nTotalNum/2)
 	odomdata[nTotalNum/2+i]=dtmp;
       else
@@ -76,12 +77,12 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
     //for (int i=0;i<6;++i) cout<<odomdata[i]<<" ";cout<<endl;
     if (timestamp>tmstpLast)//avoid == condition
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::IMU);//for EuRoC dataset
-    //cout<<green<<timestamp<<white<<endl;
+    //cout<<green<<timestamp<<whiteSTR<<endl;
     tmstpLast=timestamp;
   }
   delete []odomdata;
   finOdomdata.close();
-  cout<<green"Simulation of Odom Data Reading is over."<<white<<endl;
+  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
 }
 //zzh over
 
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
 	{
 	finOdomdata.open(argv[5]);
 	if (!finOdomdata.is_open()){
-	  cerr<< red"Please check the last path_to_odometryData"<<endl;
+	  cerr<< redSTR"Please check the last path_to_odometryData"<<endl;
 	  return -1;
 	}
         string strTmp;
@@ -112,7 +113,7 @@ int main(int argc, char **argv)
 	break;
       default:
 	cerr << endl << "Usage: ./mono_tum path_to_vocabulary path_to_settings path_to_image_folder path_to_times_file" << endl;
-	cerr << red"Or: ./mono_tum path_to_vocabulary path_to_settings path_to_image_folder path_to_times_file path_to_odometryData (number of odometryData)"<<endl;
+	cerr << redSTR"Or: ./mono_tum path_to_vocabulary path_to_settings path_to_image_folder path_to_times_file path_to_odometryData (number of odometryData)"<<endl;
         return 1;
     }
 
@@ -204,8 +205,8 @@ int main(int argc, char **argv)
     // Stop all threads
     SLAM.Shutdown();
     
-    //zzh: fullBA
-    SLAM.FullBA(15,false);
+    //zzh: FinalGBA, not the FullBA in the paper!
+    //SLAM.FinalGBA(15,false);
 
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());

@@ -72,12 +72,12 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
 #else
       g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
 #endif
-    //cout<<green<<timestamp<<white<<endl;
+    //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
     tmstpLast=timestamp;
   }
   delete []odomdata;
   finOdomdata.close();
-  cout<<green"Simulation of Odom Data Reading is over."<<white<<endl;
+  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
 }
 
 int main(int argc, char **argv)
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 	{
 	finOdomdata.open(argv[5]);
 	if (!finOdomdata.is_open()){
-	  cerr<< red"Please check the last path_to_odometryData"<<endl;
+	  cerr<< redSTR"Please check the last path_to_odometryData"<<endl;
 	  return -1;
 	}
         string strTmp;
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 	break;
       default:
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
-	cerr << red"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData)"<<endl;
+	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData)"<<endl;
         return 1;
     }
 

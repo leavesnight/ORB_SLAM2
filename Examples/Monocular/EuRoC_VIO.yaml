@@ -48,8 +48,14 @@ Camera.Tco:
   1.000000000,  0.000000000,  0.000000000, -0.518000000,
   0.000000000,  0.000000000,  0.000000000,  1.000000000]
 
-# Local Window size: JW is 20
-LocalMapping.LocalWindowSize: 10
+# Local Window size(0 means pure-vision+IMU Initialzation but no IMU error in BA): JW is 20
+LocalMapping.LocalWindowSize: 5
+
+# Full BA: 0 means no Full BA, 1 means Full BA just after IMU Initialized
+IMU.FullBA: 1
+
+# the Error allow between "simultaneous" IMU data(Timu) & Image's mTimeStamp(Timg): Timu=[Timg-err,Timg+err]
+ErrIMUImg: 0.03
 
 #--------------------------------------------------------------------------------------------
 # Camera Parameters. Adjust them!

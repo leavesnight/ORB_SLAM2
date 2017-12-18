@@ -37,10 +37,9 @@ LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSet
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
   if (fnSize.empty()){
     mnLocalWindowSize=0;
-    cout<<red"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<white<<endl;
+    cout<<redSTR"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<whiteSTR<<endl;
   }else{
-    mnLocalWindowSize=fnSize;
-    if (mnLocalWindowSize<1){ mnLocalWindowSize=10;cout<<red"mnLocalWindowSize>=1, we change it to the default 10!"<<white<<endl;}
+    mnLocalWindowSize=fnSize;//notice it can <1
   }
   
 }
@@ -93,7 +92,6 @@ void LocalMapping::Run()
 		  if(!mpIMUInitiator->GetVINSInited()){
 		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
-		    //Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);
 		  }
@@ -774,9 +772,9 @@ void LocalMapping::KeyFrameCulling()
 	      mpLastKF=pKF->GetParent();
 	    }
 	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
-// 	    cout<<red"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
+// 	    cout<<redSTR"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
             pKF->SetBadFlag();
-// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<white<<" pKF->mnId:"<<pKF->mnId<<endl;
+// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<whiteSTR<<" pKF->mnId:"<<pKF->mnId<<endl;
 	    
 	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
 	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();

@@ -2,6 +2,13 @@
 #ifndef IMUINITIALIZATION_H
 #define IMUINITIALIZATION_H
 
+//zzh defined color cout, must after include opencv2
+#define redSTR "\033[31m"
+#define greenSTR "\e[32m"
+#define blueSTR "\e[34m"
+#define yellowSTR "\e[33m"
+#define whiteSTR "\e[37m"
+
 // #include <list>
 #include <mutex>
 #include <string>
@@ -48,6 +55,7 @@ using namespace std;
 
 class IMUInitialization{//designed for multi threads
   string mTmpfilepath;
+  bool mbFullBA;//if execute full ba just after IMU Initialized
   double mdStartTime;//for reset
   //cv::Mat mRwiInit;//unused
   
@@ -91,7 +99,9 @@ class IMUInitialization{//designed for multi threads
   CREATOR_SET(Finish,bool,b)
   CREATOR_GET(FinishRequest,bool,b)
 public:
-  IMUInitialization(Map* pMap,const bool bMonocular,const string& strSettingPath):mpMap(pMap),mbMonocular(bMonocular),mbFinish(true),mbFinishRequest(false){
+  bool mbUsePureVision;//for pure-vision+IMU Initialization mode!
+  
+  IMUInitialization(Map* pMap,const bool bMonocular,const string& strSettingPath):mpMap(pMap),mbMonocular(bMonocular),mbFinish(true),mbFinishRequest(false),mbReset(false){
     mdStartTime=-1;mbSensorIMU=false;mpCurrentKeyFrame=NULL;
     mbVINSInited=false;
     mbCopyInitKFs=false;
@@ -101,6 +111,24 @@ public:
     cv::FileNode fnStr=fSettings["test.InitVIOTmpPath"];
     if (!fnStr.empty()) fnStr>>mTmpfilepath;
     else cout<<"Nothing recorded for analysis!"<<endl;
+    //load if Full BA just after IMU Initialized
+    cv::FileNode fnFBA=fSettings["IMU.FullBA"];
+    if (!fnFBA.empty()) mbFullBA=(int)fnFBA;
+    else{
+      mbFullBA=true;
+      cout<<"Default execute FullBA!"<<endl;
+    }
+    //load mbUsePureVision
+    cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
+    if (fnSize.empty()){
+      mbUsePureVision=true;
+      cout<<redSTR"No LocalWindowSize, then don't enter VIORBSLAM2 or Odom(Enc/IMU) mode!"<<whiteSTR<<endl;
+    }else{
+      if ((int)fnSize<1){
+	mbUsePureVision=true;
+	cout<<blueSTR"mnLocalWindowSize<1, we use pure-vision+IMU Initialization mode!"<<whiteSTR<<endl;
+      }else mbUsePureVision=false;
+    }
   }
   
   void Run();

@@ -46,7 +46,7 @@ cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const
   
   return Tcw;
 }
-void System::FullBA(int nIterations,bool bRobust){
+void System::FinalGBA(int nIterations,bool bRobust){
   if (mpIMUInitiator->GetSensorIMU())//zzh, full BA
     Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),nIterations,NULL,0,bRobust);
   else

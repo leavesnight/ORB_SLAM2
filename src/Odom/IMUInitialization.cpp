@@ -1,13 +1,6 @@
 #include "IMUInitialization.h"
 #include "Optimizer.h"
 
-//zzh defined color cout, must after include opencv2
-#define red "\033[31m"
-#define green "\e[32m"
-#define blue "\e[34m"
-#define yellow "\e[33m"
-#define white "\e[37m"
-
 namespace ORB_SLAM2 {
 
 using namespace std;
@@ -74,7 +67,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     fcondnum<<std::fixed<<std::setprecision(6);
   }
 
-  Optimizer::GlobalBundleAdjustment(mpMap, 10);//GBA by only vision 1stly, suggested by JingWang
+  //Optimizer::GlobalBundleAdjustment(mpMap, 10);//GBA by only vision 1stly, suggested by JingWang
 
   // Extrinsics
   cv::Mat Tbc = Frame::mTbc;
@@ -327,13 +320,13 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();//we don't change the vpMPs[i] but change the *vpMPs[i]
       for(vector<MapPoint*>::iterator vit=vpMPs.begin(), vend=vpMPs.end(); vit!=vend; ++vit) (*vit)->UpdateScale(scale);
       //Now every thing in Map is right scaled & mGravityVec is got
-      SetVINSInited(true);
+      if (!mbUsePureVision) SetVINSInited(true);
       mpMap->InformNewChange();//used to notice Tracking thread bMapUpdated
       
       mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
       std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
       // Run global BA after inited, we use LoopClosing thread to do this job for safety!
-      SetInitGBA(true);
+      if (mbFullBA) SetInitGBA(true);
     }
   }
 

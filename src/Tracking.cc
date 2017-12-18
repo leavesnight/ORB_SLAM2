@@ -90,11 +90,13 @@ void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
   PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
+//   cout<<"!"<<mlOdomIMU.size()<<endl;
 //   cout<<"encdata over"<<endl;
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
 //   cout<<"over"<<endl;
    if (type==2){
      cout<<"List size: "<<mpReferenceKF->GetListIMUData().size()<<endl;
+//      if (mpReferenceKF->GetListIMUData().size()==0) cout<<fixed<<setprecision(6)<<"Last:"<<mpLastKeyFrame->mTimeStamp<<" Cur:"<<mCurrentFrame.mTimeStamp<<endl;
 // #ifndef TRACK_WITH_IMU
 //     Eigen::AngleAxisd angax(mpReferenceKF->GetIMUPreInt().mdelxRji);
 //     cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<"t, "<<angax.angle()*angax.axis()[1]<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
@@ -104,7 +106,7 @@ void Tracking::PreIntegration(const char type){
    }else if (0&&(type==3||type==1)){
      if (0&&type==1){ 
        const list<IMUData> &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
-       cout<<blue<<"List size between 2Frames: "<<limu.size()<<white<<endl;
+       cout<<blueSTR"List size between 2Frames: "<<limu.size()<<whiteSTR<<endl;
        for (auto data:limu) cout<<data.mtm<<": a="<<data.ma.transpose()<<" w="<<data.mw.transpose()<<", ";
        cout<<endl;
      }
@@ -125,7 +127,7 @@ bool Tracking::TrackWithIMU(bool bMapUpdated){
     // Update current frame pose according to last frame or keyframe when last KF is changed by LocalMapping/LoopClosing threads
     // unadded code: Create "visual odometry" points if in Localization Mode
     if (!PredictNavStateByIMU(bMapUpdated)){
-      cout<<red"CurF.mdeltatij==0! we have to TrackWithMotionModel()!"<<white<<endl;
+      cout<<redSTR"CurF.mdeltatij==0! we have to TrackWithMotionModel()!"<<whiteSTR<<endl;
       if (!mVelocity.empty()){
 	bool bOK=TrackWithMotionModel();//maybe track failed then call pure-vision TrackWithMotionModel
 	if (bOK) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated
@@ -249,7 +251,7 @@ bool Tracking::TrackLocalMapWithIMU(bool bMapUpdated){
 
   // Optimize Pose
   if (mCurrentFrame.mOdomPreIntIMU.mdeltatij==0){
-    cout<<red"CurF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<white<<endl;
+    cout<<redSTR"CurF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<whiteSTR<<endl;
     Optimizer::PoseOptimization(&mCurrentFrame);//motion-only BA
     mCurrentFrame.UpdateNavStatePVRFromTcw();//here is the imu data empty condition after imu's initialized, we must update NavState to keep continuous right Tbw after imu's initialized
   }else{
@@ -259,7 +261,7 @@ bool Tracking::TrackLocalMapWithIMU(bool bMapUpdated){
     }else{
       assert(mLastFrame.mbPrior==true||mLastFrame.mbPrior==false&&(mCurrentFrame.mnId==mnLastRelocFrameId+20||mnLastRelocFrameId==0));
       Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame,mpIMUInitiator->GetGravityVec(),true);//last F unfixed/fixed when lastF.mOdomPreIntIMU.deltatij==0 or RecomputeIMUBiasAndCurrentNavstate(), save its Hessian
-      if (mLastFrame.mOdomPreIntIMU.mdeltatij==0) cout<<red"LastF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<white<<endl;
+      if (mLastFrame.mOdomPreIntIMU.mdeltatij==0) cout<<redSTR"LastF.deltatij==0!In TrackLocalMapWithIMU(), Check!"<<whiteSTR<<endl;
     }
   }
   //after IMU motion-only BA, we don't change bi to bi+dbi for reason that next Frame may(if imu data exists) still optimize dbi, so it's not necessary to update bi
@@ -410,7 +412,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mTbc=cv::Mat::eye(4,4,CV_32F);
     for (int i=0;i<2;++i){
       if (fnT[i].empty()){
-	cout<<red"No Tbc/Tco, please check if u wanna use VIO!"<<white<<endl;
+	cout<<redSTR"No Tbc/Tco, please check if u wanna use VIO!"<<whiteSTR<<endl;
       }else{
 	eigRtmp<<fnT[i][0],fnT[i][1],fnT[i][2],fnT[i][4],fnT[i][5],fnT[i][6],fnT[i][8],fnT[i][9],fnT[i][10];
 	eigRtmp=Eigen::Quaterniond(eigRtmp).normalized().toRotationMatrix();
@@ -434,7 +436,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     //load Sigma etad & etawi & gd,ad,bgd,bad & if accelerate needs to *9.81
     cv::FileNode fnSig[3]={fSettings["IMU.SigmaI"],fSettings["IMU.sigma2"],fSettings["IMU.dMultiplyG"]};
     if (fnSig[0].empty()||fnSig[1].empty()||fnSig[2].empty())
-      cout<<red"No IMU.SigmaI or IMU.sigma2 or IMU.dMultiplyG!"<<white<<endl;
+      cout<<redSTR"No IMU.SigmaI or IMU.sigma2 or IMU.dMultiplyG!"<<whiteSTR<<endl;
     else{
       for (int i=0;i<3;++i) for (int j=0;j<3;++j) eigRtmp(i,j)=fnSig[0][i*3+j];
       double sigma2tmp[4]={fnSig[1][0],fnSig[1][1],fnSig[1][2],fnSig[1][3]};
@@ -443,7 +445,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     //load rc,vscale,Sigma etad
     cv::FileNode fnEnc[3]={fSettings["Encoder.scale"],fSettings["Encoder.rc"],fSettings["Encoder.Sigmad"]};
     if (fnEnc[0].empty()||fnEnc[1].empty()||fnEnc[2].empty())
-      cout<<red"No Encoder.SimgaI or Encoder.scale or Encoder.rc!"<<white<<endl;
+      cout<<redSTR"No Encoder.SimgaI or Encoder.scale or Encoder.rc!"<<whiteSTR<<endl;
     else{
       Eigen::Matrix2d eig2Rtmp;
       eig2Rtmp<<fnEnc[2][0],fnEnc[2][1],fnEnc[2][2],fnEnc[2][3];
@@ -452,10 +454,20 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     //load delay
     cv::FileNode fnDelay=fSettings["Camera.delaytoimu"];
     if (fnDelay.empty()){
-      cout<<red"No Camera.delaytoimu!"<<white<<endl;
+      cout<<redSTR"No Camera.delaytoimu!"<<whiteSTR<<endl;
       mDelayOdom=0.001;
     }else
       mDelayOdom=-(double)fnDelay;
+    //load mdErrIMUImg
+    float fps = fSettings["Camera.fps"];
+    if(fps==0) fps=30;
+    cv::FileNode fnErrIMUImg=fSettings["ErrIMUImg"];
+    if (fnErrIMUImg.empty()){
+      cout<<redSTR"No ErrIMUImg!"<<whiteSTR<<endl;
+      mdErrIMUImg=1./fps;
+    }else{
+      mdErrIMUImg=(double)fnErrIMUImg;
+    }
     
 //created by zzh over.
 
@@ -486,9 +498,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 
     mbf = fSettings["Camera.bf"];
 
-    float fps = fSettings["Camera.fps"];
-    if(fps==0)
-        fps=30;
+//     float fps = fSettings["Camera.fps"];//moved forward
+//     if(fps==0)
+//         fps=30;
 
     // Max/Min Frames to insert keyframes and to check relocalisation
     mMinFrames = 0;
@@ -737,32 +749,32 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		    if (!mbRelocBiasPrepare){//but still need >=20 Frames after reloc, bi becomes ok for IMU motion update(calculated in 19th Frame after reloc. KF)
 		      bOK=TrackWithIMU(bMapUpdated);
 		      if(!bOK){
-			cout<<red"TrackWitIMU() failed!"<<white<<endl;
+			cout<<redSTR"TrackWitIMU() failed!"<<whiteSTR<<endl;
 			if (bOK=TrackReferenceKeyFrame()) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated; 6,7
 		      }
 		    }else{//<20 Frames after reloc then use pure-vision tracking, but notice we can still use Encoder motion update!
 		      if (mVelocity.empty()){
 			if (bOK=TrackReferenceKeyFrame()) mCurrentFrame.UpdateNavStatePVRFromTcw();//match with rKF, use lF as initial & m-o BA
-			cout<<fixed<<setprecision(6)<<red"TrackRefKF()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+			cout<<fixed<<setprecision(6)<<redSTR"TrackRefKF()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 		      }else{
 			bOK=TrackWithMotionModel();//match with lF, use v*lF(velocityMM) as initial & m-o BA
 			if(!bOK){
 			  bOK=TrackReferenceKeyFrame();
-			  cout<<red"TrackRefKF()2"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+			  cout<<redSTR"TrackRefKF()2"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 			}
 			if (bOK) mCurrentFrame.UpdateNavStatePVRFromTcw();
 		      }
 		    }
 		}else{
 		  if(mVelocity.empty()){// || mCurrentFrame.mnId<mnLastRelocFrameId+2){//if last frame relocalized, there's no motion could be calculated, so I think 2nd condition is useless
-//   		    if (!mVelocity.empty()) cerr<<red"Error in Velocity.empty()!!!"<<endl;//check if right
+//   		    if (!mVelocity.empty()) cerr<<redSTR"Error in Velocity.empty()!!!"<<endl;//check if right
 		    bOK = TrackReferenceKeyFrame();//match with rKF, use lF as initial & m-o BA
-		    cout<<fixed<<setprecision(6)<<red"TrackRefKF()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+		    cout<<fixed<<setprecision(6)<<redSTR"TrackRefKF()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 		  }else{
 		    bOK = TrackWithMotionModel();//match with lF, use v*lF(velocityMM) as initial & m-o BA
 		    if(!bOK){
 		      bOK = TrackReferenceKeyFrame();
-		      cout<<red"TrackRefKF()2"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+		      cout<<redSTR"TrackRefKF()2"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
 		    }
 //   		    cout<<mCurrentFrame.mnId<<endl;
 		  }
@@ -771,7 +783,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             else
             {
                 bOK = Relocalization();
-		cout<<green"Relocalization()"white<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+		cout<<greenSTR"Relocalization()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
             }
         }
         else
@@ -858,7 +870,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		bOK = TrackLocalMapWithIMU(bMapUpdated);
 		
 	      if (!bOK)
-		cout<<red"TrackLocalMap() failed!"white<<endl;
+		cout<<redSTR"TrackLocalMap() failed!"whiteSTR<<endl;
 	    }
         }
         else
@@ -874,7 +886,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             mState = OK;
 	    // Add Frames to re-compute IMU bias after reloc
             if(mbRelocBiasPrepare){
-	       cout<<red<<" Relocalization Recomputation Preparing..."<<white<<endl;
+	       cout<<redSTR<<" Relocalization Recomputation Preparing..."<<whiteSTR<<endl;
                 mv20pFramesReloc.push_back(new Frame(mCurrentFrame));
 
                 // Before creating new keyframe
@@ -900,11 +912,11 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		}
 	      }
 	      if (!mVelocity.empty()){
-		cout<<green<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<white<<endl;
+		cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
 		
 		if (mVtmspan==0){
 		  mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
-		  cout<<red<<"mVtmspan == 0!"<<white<<endl;
+		  cout<<redSTR<<"mVtmspan == 0!"<<whiteSTR<<endl;
 		}else{
 		  Eigen::AngleAxisd angAxis(Converter::toMatrix3d(mVelocity.rowRange(0,3).colRange(0,3)));
 		  Eigen::AngleAxisd angAxisToUse(angAxis.angle()*(mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp)/mVtmspan,angAxis.axis());
@@ -917,7 +929,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
 	      }else{
 		mState=LOST;
-		cout<<red"Error when mVelocity.empty()"<<white<<endl;
+		cout<<redSTR"Error when mVelocity.empty()"<<whiteSTR<<endl;
 	      }
 	    }else{
 	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
@@ -946,7 +958,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             }
             else{
                 mVelocity = cv::Mat();//can use odometry data here!
-		//cout<<red"Error in mVelocity=cv::Mat()"<<white<<endl;
+		//cout<<redSTR"Error in mVelocity=cv::Mat()"<<whiteSTR<<endl;
 	    }
 
             mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
@@ -1013,10 +1025,10 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
         // Reset if the camera get lost soon after initialization
         if(mState==LOST)
         {
-	  bool autoreset=mpIMUInitiator->GetSensorIMU()?!mpIMUInitiator->GetVINSInited():mpMap->KeyFramesInMap()<=5;
+	  bool autoreset=mpIMUInitiator->GetSensorIMU()&&!mpIMUInitiator->mbUsePureVision?!mpIMUInitiator->GetVINSInited():mpMap->KeyFramesInMap()<=5;
 	  if(autoreset)
 	  {
-	      cout << red"Track lost soon after initialisation, reseting..." <<white<< endl;
+	      cout << redSTR"Track lost soon after initialisation, reseting..." <<whiteSTR<< endl;
 	      mpSystem->Reset();
 	      return;
 	  }
@@ -1025,9 +1037,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
         if(!mCurrentFrame.mpReferenceKF)//when mCurrentFrame is not KF but it cannot see common MPs in local MPs(e.g. it has all new MPs but it's not inserted as new KF & you can get its mTcw through other odometry)
             mCurrentFrame.mpReferenceKF = mpReferenceKF;
 
-        //mLastFrame = Frame(mCurrentFrame);//copy constructor for some Mat.clone() and vec<>[][] deep copy
+        mLastFrame = Frame(mCurrentFrame);//copy constructor for some Mat.clone() and vec<>[][] deep copy, notice mLastFrame is also set in XXXInitialization()!
     }
-    mLastFrame = Frame(mCurrentFrame);//copy constructor for some Mat.clone() and vec<>[][] deep copy, used here for Encoder Preintegration
 
     // Store frame pose information to retrieve the complete camera trajectory afterwards.
     if(!mCurrentFrame.mTcw.empty())
@@ -1119,19 +1130,18 @@ void Tracking::MonocularInitialization()
 
     if(!mpInitializer)
     {
-	PreIntegration();//PreIntegration Intialize, Clear IMUData buffer, zzh
-	
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
+	    PreIntegration();//PreIntegration Intialize, Clear IMUData buffer, zzh
+	  
             mInitialFrame = Frame(mCurrentFrame);
             mLastFrame = Frame(mCurrentFrame);
             mvbPrevMatched.resize(mCurrentFrame.mvKeysUn.size());
             for(size_t i=0; i<mCurrentFrame.mvKeysUn.size(); i++)
                 mvbPrevMatched[i]=mCurrentFrame.mvKeysUn[i].pt;
 
-            if(mpInitializer)
-                delete mpInitializer;
+//             if(mpInitializer) delete mpInitializer;//useless
 
             mpInitializer =  new Initializer(mCurrentFrame,1.0,200);
 
@@ -1194,10 +1204,7 @@ void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);
-    mpLastKeyFrame=pKFini;//initial KF doesn't need to ComputePreInt(), and PreIntegration()/Clear IMUData buffer before initial KF is done in MonocularInitialization()
     KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,pKFini);//zzh, it's very important! or assert failed in KF->SetBadFlag()
-    mpReferenceKF=pKFcur;//next 2KFs' ComputePreInt()/Preintegration(2) need this variable set to current KF
-    PreIntegration(2);//this will automatically Clear IMUData buffer before mCurrentFrame/pKFcur, zzh
 
     pKFini->ComputeBoW();
     pKFcur->ComputeBoW();
@@ -1275,13 +1282,17 @@ void Tracking::CreateInitialMapMonocular()
 
     mCurrentFrame.SetPose(pKFcur->GetPose());
     mnLastKeyFrameId=mCurrentFrame.mnId;
-    mpLastKeyFrame = pKFcur;
+    //mpLastKeyFrame = pKFcur;//zzh, used later
 
     mvpLocalKeyFrames.push_back(pKFcur);
     mvpLocalKeyFrames.push_back(pKFini);
     mvpLocalMapPoints=mpMap->GetAllMapPoints();
-    mpReferenceKF = pKFcur;
+    mpReferenceKF = pKFcur;//next 2KFs' ComputePreInt()/Preintegration(2) need this variable set to current KF
     mCurrentFrame.mpReferenceKF = pKFcur;
+    
+    mpLastKeyFrame=pKFini;//zzh, initial KF doesn't need to ComputePreInt(), and PreIntegration()/Clear IMUData buffer before initial KF is done in MonocularInitialization()
+    PreIntegration(2);//zzh, this will automatically Clear IMUData buffer before mCurrentFrame/pKFcur, must be put after Wrong return
+    mpLastKeyFrame=pKFcur;//zzh, replaced here
 
     mLastFrame = Frame(mCurrentFrame);
 
@@ -2077,7 +2088,7 @@ bool Tracking::Relocalization()
     {
         mnLastRelocFrameId = mCurrentFrame.mnId;
 	
-	if (mpIMUInitiator->GetSensorIMU()){
+	if (mpIMUInitiator->GetSensorIMU()&&!mpIMUInitiator->mbUsePureVision){
 	  assert(mpIMUInitiator->GetVINSInited()&&"VINS not inited? why.");
 	  mbRelocBiasPrepare=true;//notice we should call RecomputeIMUBiasAndCurrentNavstate() when 20-1 frames later, see IV-E in VIORBSLAM paper
 	}
