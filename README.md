@@ -14,7 +14,7 @@ Dec. 14
 ----------------------------------------
 Tested on:
 
-EuRoC ASL Dataset Format: V101,V202,V203,MH04.
+EuRoC ASL Dataset Format: V101,V103,V202,V203,MH04,MH05.
 
 
 Usage:
@@ -28,7 +28,7 @@ Normally use it like:
 
   cd ~/zzh/ORB_SLAM2/Examples/Monocular 
   
-  VIO:
+  VIO:(LocalWindowSize<=0 for Monocular ORB-SLAM in that paper)
   
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt ~/dataset/EuRoC/V202medium/mav0/imu0/data.csv 
     

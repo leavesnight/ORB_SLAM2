@@ -48,7 +48,7 @@ class LocalMapping
   
   //Local Window size
   int mnLocalWindowSize;//default 10, JW uses 20
-
+  
 //created by zzh over.
   
 public:

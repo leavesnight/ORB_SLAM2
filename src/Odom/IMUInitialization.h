@@ -4,10 +4,15 @@
 
 //zzh defined color cout, must after include opencv2
 #define redSTR "\033[31m"
+#define brightredSTR "\033[31;1m"
 #define greenSTR "\e[32m"
+#define brightgreenSTR "\e[32;1m"
 #define blueSTR "\e[34m"
-#define yellowSTR "\e[33m"
-#define whiteSTR "\e[37m"
+#define brightblueSTR "\e[34;1m"
+#define yellowSTR "\e[33;1m"
+#define brownSTR "\e[33m"
+#define azureSTR "\e[36;1m"
+#define whiteSTR "\e[0m"
 
 // #include <list>
 #include <mutex>
@@ -55,7 +60,6 @@ using namespace std;
 
 class IMUInitialization{//designed for multi threads
   string mTmpfilepath;
-  bool mbFullBA;//if execute full ba just after IMU Initialized
   double mdStartTime;//for reset
   //cv::Mat mRwiInit;//unused
   
@@ -111,13 +115,6 @@ public:
     cv::FileNode fnStr=fSettings["test.InitVIOTmpPath"];
     if (!fnStr.empty()) fnStr>>mTmpfilepath;
     else cout<<"Nothing recorded for analysis!"<<endl;
-    //load if Full BA just after IMU Initialized
-    cv::FileNode fnFBA=fSettings["IMU.FullBA"];
-    if (!fnFBA.empty()) mbFullBA=(int)fnFBA;
-    else{
-      mbFullBA=true;
-      cout<<"Default execute FullBA!"<<endl;
-    }
     //load mbUsePureVision
     cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
     if (fnSize.empty()){

@@ -308,16 +308,24 @@ void Tracking::RecomputeIMUBiasAndCurrentNavstate(){//see VIORBSLAM paper IV-E
   NavState& nscur=mCurrentFrame.mNavState;
   
   // Step1. Estimate gyr bias / see VIORBSLAM paper IV-A
-  Vector3d bgest=Optimizer::OptimizeInitialGyroBias<Frame>(mv20pFramesReloc,0);//use Identity() as Info in JingWang's code
-  // Update gyr bias of Frames
+  // compute initial IMU pre-integration for bgi_bar=0 as for the KFs' mOdomPreIntIMU in IMU Initialization
   size_t N=mv20pFramesReloc.size();
+  std::list<IMUData>::iterator iterTmp=miterLastIMU;
+  for(size_t i=0; i<N-1; ++i){
+    unique_lock<mutex> lock(mMutexOdom);
+    //so vKFInit[i].mOdomPreIntIMU is based on bg_bar=0,ba_bar=0; dbg=0 but dba/ba waits to be optimized
+    PreIntegration<IMUData>(1,mlOdomIMU,miterLastIMU,mv20pFramesReloc[i],mv20pFramesReloc[i+1]);//actually we don't need to copy the data list!
+  }
+  Vector3d bgest=Optimizer::OptimizeInitialGyroBias<Frame>(mv20pFramesReloc);//though JingWang uses Identity() as Info
+  // Update gyr bias of Frames
   assert(N==20);
-  for(size_t i=0; i<N; i++){
+  for(size_t i=0; i<N; ++i){
     mv20pFramesReloc[i]->mNavState.mbg=bgest;
     assert(mv20pFramesReloc[i]->mNavState.mdbg.norm()==0);
   }
   // Re-compute IMU pre-integration for bgi_bar changes to bgest from 0=>dbgi=0 see VIORBSLAM paper IV
-  for(size_t i=0; i<N-1; i++){
+  miterLastIMU=iterTmp;
+  for(size_t i=0; i<N-1; ++i){
     unique_lock<mutex> lock(mMutexOdom);
     //so vKFInit[i].mOdomPreIntIMU is based on bg_bar=bgest,ba_bar=0; dbg=0 but dba/ba waits to be optimized
     PreIntegration<IMUData>(1,mlOdomIMU,miterLastIMU,mv20pFramesReloc[i],mv20pFramesReloc[i+1]);//actually we don't need to copy the data list!
@@ -1597,11 +1605,12 @@ bool Tracking::NeedNewKeyFrame()
 
     if(mSensor==System::MONOCULAR)
         thRefRatio = 0.9f;//JingWang uses 0.8f
-        
+    
     double timegap = 0.5;
+//     if (!mpIMUInitiator->GetVINSInited()) timegap=0.1;//JW uses different timegap during IMU Initialization(0.1s)
     bool cTimeGap =false;
     if (mpIMUInitiator->GetSensorIMU()) cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
-
+    
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
     const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;//time span too long(1s)
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle

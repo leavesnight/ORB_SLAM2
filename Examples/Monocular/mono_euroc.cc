@@ -205,8 +205,19 @@ int main(int argc, char **argv)
     // Stop all threads
     SLAM.Shutdown();
     
-    //zzh: FinalGBA, not the FullBA in the paper!
-    //SLAM.FinalGBA(15,false);
+    //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
+    //load if Full BA just after IMU Initialized
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnFBA=fSettings["IMU.FullBA"];
+    if (!fnFBA.empty()){
+      if((int)fnFBA){
+	SLAM.FinalGBA(15,false);
+	cout<<azureSTR"Execute FullBA!"<<whiteSTR<<endl;
+      }
+    }else{
+      cout<<redSTR"Default execute FullBA!"<<whiteSTR<<endl;
+      SLAM.FinalGBA(15,false);
+    }
 
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());

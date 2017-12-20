@@ -491,7 +491,7 @@ Vector3d Optimizer::OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> 
   // It's actualy a linear estimator, so 1 iteration is enough.
   optimizer.initializeOptimization();
   optimizer.optimize(1);
-  //optimizer.setVerbose(true);
+//   optimizer.setVerbose(true);
 
   g2o::VertexGyrBias * vBgEst = static_cast<g2o::VertexGyrBias*>(optimizer.vertex(0));
 

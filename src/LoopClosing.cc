@@ -91,7 +91,7 @@ void LoopClosing::Run()
 	    }
 	  }
         }
-        //for Full BA, zzh
+        //for full BA just after IMU Initialized, zzh
         if (mpIMUInitiator&&mpIMUInitiator->GetInitGBA()){
 	  CreateGBA();
 	}
@@ -690,7 +690,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA!
     mpIMUInitiator->SetInitGBA(false);
     if (mpIMUInitiator->GetVINSInited()){
-      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),20,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
+      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
       bUseGBAPRV=true;
     }else{
 //       if (!mbVIFBA)
@@ -721,6 +721,8 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
             {
                 usleep(1000);
             }
+            
+            chrono::steady_clock::time_point t1=chrono::steady_clock::now();//test time used
 
             // Get Map Mutex
             unique_lock<mutex> lock(mpMap->mMutexMapUpdate);
@@ -807,6 +809,8 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
             mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
 
             cout << redSTR<<"Map updated!" <<whiteSTR<< endl;//if GBA/loop correction successed, this word should appear!
+            
+            cout<<azureSTR"Used time in propagation="<<chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now()-t1).count()<<whiteSTR<<endl;//test time used
         }
 
         //mbFinishedGBA = true;

@@ -26,6 +26,7 @@ void IMUInitialization::Run(){
     if(GetSensorIMU()){//at least 4 consecutive KFs, see IV-B/C VIORBSLAM paper
       KeyFrame* pCurKF=GetCurrentKeyFrame();
       if (mdStartTime==-1){ initedid=0;mdStartTime=-2;}
+//       if(mdStartTime<0||mdStartTime>=0&&pCurKF->mTimeStamp-mdStartTime>=15)
       if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
 	initedid = pCurKF->mnId;
 	if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
@@ -34,15 +35,17 @@ void IMUInitialization::Run(){
     
     ResetIfRequested();
     if(GetFinishRequest()) break;
-    //usleep(3000);
-    sleep(3);
+//     usleep(3000);
+    sleep(1);//3,1,0.5
   }
   SetFinish(true);
   cout<<"VINSInitThread is Over."<<endl;
 }
 bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the KFs has no inter IMUData in initial 15s!!!
+  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
+  
   //at least N>=4
-  if(mpMap->KeyFramesInMap()<4){ return false;}//21
+  if(mpMap->KeyFramesInMap()<4){ return false;}//21,11, 4
   //Recording data in txt files for further analysis
   static bool fopened = false;
   static ofstream fgw,fscale,fbiasa,fcondnum,fbiasg;
@@ -67,7 +70,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     fcondnum<<std::fixed<<std::setprecision(6);
   }
 
-  //Optimizer::GlobalBundleAdjustment(mpMap, 10);//GBA by only vision 1stly, suggested by JingWang
+//   Optimizer::GlobalBundleAdjustment(mpMap, 10);//GBA by only vision 1stly, suggested by JingWang
 
   // Extrinsics
   cv::Mat Tbc = Frame::mTbc;
@@ -86,16 +89,18 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   vector<KeyFrame*> vScaleGravityKF = mpMap->GetAllKeyFrames();
   //sort(vScaleGravityKF.begin(),vScaleGravityKF.end(),[](const KeyFrame *a,const KeyFrame *b){return a->mnId<b->mnId;});//we change the set less/compare func. so that we don't need to sort them!
   assert((*vScaleGravityKF.begin())->mnId==0);
-  int N = vScaleGravityKF.size();
-  KeyFrame* pNewestKF = vScaleGravityKF[N-1];
+  int N=0,NvSGKF=vScaleGravityKF.size();
+  KeyFrame* pNewestKF = vScaleGravityKF[NvSGKF-1];
   // Store initialization-required KeyFrame data
   vector<IMUKeyFrameInit*> vKFInit;
 
-  for(int i=0;i<N;i++){
+  for(int i=0;i<NvSGKF;++i){
     KeyFrame* pKF = vScaleGravityKF[i];
+//     if (pKF->mTimeStamp<pNewestKF->mTimeStamp-15) continue;//15s as the VIORBSLAM paper
     IMUKeyFrameInit* pkfi=new IMUKeyFrameInit(*pKF);
-    if(i>0) pkfi->mpPrevKeyFrame=vKFInit[i-1];
+    if(N>0) pkfi->mpPrevKeyFrame=vKFInit[N-1];
     vKFInit.push_back(pkfi);
+    ++N;
   }
 
   SetCopyInitKFs(false);
@@ -163,7 +168,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
 
   // Step 3. / See VIORBSLAM paper IV-C
-  // Use gravity magnitude 9.810 as constraint; gIn/^gI=[0;0;1], the normalized gravity vector in an inertial frame
+  // Use gravity magnitude 9.810 as constraint; gIn/^gI=[0;0;1], the normalized gravity vector in an inertial frame, we can also choose gIn=[0;0;-1] as the VIORBSLAM paper
   cv::Mat gIn=cv::Mat::zeros(3,1,CV_32F);gIn.at<float>(2)=1;
   cv::Mat gwn=gwstar/cv::norm(gwstar);//^gw=gw*/||gw*|| / Normalized approx. gravity vecotr in world frame
   cv::Mat gInxgwn=gIn.cross(gwn);double normgInxgwn=cv::norm(gInxgwn);
@@ -241,7 +246,9 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   bool bVIOInited = false;
   if(mdStartTime<0) mdStartTime=pNewestKF->mTimeStamp;
   if(pNewestKF->mTimeStamp-mdStartTime>=15){//15s in the paper V-A
-    bVIOInited = true;
+    cout<<yellowSTR"condnum="<<w2.at<float>(0)<<";"<<w2.at<float>(5)<<whiteSTR<<endl;
+//     if (w2.at<float>(0)/w2.at<float>(5)<700)
+      bVIOInited = true;
   }
 
   //if VIO is initialized with appropriate bg*,s*,gw*,ba*, update the map(MPs' P,KFs' PRVB) like GBA/CorrrectLoop()
@@ -325,10 +332,12 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       
       mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
       std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
-      // Run global BA after inited, we use LoopClosing thread to do this job for safety!
-      if (mbFullBA) SetInitGBA(true);
+      // Run global BA/full BA after inited, we use LoopClosing thread to do this job for safety!
+      SetInitGBA(true);
     }
   }
+  
+  cout<<yellowSTR"Used time in IMU Initialization="<<chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now()-t1).count()<<whiteSTR<<endl;
 
   for(int i=0;i<N;i++){//delete the newed pointer
     if(vKFInit[i]) delete vKFInit[i];

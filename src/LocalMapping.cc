@@ -89,19 +89,22 @@ void LocalMapping::Run()
             {
                 // Local BA
                 if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
+		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
+		  
 		  if(!mpIMUInitiator->GetVINSInited()){
 		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);
 		  }
+		  
+		  cout<<blueSTR"Used time in localBA="<<chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now()-t1).count()<<whiteSTR<<endl;
 		}
 
                 // Check redundant local Keyframes
                 KeyFrameCulling();
             }
 	    
-	    //if(mpIMUInitiator->GetInitGBAFinish())
 	    mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
         }
         else if(Stop())
@@ -685,7 +688,9 @@ void LocalMapping::KeyFrameCulling()
     double tmNthKF=-1;//pLastNthKF==NULL then -1
     vector<bool> vbEntered;
     int nRestrict=1;//for not VIO mode
-    if (mpIMUInitiator->GetSensorIMU()){
+    bool bSensorIMU=mpIMUInitiator->GetSensorIMU();
+    if (mnLocalWindowSize<1&&mpIMUInitiator->GetVINSInited()) bSensorIMU=false;//for pure-vision+IMU Initialization mode!
+    if (bSensorIMU){
       int Nlocal=mnLocalWindowSize;
       while (--Nlocal>0&&pLastNthKF!=NULL){//maybe less than N KFs in pMap
 	pLastNthKF=pLastNthKF->GetPrevKeyFrame();
@@ -693,7 +698,9 @@ void LocalMapping::KeyFrameCulling()
       if (pLastNthKF!=NULL) tmNthKF=pLastNthKF->mTimeStamp;//N starts from 1 & notice mTimeStamp>=0
       
       vbEntered.resize(vpLocalKeyFrames.size(),false);
-      nRestrict=2;
+      if (mpIMUInitiator->GetVINSInited()){
+	nRestrict=2;//notice when during IMU Initialization: we use all KFs' timespan restriction of 0.5s like JW, for MH04 has problem with 0.5/3s strategy!
+      }
     }
     
     for (int k=0;k<nRestrict;++k){//k==0 for strict restriction then k==1 do loose restriction only for outer LocalWindow KFs
@@ -706,11 +713,13 @@ void LocalMapping::KeyFrameCulling()
         //timespan restriction is implemented as the VIORBSLAM paper III-B
         double tmNext=-1;
 	if (k==0){
-	  if (nRestrict==2){//restriction is only for VIO
+	  if (bSensorIMU){//restriction is only for VIO
 	    assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);
 	    tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
 	    if (tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>0.5) continue;
 	    else vbEntered[vi]=true;
+	    
+// 	    if (pKF==pLastNthKF||pLastNthKF!=NULL&&pKF==pLastNthKF->GetNextKeyFrame()||pKF->GetNextKeyFrame()==mpCurrentKeyFrame) {vbEntered[vi]=true;continue;}
 	  }
 	}else{//loose restriction when k==1
 	  if (vbEntered[vi]) continue;
@@ -771,15 +780,15 @@ void LocalMapping::KeyFrameCulling()
 	    if (mpLastKF==pKF){
 	      mpLastKF=pKF->GetParent();
 	    }
-	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
-// 	    cout<<redSTR"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
-            pKF->SetBadFlag();
-// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<whiteSTR<<" pKF->mnId:"<<pKF->mnId<<endl;
-	    
 	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
 	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
 	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
-	    }
+	    }//must done before pKF->SetBadFlag()!
+	    
+// 	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
+// 	    cout<<redSTR"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
+            pKF->SetBadFlag();
+// 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<whiteSTR<<" pKF->mnId:"<<pKF->mnId<<endl;
 	}
     }
     }
