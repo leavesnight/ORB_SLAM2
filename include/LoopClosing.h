@@ -48,7 +48,8 @@ class KeyFrameDatabase;
 class LoopClosing
 {
 public:
-  bool mbVIFBA;//if use Visual-Inertial FBA for pure-vision+IMU Initialization mode!
+  bool mbLoopMore;//if uses more loop closing strategy in KeyFrameDatabase::DetectLoopCandidates()
+  int mnIterations,mnInitIterations;//number of Iterations in Full BA / GBA
   
 public:
   void CreateGBA();
@@ -65,7 +66,7 @@ public:
 
 public:
 
-    LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale);
+    LoopClosing(Map* pMap, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, const string &strSettingPath);//zzh
 
     void SetTracker(Tracking* pTracker);
     void SetLocalMapper(LocalMapping* pLocalMapper);

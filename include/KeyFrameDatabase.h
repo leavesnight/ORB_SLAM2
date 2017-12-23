@@ -55,7 +55,7 @@ public:
    //use pKF->mBowVec&&(mvInvertedFile/KFDatabase) to quickly find the KFs(not in pKF's covisible neighbors,enough CommonWorlds) \
    whose 10 best covisible neighbors have enough accScore(sigma(score(CovNeighKF->mBowVec,F->mBowVec))),\
    but return the best mLoopScore KF in CovNeighKFs(including KFCWs) as the candidate
-   std::vector<KeyFrame *> DetectLoopCandidates(KeyFrame* pKF, float minScore);
+   std::vector<KeyFrame *> DetectLoopCandidates(KeyFrame* pKF, float minScore, bool bVIO=false);
 
    // Relocalization
    //use F->mBowVec to quickly find the KFs whose covisible neighbors have enough accScore(sigma(score(CovNeighKF->mBowVec,F->mBowVec))), but return the best mRelocScore KF in CovNeighKFs as the candidate

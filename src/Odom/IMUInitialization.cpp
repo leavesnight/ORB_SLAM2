@@ -26,17 +26,17 @@ void IMUInitialization::Run(){
     if(GetSensorIMU()){//at least 4 consecutive KFs, see IV-B/C VIORBSLAM paper
       KeyFrame* pCurKF=GetCurrentKeyFrame();
       if (mdStartTime==-1){ initedid=0;mdStartTime=-2;}
-//       if(mdStartTime<0||mdStartTime>=0&&pCurKF->mTimeStamp-mdStartTime>=15)
-      if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
-	initedid = pCurKF->mnId;
-	if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
-      }
+      if(mdStartTime<0||mdStartTime>=0&&pCurKF->mTimeStamp-mdStartTime>=mdInitTime)
+	if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
+	  initedid = pCurKF->mnId;
+	  if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
+	}
     }
     
     ResetIfRequested();
     if(GetFinishRequest()) break;
 //     usleep(3000);
-    sleep(1);//3,1,0.5
+    sleep(mdSleepTime);//3,1,0.5
   }
   SetFinish(true);
   cout<<"VINSInitThread is Over."<<endl;
@@ -168,63 +168,80 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cout<<"gwstar: "<<gwstar.t()<<", |gwstar|="<<cv::norm(gwstar)<<endl;
 
   // Step 3. / See VIORBSLAM paper IV-C
+  cv::Mat Rwi;//for Recording
+  cv::Mat w2,u2,vt2;// Note w2 is 6x1 vector by SVDecomp(), for Recording
+  Eigen::Matrix3d Rwieig_;//for Recording
   // Use gravity magnitude 9.810 as constraint; gIn/^gI=[0;0;1], the normalized gravity vector in an inertial frame, we can also choose gIn=[0;0;-1] as the VIORBSLAM paper
   cv::Mat gIn=cv::Mat::zeros(3,1,CV_32F);gIn.at<float>(2)=1;
-  cv::Mat gwn=gwstar/cv::norm(gwstar);//^gw=gw*/||gw*|| / Normalized approx. gravity vecotr in world frame
-  cv::Mat gInxgwn=gIn.cross(gwn);double normgInxgwn=cv::norm(gInxgwn);
-  cv::Mat vhat=gInxgwn/normgInxgwn;//RwI=Exp(theta*^v), or we can call it vn=(gI x gw)/||gI x gw||
-  double theta=std::atan2(normgInxgwn,gIn.dot(gwn));//notice theta*^v belongs to [-Pi,Pi]*|^v| though theta belongs to [0,Pi]
-  Matrix3d RWIeig=IMUPreintegrator::Expmap(Converter::toVector3d(vhat)*theta);cv::Mat Rwi=Converter::toCvMat(RWIeig);//RwI
   cv::Mat GI=gIn*IMUData::mdRefG;//gI or GI=^gI*G
-  
-  // Solve C*x=D for x=[s,dthetaxy,ba] (1+2+3)x1 vector
-  cv::Mat C=cv::Mat::zeros(3*(N-2),6,CV_32F);
-  cv::Mat D=cv::Mat::zeros(3*(N-2),1,CV_32F);
-  for(int i=0; i<N-2; i++){
-    IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3 = vKFInit[i+2];
-    const IMUPreintegrator &imupreint12=pKF2->mOdomPreIntIMU,&imupreint23=pKF3->mOdomPreIntIMU;
-    //d means delta
-    double dt12=imupreint12.mdeltatij;double dt23=imupreint23.mdeltatij;
-    cv::Mat dp12=Converter::toCvMat(imupreint12.mpij);cv::Mat dp23=Converter::toCvMat(imupreint23.mpij);
-    cv::Mat dv12=Converter::toCvMat(imupreint12.mvij);cv::Mat Jav12=Converter::toCvMat(imupreint12.mJavij);
-    cv::Mat Jap12 = Converter::toCvMat(imupreint12.mJapij);cv::Mat Jap23=Converter::toCvMat(imupreint23.mJapij);
-    cv::Mat Twc1=vKFInit[i]->mTwc;//Twci for pwci&Rwci, not necessary for clone()
-    cv::Mat Twc2=pKF2->mTwc;cv::Mat Twc3=pKF3->mTwc;
-    cv::Mat pc1=Twc1.rowRange(0,3).col(3);//pwci
-    cv::Mat pc2=Twc2.rowRange(0,3).col(3);cv::Mat pc3=Twc3.rowRange(0,3).col(3);
-    cv::Mat Rc1=Twc1.rowRange(0,3).colRange(0,3);//Rwci
-    cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
-    // Stack to C/D matrix; lambda*s + phi(:,0:1)*dthetaxy + zeta*ba = psi, Ci(3*6),Di/psi(3*1)
-    cv::Mat lambda=(pc2-pc1)*dt23+(pc2-pc3)*dt12;//3*1
-    cv::Mat phi=-(dt12*dt12*dt23+dt12*dt23*dt23)/2*Rwi*SkewSymmetricMatrix(GI);//3*3 note: this has a '-', different to paper
-    cv::Mat zeta=Rc2*Rcb*Jap23*dt12+Rc1*Rcb*Jav12*dt12*dt23-Rc1*Rcb*Jap12*dt23;//3*3 notice here is Jav12, paper writes a wrong Jav23
-    cv::Mat psi=(Rc1-Rc2)*pcb*dt23+(Rc3-Rc2)*pcb*dt12-Rc2*Rcb*dp23*dt12-Rc1*Rcb*dv12*dt12*dt23//note:  - paper & deltatij^2 in paper means dt12^2*dt23+dt23^2*dt12
-    +Rc1*Rcb*dp12*dt23-(dt12*dt12*dt23+dt12*dt23*dt23)/2*(Rwi*GI);//notice here use Rwi*GI instead of gwstar for it's designed for iterative usage
-    lambda.copyTo(C.rowRange(3*i+0,3*i+3).col(0));
-    phi.colRange(0,2).copyTo(C.rowRange(3*i+0,3*i+3).colRange(1,3));//phi(:,0:1)(3*2) / only the first 2 columns, third term in dtheta is zero, here compute dthetaxy 2x1.
-    zeta.copyTo(C.rowRange(3*i+0,3*i+3).colRange(3,6));
-    psi.copyTo(D.rowRange(3*i+0,3*i+3));
-  }
-  // Use svd to compute C*x=D, x=[s,dthetaxy,ba] 6x1 vector
-  cv::Mat w2,u2,vt2;// Note w2 is 6x1 vector by SVDecomp()
-  cv::SVD::compute(C,w2,u2,vt2,cv::SVD::MODIFY_A);
-  cv::Mat w2inv=cv::Mat::eye(6,6,CV_32F);
-  for(int i=0;i<6;++i){
-    if(fabs(w2.at<float>(i))<1e-10){
-      w2.at<float>(i) += 1e-10;
-      cerr<<"w2(i) < 1e-10, w="<<endl<<w2<<endl;
+  double s_;
+  cv::Mat Rwi_;
+  Vector3d bastareig;
+//   for (int k=0;k<2;++k){//we prefer 1 iteration
+//     if (k==1){
+//       gwstar=Rwi_*GI;
+//       for(int i=0;i<N;++i) vKFInit[i]->mba_=bastareig;
+//       for(int i=1;i<N;++i) vKFInit[i]->ComputePreInt();
+//     }
+    
+    cv::Mat gwn=gwstar/cv::norm(gwstar);//^gw=gw*/||gw*|| / Normalized approx. gravity vecotr in world frame
+    cv::Mat gInxgwn=gIn.cross(gwn);double normgInxgwn=cv::norm(gInxgwn);
+    cv::Mat vhat=gInxgwn/normgInxgwn;//RwI=Exp(theta*^v), or we can call it vn=(gI x gw)/||gI x gw||
+    double theta=std::atan2(normgInxgwn,gIn.dot(gwn));//notice theta*^v belongs to [-Pi,Pi]*|^v| though theta belongs to [0,Pi]
+    Matrix3d RWIeig=IMUPreintegrator::Expmap(Converter::toVector3d(vhat)*theta);Rwi=Converter::toCvMat(RWIeig);//RwI
+    
+    // Solve C*x=D for x=[s,dthetaxy,ba] (1+2+3)x1 vector
+    cv::Mat C=cv::Mat::zeros(3*(N-2),6,CV_32F);
+    cv::Mat D=cv::Mat::zeros(3*(N-2),1,CV_32F);
+    for(int i=0; i<N-2; i++){
+      IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3 = vKFInit[i+2];
+      const IMUPreintegrator &imupreint12=pKF2->mOdomPreIntIMU,&imupreint23=pKF3->mOdomPreIntIMU;
+      //d means delta
+      double dt12=imupreint12.mdeltatij;double dt23=imupreint23.mdeltatij;
+      cv::Mat dp12=Converter::toCvMat(imupreint12.mpij);cv::Mat dp23=Converter::toCvMat(imupreint23.mpij);
+      cv::Mat dv12=Converter::toCvMat(imupreint12.mvij);cv::Mat Jav12=Converter::toCvMat(imupreint12.mJavij);
+      cv::Mat Jap12 = Converter::toCvMat(imupreint12.mJapij);cv::Mat Jap23=Converter::toCvMat(imupreint23.mJapij);
+      cv::Mat Twc1=vKFInit[i]->mTwc;//Twci for pwci&Rwci, not necessary for clone()
+      cv::Mat Twc2=pKF2->mTwc;cv::Mat Twc3=pKF3->mTwc;
+      cv::Mat pc1=Twc1.rowRange(0,3).col(3);//pwci
+      cv::Mat pc2=Twc2.rowRange(0,3).col(3);cv::Mat pc3=Twc3.rowRange(0,3).col(3);
+      cv::Mat Rc1=Twc1.rowRange(0,3).colRange(0,3);//Rwci
+      cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
+      // Stack to C/D matrix; lambda*s + phi(:,0:1)*dthetaxy + zeta*ba = psi, Ci(3*6),Di/psi(3*1)
+      cv::Mat lambda=(pc2-pc1)*dt23+(pc2-pc3)*dt12;//3*1
+      cv::Mat phi=-(dt12*dt12*dt23+dt12*dt23*dt23)/2*Rwi*SkewSymmetricMatrix(GI);//3*3 note: this has a '-', different to paper
+      cv::Mat zeta=Rc2*Rcb*Jap23*dt12+Rc1*Rcb*Jav12*dt12*dt23-Rc1*Rcb*Jap12*dt23;//3*3 notice here is Jav12, paper writes a wrong Jav23
+      cv::Mat psi=(Rc1-Rc2)*pcb*dt23+(Rc3-Rc2)*pcb*dt12-Rc2*Rcb*dp23*dt12-Rc1*Rcb*dv12*dt12*dt23//note:  - paper & deltatij^2 in paper means dt12^2*dt23+dt23^2*dt12
+      +Rc1*Rcb*dp12*dt23-(dt12*dt12*dt23+dt12*dt23*dt23)/2*(Rwi*GI);//notice here use Rwi*GI instead of gwstar for it's designed for iterative usage
+      lambda.copyTo(C.rowRange(3*i+0,3*i+3).col(0));
+      phi.colRange(0,2).copyTo(C.rowRange(3*i+0,3*i+3).colRange(1,3));//phi(:,0:1)(3*2) / only the first 2 columns, third term in dtheta is zero, here compute dthetaxy 2x1.
+      zeta.copyTo(C.rowRange(3*i+0,3*i+3).colRange(3,6));
+      psi.copyTo(D.rowRange(3*i+0,3*i+3));
     }
-    w2inv.at<float>(i,i)=1./w2.at<float>(i);
-  }
-  cv::Mat y=vt2.t()*w2inv*u2.t()*D;// Then y/x = vt'*winv*u'*D
-  double s_=y.at<float>(0);//s*_C, C means IV-C in the paper
-  Eigen::Vector3d dthetaeig(y.at<float>(1),y.at<float>(2),0);//small deltatheta/dtheta=[dthetaxy.t() 0].t()
-  Eigen::Matrix3d Rwieig_=RWIeig*IMUPreintegrator::Expmap(dthetaeig);//RwI*_C=RwI*_B*Exp(dtheta)
-  cv::Mat Rwi_=Converter::toCvMat(Rwieig_);
-  Vector3d bastareig=Converter::toVector3d(y.rowRange(3,6));//here bai_bar=0, so dba=ba
+    // Use svd to compute C*x=D, x=[s,dthetaxy,ba] 6x1 vector
+    cv::SVD::compute(C,w2,u2,vt2,cv::SVD::MODIFY_A);
+    cv::Mat w2inv=cv::Mat::eye(6,6,CV_32F);
+    for(int i=0;i<6;++i){
+      if(fabs(w2.at<float>(i))<1e-10){
+	w2.at<float>(i) += 1e-10;
+	cerr<<"w2(i) < 1e-10, w="<<endl<<w2<<endl;
+      }
+      w2inv.at<float>(i,i)=1./w2.at<float>(i);
+    }
+    cv::Mat y=vt2.t()*w2inv*u2.t()*D;// Then y/x = vt'*winv*u'*D
+    s_=y.at<float>(0);//s*_C, C means IV-C in the paper
+    Eigen::Vector3d dthetaeig(y.at<float>(1),y.at<float>(2),0);//small deltatheta/dtheta=[dthetaxy.t() 0].t()
+    Rwieig_=RWIeig*IMUPreintegrator::Expmap(dthetaeig);//RwI*_C=RwI*_B*Exp(dtheta)
+    Rwi_=Converter::toCvMat(Rwieig_);
+//     if (k==0)
+    bastareig=Converter::toVector3d(y.rowRange(3,6));//here bai_bar=0, so dba=ba
+//     else bastareig+=Converter::toVector3d(y.rowRange(3,6));
+//   }
+  
 
   // Record data for analysis
   cv::Mat gwbefore=Rwi*GI,gwafter=Rwi_*GI;//direction of gwbefore is the same as gwstar, but value is different!
+
   cout<<"Time: "<<pNewestKF->mTimeStamp-mdStartTime<<", sstar: "<<sstar<<", s: "<<s_<<endl;//Debug the frequency & sstar2&sstar
   //<<" bgest: "<<bgest.transpose()<<", gw*(gwafter)="<<gwafter.t()<<", |gw*|="<<cv::norm(gwafter)<<", norm(gwbefore,gwstar)"<<cv::norm(gwbefore.t())<<" "<<cv::norm(gwstar.t())<<endl;
   if (mTmpfilepath.length()>0){//Debug the Rwistar2
@@ -245,7 +262,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Todo: Add some logic or strategy to confirm init status, VIORBSLAM paper just uses 15 seconds to confirm
   bool bVIOInited = false;
   if(mdStartTime<0) mdStartTime=pNewestKF->mTimeStamp;
-  if(pNewestKF->mTimeStamp-mdStartTime>=15){//15s in the paper V-A
+  if(pNewestKF->mTimeStamp-mdStartTime>=mdFinalTime){//15s in the paper V-A
     cout<<yellowSTR"condnum="<<w2.at<float>(0)<<";"<<w2.at<float>(5)<<whiteSTR<<endl;
 //     if (w2.at<float>(0)/w2.at<float>(5)<700)
       bVIOInited = true;

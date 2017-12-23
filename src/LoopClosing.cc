@@ -34,9 +34,8 @@
 namespace ORB_SLAM2
 {
 void LoopClosing::CreateGBA()
-{
-  mpIMUInitiator->SetInitGBA(false);//we should avoid entering this func. twice
-//   mbVIFBA=true;
+{ 
+  mpIMUInitiator->SetInitGBA(false);//avoid enter this func. twice when lock mMutexGBA after entered
   
   // If a Global Bundle Adjustment is running, abort it
   if(isRunningGBA()){
@@ -51,12 +50,30 @@ void LoopClosing::CreateGBA()
   
 //created by zzh
 
-LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
+LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale, const string &strSettingPath):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), //mbFinishedGBA(true),
     mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0),
-    mbVIFBA(false),mpIMUInitiator(NULL)//zzh
+    mpIMUInitiator(NULL)//zzh
 {
+    cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
+    cv::FileNode fnLoopMore=fSettings["Loop.More"];
+    if (fnLoopMore.empty()){
+      mbLoopMore=false;
+    }else{
+      if (mbLoopMore=(int)fnLoopMore)//allow loop detection of covisible KFs with weight<10 but mnId<mCurrentFrame.mnId-10
+	cout<<yellowSTR"Use more Loop Detection!"<<whiteSTR<<endl;
+    }
+    cv::FileNode fnIter[2]={fSettings["GBA.iterations"],fSettings["GBA.initIterations"]};
+    if (fnIter[0].empty()||fnIter[1].empty()){
+      mnInitIterations=15;mnIterations=15;
+      cout<<redSTR"No iterations,use default 15(normal),15(init)"<<whiteSTR<<endl;
+    }else{
+      mnIterations=fnIter[0];
+      mnInitIterations=fnIter[1];
+    }
+//created by zzh
+  
     mnCovisibilityConsistencyTh = 3;
 }
 
@@ -160,7 +177,7 @@ bool LoopClosing::DetectLoop()
     }
 
     // Query the database imposing the minimum score
-    vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore);//returned KFs cannot be in vpConnectedKeyFrames(not made from score(BowVecs))
+    vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore, mbLoopMore&&mpIMUInitiator->GetVINSInited());//returned KFs cannot be in vpConnectedKeyFrames(not made from score(BowVecs))
 
     // If there are no loop candidates, just add new keyframe and return false
     if(vpCandidateKFs.empty())
@@ -687,19 +704,18 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
 
     bool bUseGBAPRV=false;
     int idx =  mnFullBAIdx;
-    unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA!
-    mpIMUInitiator->SetInitGBA(false);
+    unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA! 
     if (mpIMUInitiator->GetVINSInited()){
-      Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
+      if (!mpIMUInitiator->GetInitGBAOver()){//if it's 1st Full BA just after IMU Initialized(the before ones may be cancelled)
+	cout<<redSTR"Full BA just after IMU Initializated!"<<whiteSTR<<endl;
+	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);
+// 	mbFixScale=true;
+      }else
+	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
       bUseGBAPRV=true;
     }else{
-//       if (!mbVIFBA)
-	Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
-//       else{
-// 	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),15,&mbStopGBA,nLoopKF,false);
-// 	bUseGBAPRV=true;
-// 	mbVIFBA=false;
-//       }
+      cout<<redSTR"pure-vision GBA!"<<whiteSTR<<endl;
+      Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
     }
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -807,6 +823,8 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
             mpMap->InformNewBigChange();//used to check the SLAM's state
 
             mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
+            
+	    mpIMUInitiator->SetInitGBAOver(true);//should be put after 1st visual-inertial full BA!
 
             cout << redSTR<<"Map updated!" <<whiteSTR<< endl;//if GBA/loop correction successed, this word should appear!
             

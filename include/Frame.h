@@ -67,16 +67,16 @@ public:
   void UpdateNavStatePVRFromTcw();//for imu data empty condition after imu's initialized(including bias recomputed)
   
   // Odom PreIntegration
-  template <class _OdomData>
-  void SetPreIntegrationList(typename std::list<_OdomData>::iterator &begin,typename std::list<_OdomData>::iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
-    mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
-  }
+//   template <class _OdomData>
+//   void SetPreIntegrationList(const typename std::list<_OdomData>::const_iterator &begin,const typename std::list<_OdomData>::const_iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+//     mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
+//   }
   template <class _OdomData>//here if u use _Frame*, it can be automatically checked while vector<_Frame>::iterator won't do so! but partial specialized template function doesn't exist!
-  void PreIntegration(Frame* pLastF){//0th frame don't use this function
-    mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
+  void PreIntegration(Frame* pLastF,const typename std::list<_OdomData>::const_iterator &iteri,const typename std::list<_OdomData>::const_iterator &iterj){//0th frame don't use this function
+    mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp,iteri,iterj);
   }
   template <class _OdomData>
-  void PreIntegration(KeyFrame* pLastKF);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
+  void PreIntegration(KeyFrame* pLastKF,const typename std::list<_OdomData>::const_iterator &iteri,const typename std::list<_OdomData>::const_iterator &iterj);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
   
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState && Matrix4d
 //created by zzh over.
@@ -248,14 +248,14 @@ private:
 };
 
 //created by zzh
-template <>//specialized
-void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator &begin,typename std::list<IMUData>::iterator &pback);
+// template <>//specialized
+// void Frame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback);
 template <>
-void Frame::PreIntegration<IMUData>(Frame* pLastF);
+void Frame::PreIntegration<IMUData>(Frame* pLastF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj);
 template <>
-void Frame::PreIntegration<EncData>(KeyFrame* pLastKF);
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const std::list<EncData>::const_iterator &iteri,const std::list<EncData>::const_iterator &iterj);
 template <>
-void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF);
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj);
 
 }// namespace ORB_SLAM
 

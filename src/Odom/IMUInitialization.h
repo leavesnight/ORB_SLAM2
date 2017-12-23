@@ -60,6 +60,7 @@ using namespace std;
 
 class IMUInitialization{//designed for multi threads
   string mTmpfilepath;
+  double mdInitTime,mdSleepTime,mdFinalTime;
   double mdStartTime;//for reset
   //cv::Mat mRwiInit;//unused
   
@@ -73,6 +74,7 @@ class IMUInitialization{//designed for multi threads
   
   //CREATOR_VAR_MULTITHREADS(UpdatingInitPoses,bool,b)//for last propagation in IMU Initialization to stop adding new KFs in Tracking thread, useless for LocalMapping is stopped
   CREATOR_VAR_MULTITHREADS(InitGBA,bool,b)//for last GBA(include propagation) required by IMU Initialization, LoopClosing always creates new GBA thread when it's true
+  CREATOR_VAR_MULTITHREADS(InitGBAOver,bool,b)//for 1st Full BA strategy Adjustment
   
   //like the part of LocalMapping
   CREATOR_VAR_MULTITHREADS(CurrentKeyFrame,KeyFrame*,p)//updated by LocalMapping thread
@@ -96,6 +98,7 @@ class IMUInitialization{//designed for multi threads
       mdStartTime=-1;SetCurrentKeyFrame(NULL);//SetSensorIMU(false);
       SetVINSInited(false);//usually this 3 variables are false when LOST then this func. will be called
       SetInitGBA(false);//if it's true, won't be automatically reset
+      SetInitGBAOver(false);
       
       SetReset(false);
     }
@@ -109,7 +112,7 @@ public:
     mdStartTime=-1;mbSensorIMU=false;mpCurrentKeyFrame=NULL;
     mbVINSInited=false;
     mbCopyInitKFs=false;
-    mbInitGBA = false;
+    mbInitGBA=false;mbInitGBAOver=false;
     
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
     cv::FileNode fnStr=fSettings["test.InitVIOTmpPath"];
@@ -125,6 +128,15 @@ public:
 	mbUsePureVision=true;
 	cout<<blueSTR"mnLocalWindowSize<1, we use pure-vision+IMU Initialization mode!"<<whiteSTR<<endl;
       }else mbUsePureVision=false;
+    }
+    cv::FileNode fnTime[3]={fSettings["IMU.InitTime"],fSettings["IMU.SleepTime"],fSettings["IMU.FinalTime"]};
+    if (fnTime[0].empty()||fnTime[1].empty()||fnTime[2].empty()){
+      mdInitTime=0;mdSleepTime=1;mdFinalTime=15;
+      cout<<redSTR"No IMU.InitTime&SleepTime&FinalTime, we use default 0s & 1s & 15s!"<<whiteSTR<<endl;
+    }else{
+      mdInitTime=fnTime[0];
+      mdSleepTime=fnTime[1];
+      mdFinalTime=fnTime[2];
     }
   }
   

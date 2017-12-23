@@ -47,17 +47,17 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
   switch (mode){
     case System::ENCODER://only encoder
       if (mlOdomEnc.empty()){
-	mlOdomEnc.push_back(EncData(odomdata,timestamp));
+	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));//notice Timg=Todom+delay
 	miterLastEnc=mlOdomEnc.begin();
       }else
-	mlOdomEnc.push_back(EncData(odomdata,timestamp));
+	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
       break;
     case System::IMU://only q/awIMU
       if (mlOdomIMU.empty()){
-	mlOdomIMU.push_back(IMUData(odomdata,timestamp));
+	mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
 	miterLastIMU=mlOdomIMU.begin();
       }else
-	mlOdomIMU.push_back(IMUData(odomdata,timestamp));
+	mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
 #ifndef TRACK_WITH_IMU
       ;//mbSensorIMU=false;
 #else
@@ -66,15 +66,15 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
       break;
     case System::BOTH://both encoder & q/awIMU
       if (mlOdomEnc.empty()){
-	mlOdomEnc.push_back(EncData(odomdata,timestamp));
+	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
 	miterLastEnc=mlOdomEnc.begin();
       }else
-	mlOdomEnc.push_back(EncData(odomdata,timestamp));
+	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
       if (mlOdomIMU.empty()){
-	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp));
+	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
 	miterLastIMU=mlOdomIMU.begin();
       }else
-	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp));
+	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
 #ifndef TRACK_WITH_IMU
       ;//mbSensorIMU=false;
 #else
@@ -104,7 +104,7 @@ void Tracking::PreIntegration(const char type){
 //     cout<<Sophus::SO3::log(Sophus::SO3(mpReferenceKF->GetIMUPreInt().mRij)).transpose()<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #endif
    }else if (0&&(type==3||type==1)){
-     if (0&&type==1){ 
+     if (0&&type==1){
        const list<IMUData> &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
        cout<<blueSTR"List size between 2Frames: "<<limu.size()<<whiteSTR<<endl;
        for (auto data:limu) cout<<data.mtm<<": a="<<data.ma.transpose()<<" w="<<data.mw.transpose()<<", ";
@@ -310,7 +310,7 @@ void Tracking::RecomputeIMUBiasAndCurrentNavstate(){//see VIORBSLAM paper IV-E
   // Step1. Estimate gyr bias / see VIORBSLAM paper IV-A
   // compute initial IMU pre-integration for bgi_bar=0 as for the KFs' mOdomPreIntIMU in IMU Initialization
   size_t N=mv20pFramesReloc.size();
-  std::list<IMUData>::iterator iterTmp=miterLastIMU;
+  std::list<IMUData>::const_iterator iterTmp=miterLastIMU;
   for(size_t i=0; i<N-1; ++i){
     unique_lock<mutex> lock(mMutexOdom);
     //so vKFInit[i].mOdomPreIntIMU is based on bg_bar=0,ba_bar=0; dbg=0 but dba/ba waits to be optimized
@@ -460,12 +460,14 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
       EncData::SetParam(fnEnc[0],fnEnc[1],eig2Rtmp);
     }
     //load delay
-    cv::FileNode fnDelay=fSettings["Camera.delaytoimu"];
-    if (fnDelay.empty()){
-      cout<<redSTR"No Camera.delaytoimu!"<<whiteSTR<<endl;
-      mDelayOdom=0.001;
-    }else
-      mDelayOdom=-(double)fnDelay;
+    cv::FileNode fnDelay[3]={fSettings["Camera.delaytoimu"],fSettings["Camera.delaytoenc"],fSettings["Camera.delayForPolling"]};
+    if (fnDelay[0].empty()||fnDelay[1].empty()||fnDelay[2].empty()){
+      cout<<redSTR"No Camera.delaytoimu & delaytoenc & delayForPolling!"<<whiteSTR<<endl;
+      mDelayCache=mDelayToIMU=mDelayToIMU=0;
+    }else{
+      mDelayCache=(double)fnDelay[2];
+      mDelayToIMU=fnDelay[0];mDelayToEnc=fnDelay[1];
+    }
     //load mdErrIMUImg
     float fps = fSettings["Camera.fps"];
     if(fps==0) fps=30;
@@ -714,7 +716,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
       !mlOdomIMU.empty()&&mlOdomIMU.back().mtm>=mCurrentFrame.mTimeStamp){//2 lists data is enough for deltax~ij
     }else{//then delay some ms to ensure some Odom data to come if it runs well
       lock2.unlock();
-      mtmGrabDelay+=chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double>(mDelayOdom));//delay default=20ms
+      mtmGrabDelay+=chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double>(mDelayCache));//delay default=20ms
       while (chrono::steady_clock::now()<mtmGrabDelay) sleep(0.001);//allow 1ms delay error
     }//if still no Odom data comes, deltax~ij will be set unknown
     }

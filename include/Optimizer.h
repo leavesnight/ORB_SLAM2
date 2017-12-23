@@ -56,7 +56,7 @@ public:
   void static LocalBAPRVIDP(KeyFrame *pKF, int Nlocal, bool* pbStopFlag, Map* pMap, cv::Mat &gw);
   void static LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool *pbStopFlag, Map *pMap, cv::Mat gw);//Nlocal>=1(if <1 it's 1)
   void static GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations=5, bool *pbStopFlag=NULL,
-				    const unsigned long nLoopKF=0, const bool bRobust = true);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA
+				    const unsigned long nLoopKF=0, const bool bRobust = true, bool bScaleOpt=false);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA
   
   template<class IMUKeyFrameInit>
   static Eigen::Vector3d OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> &vpKFInit,bool bInfo=true);//if bInfo==true, use the R part of SigmaPRV as the Infomation matrix else use Identity(); \

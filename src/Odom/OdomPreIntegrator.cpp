@@ -7,26 +7,26 @@ namespace ORB_SLAM2{
 
 using namespace Eigen;
 
-void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &timeStampj){
-  if (!mlOdom.empty()){ 
+void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &timeStampj,
+				      const std::list<EncData>::const_iterator &iterBegin,const std::list<EncData>::const_iterator &iterEnd){
+  if (iterBegin!=iterEnd){ 
     Vector2d eigdeltaPijM(0,0);//deltaPii=0
     double deltaThetaijMz=0;//deltaTheta~iiz=0
     mSigmaEij.setZero();//SigmaEii=0
     
     Matrix2d eigSigmaetad(EncData::mSigmad);double rc(EncData::mrc);
     
-    list<EncData>::iterator iterEnd=mlOdom.end();
-    for (list<EncData>::iterator iterj=mlOdom.begin();iterj!=iterEnd;){//start iterative method from i/iteri->tm to j/iter->tm
-      list<EncData>::iterator iterjm1=iterj++;//iterj-1
+    for (list<EncData>::const_iterator iterj=iterBegin;iterj!=iterEnd;){//start iterative method from i/iteri->tm to j/iter->tm
+      list<EncData>::const_iterator iterjm1=iterj++;//iterj-1
       
       double deltat,tj,tj_1;//deltatj-1j
-      if (iterjm1==mlOdom.begin()) tj_1=timeStampi; else tj_1=iterjm1->mtm;
-      if (iterj==mlOdom.end()) tj=timeStampj; else tj=iterj->mtm;
+      if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
+      if (iterj==iterEnd) tj=timeStampj; else tj=iterj->mtm;
       deltat=tj-tj_1;
       
       //selete/design measurement_j-1
       double vl,vr;//vlj-1,vrj-1
-      if (iterj!=mlOdom.end()){
+      if (iterj!=iterEnd){
 	vl=(iterjm1->mv[0]+iterj->mv[0])/2,vr=(iterjm1->mv[1]+iterj->mv[1])/2;
       }else{
 	vl=iterjm1->mv[0];vr=iterjm1->mv[1];

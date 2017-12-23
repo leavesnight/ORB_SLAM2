@@ -32,7 +32,7 @@ LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSet
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
     mpLastKF(NULL),mnLastOdomKFId(0)
-{
+{//zzh
   cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
   if (fnSize.empty()){

@@ -111,7 +111,7 @@ public:
   
   // Odom PreIntegration
   template <class _OdomData>
-  void SetPreIntegrationList(typename std::list<_OdomData>::iterator begin,typename std::list<_OdomData>::iterator pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+  void SetPreIntegrationList(const typename std::list<_OdomData>::const_iterator &begin,const typename std::list<_OdomData>::const_iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
     unique_lock<mutex> lock(mMutexOdomData);
     mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
   }
@@ -120,6 +120,8 @@ public:
     unique_lock<mutex> lock(mMutexOdomData);
     mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
   }//0th frame don't use this function, pLastKF shouldn't be bad
+  
+  std::set<KeyFrame *> GetConnectedKeyFramesByWeight(int w);//set made from mConnectedKeyFrameWeights[i].first restricted by weight
   
   inline char getState(){
     return mState;
@@ -292,8 +294,8 @@ protected:
     // Grid over the image to speed up feature matching
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;//covisibility graph need KFs >=15 covisible MapPoints or the KF with Max covisible MapPoints
-    std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
+    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;//covisibility graph need KFs >0 covisible MapPoints 
+    std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;//ordered covisibility graph/connected KFs need KFs >=15 covisible MPs or the KF with Max covisible MapPoints
     std::vector<int> mvOrderedWeights;//covisible MPs' number
 
     // Spanning Tree and Loop Edges
@@ -318,7 +320,7 @@ protected:
 
 //created by zzh
 template <>//specialized
-void KeyFrame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator begin,typename std::list<IMUData>::iterator pback);
+void KeyFrame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback);
 template <>
 void KeyFrame::PreIntegration<IMUData>(KeyFrame* pLastKF);
 

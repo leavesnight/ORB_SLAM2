@@ -15,6 +15,20 @@ using namespace ORB_SLAM2;
 using namespace Eigen;
 
 /**
+ * \brief template Vertex for VertexScale
+ */
+class VertexScale: public BaseVertex<1,double>{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  //default constructor is enough
+  virtual bool read(std::istream &is){is>>_estimate;return true;}
+  bool write(std::ostream &os) const{os<<estimate()<<" ";return os.good();}
+  
+  void setToOriginImpl(){_estimate=1;}//default scale_truth_from_currentworld=1
+  void oplusImpl(const double* update_){_estimate+=*update_;}
+};
+
+/**
  * \brief template Vertex for VertexNavStatePR,VertexNavStateV,VertexNavStatePVR
  */
 template <int DV>
@@ -230,6 +244,103 @@ typedef EdgeNavStateProjectXYZ<2,9> EdgeNavStatePVRPointXYZ;
 typedef EdgeNavStateProjectXYZ<3,9> EdgeStereoNavStatePVRPointXYZ;
 
 /**
+ * \brief template for EdgeProjectXYZ(trinary edge, mono/stereo), similar to EdgeProjectXYZ(binary edge, just add one VertexScale)
+ */
+template <int DE,int DV>
+class EdgeNavStateProjectXYZWithScale:public BaseMultiEdge<DE, Matrix<double,DE,1> >{
+  Matrix<double,DE,1> cam_project(const Vector3d &trans_xyz)const{
+    const float invz=1.0f/trans_xyz[2];//normalize
+    Matrix<double,DE,1> res;res[0]=trans_xyz[0]*invz*fx+cx;res[1]=trans_xyz[1]*invz*fy+cy;
+    if (DE==3) res[2]=res[0]-bf*invz;//ur=ul-b*fx/dl or u in right image
+    return res;
+  }
+  
+  typedef BaseMultiEdge<DE, Matrix<double,DE,1> > Base;
+  
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  EdgeNavStateProjectXYZWithScale() : Base(){this->resize(3);}
+  bool read(std::istream& is){return readEdge<DE>(is,this->_measurement,this->information());}
+  bool write(std::ostream& os) const{return writeEdge<DE>(os,this->measurement(),this->information());}
+  virtual void computeError(){
+    const VertexSBAPointXYZ* pXw=static_cast<const VertexSBAPointXYZ*>(_vertices[0]);//Xw/Pw
+    const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[1]);//Tbw
+    const NavState& ns=vNS->estimate();//transform Xw to Xc through Tbw&&Tcb
+    const VertexScale* vScale=static_cast<const VertexScale*>(_vertices[2]);//Scale
+    double scale=vScale->estimate();
+    Matrix3d Rcw=Rcb*ns.getRwb().transpose();
+//     Vector3d RwcPcb=Rcw.transpose()*tcb;Vector3d twb_true=scale*(ns.mpwb-RwcPcb)-RwcPcb;
+    //here we use Xw_truescale=s*Xw_currentscale;twb is nearly true scale at the end of execution, so here we don't use twb_true=s*twc+Rwc*tcb=s*(twb_current-Rwc*tcb)+Rwc*tcb
+    this->_error=this->_measurement-cam_project(Rcw*(scale*pXw->estimate()-ns.mpwb)+tcb);//Pc=Tcb*Tbw*Pw=Rcb*Rbw*Pw+Rcb*tbw(-Rcb*Rbw*twb)+tcb(-Rcb*tbc)=Rcb*Rbw*(Pw_true-twb_true)+tcb;
+  }
+  virtual void linearizeOplus();
+  
+  void SetParams(const double& fx_, const double& fy_, const double& cx_, const double& cy_,
+                   const Matrix3d& Rcb_, const Vector3d& tcb_, const float *bf_=NULL){
+    fx=fx_;fy=fy_;cx=cx_;cy=cy_;Rcb=Rcb_;tcb=tcb_;if (bf_!=NULL) bf=*bf_;
+  }
+  bool isDepthPositive(){//unused in IMU motion-only BA, but used in localBA&GBA
+    const VertexSBAPointXYZ* pXw=static_cast<const VertexSBAPointXYZ*>(_vertices[0]);//Xw/Pw
+    const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[1]);//Tbw
+    const NavState& ns=vNS->estimate();
+    const VertexScale* vScale=static_cast<const VertexScale*>(_vertices[2]);//Scale
+    double scale=vScale->estimate();
+    Matrix3d Rcw=Rcb*ns.getRwb().transpose();
+    return (Rcw*(scale*pXw->estimate()-ns.mpwb)+tcb)(2)>0.0;//Xc.z>0
+  }
+  
+protected:
+  double fx, fy, cx, cy, bf;// Camera intrinsics
+  Matrix3d Rcb;Vector3d tcb;// Camera-IMU extrinsics
+  
+  using Base::_vertices;
+  using Base::_jacobianOplus;
+};
+template <int DE,int DV>
+void EdgeNavStateProjectXYZWithScale<DE,DV>::linearizeOplus(){
+  const VertexSBAPointXYZ* pXw=static_cast<const VertexSBAPointXYZ*>(_vertices[0]);//Xw/Pw
+  const Vector3d &Pw=pXw->estimate();
+  const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[1]);//Tbw
+  const NavState& ns=vNS->estimate();
+  Matrix3d Rwb=ns.getRwb();
+  const VertexScale* vScale=static_cast<const VertexScale*>(_vertices[2]);//Scale
+  double scale=vScale->estimate();
+
+  Matrix3d Rcw=Rcb*Rwb.transpose();
+//   Vector3d RwcPcb=Rcw.transpose()*tcb;Vector3d twb_true=scale*(ns.mpwb-RwcPcb)-RwcPcb;
+  Vector3d Pc=Rcw*(scale*Pw-ns.mpwb)+tcb;//Pc=Rcb*Rbw*(Pw_true-twb_true)+tcb
+  double x=Pc[0],y=Pc[1],invz=1/Pc[2],invz_2=invz*invz;
+
+  // Jacobian of camera projection, par((K*Pc)(0:1))/par(Pc)=J_e_Pc, error = obs - pi( Pc )
+  Matrix<double,DE,3> Jproj;//J_e_P'=J_e_Pc=-[fx/z 0 -fx*x/z^2; 0 fy/z -fy*y/z^2], here Xc->Xc+dXc
+  Jproj.template block<2,3>(0,0)<<-fx*invz, 0, x*fx*invz_2, 
+				  0, -fy*invz, y*fy*invz_2;
+  if (DE>2) Jproj.template block<1,3>(2,0)<<Jproj(0,0), 0, Jproj(0,2)-bf*invz_2;//ur=ul-b*fx/dl,dl=z => J_e_P'=J_e_Pc=-[fx/z 0 -fx*x/z^2; 0 fy/z -fy*y/z^2; fx/z 0 -fx*x/z^2+bf/z^2]
+
+  // Jacobian of error w.r.t dPwb = JdPwb=J_e_Pc*J_Pc_dPwb, notcie we use pwb->pwb+dpwb increment model in the corresponding Vertex, so here is the same, a bit dfferent from (21)
+//   Matrix<double,DE,3> JdPwb=Jproj*Rcw*(-scale);//J_Pc_dPwb = -Rcw*scale;
+  Matrix<double,DE,3> JdPwb=Jproj*(-Rcw);//J_Pc_dPwb = -Rcw;
+  // Jacobian of error w.r.t dRwb
+//   Vector3d Paux=Rcb*Rwb.transpose()*(scale*(Pw-ns.mpwb));//J_Pc_dRwb=(Rcw*(s*Pw-s*twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
+  Vector3d Paux=Rcb*Rwb.transpose()*(scale*Pw-ns.mpwb);//J_Pc_dRwb=(Rcw*(s*Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
+  Matrix<double,DE,3> JdRwb=Jproj*(Sophus::SO3::hat(Paux)*Rcb);
+//   Matrix<double,DE,1> Jds=Jproj*Rcw*(Pw-ns.mpwb+RwcPcb);//J_Pc_ds=Rcw*(Pw-(twb-Rwc*tcb)), easy to prove
+  Matrix<double,DE,1> Jds=Jproj*Rcw*Pw;//J_Pc_ds=Rcw*Pw, easy to prove
+
+  // Jacobian of error w.r.t NavStatePR, order in 'update_': dP, dPhi
+  Matrix<double,DE,DV> JNavState = Matrix<double,DE,DV>::Zero();
+  JNavState.template block<DE,3>(0,0)=JdPwb;//J_error_dnotPR=0 so we'd better use PR&V instead of PVR/PVRB
+  JNavState.template block<DE,3>(0,DV-3)=JdRwb;//only for 9(J_e_dV=0)/6
+  _jacobianOplus[1]=JNavState;
+  //Jacobian of error(-pc) w.r.t dXw/dPw: J_e_dXw=JdXw=J_e_Pc*J_Pc_dPw=Jproj*Rcw=-JdPwb
+  _jacobianOplus[0]=-JdPwb;//Jproj*Rcb*Rwb.transpose()*s;
+  _jacobianOplus[2]=Jds;
+}
+
+typedef EdgeNavStateProjectXYZWithScale<2,6> EdgeNavStatePRSPointXYZ;
+typedef EdgeNavStateProjectXYZWithScale<3,6> EdgeStereoNavStatePRSPointXYZ;
+
+/**
  * \brief template for EdgeNavStateI(multi edge)
  */
 template <int NV>
@@ -258,7 +369,7 @@ void EdgeNavStateI<NV>::computeError(){
   const Sophus::SO3 RiT=nsPRi.mRwb.inverse();
   //get vi,vj,dbi in PRV/PVR situation
   Vector3d vi,vj,dbgi,dbai;
-  if (NV>3){//PRV
+  if (NV>=5){//PRV
     vi=static_cast<const VertexNavStateV*>(_vertices[2])->estimate().mvwb;//vwbi
     vj=static_cast<const VertexNavStateV*>(_vertices[3])->estimate().mvwb;//vwbj
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[4])->estimate();
@@ -285,10 +396,12 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   const Vector3d &pi=nsPRi.mpwb,&pj=nsPRj.mpwb;
   const Matrix3d RiT=nsPRi.getRwb().transpose();
   Vector3d vi,vj,dbgi;
-  if (NV>3){//PRV
+//   double scale;
+  if (NV>=5){//PRV
     vi=static_cast<const VertexNavStateV*>(_vertices[2])->estimate().mvwb;//vwbi
     vj=static_cast<const VertexNavStateV*>(_vertices[3])->estimate().mvwb;//vwbj
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[4])->estimate();
+//     if (NV==6) scale=static_cast<const VertexScale*>(_vertices[5])->estimate();
   }else{//PVR
     vi=nsPRi.mvwb;vj=nsPRj.mvwb;//nsPVRi/j
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[2])->estimate();
@@ -299,7 +412,7 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   Matrix<double,9,6> JBiasi;Matrix3d O3x3=Matrix3d::Zero();
   int idR,idV;
   Matrix<double,9,9> JPRVi,JPRVj;//when NV==3 it's JPVRi,JPVRj
-  if (NV>3){//J_ePRV_PRi,PRj,Vi,Vj,Bi
+  if (NV>=5){//J_ePRV_PRi,PRj,Vi,Vj,Bi
     idR=3;idV=6;
   }else{//J_ePVR_PVRi,PVRj,Bi
     idR=6;idV=3;//please notice everything after meaning row/col should use idR/idV except bias term!
@@ -350,6 +463,7 @@ void EdgeNavStateI<NV>::linearizeOplus(){
 
 typedef EdgeNavStateI<5> EdgeNavStatePRV;//PRi, PRj, Vi, Vj, Bi, total 5 vertices
 typedef EdgeNavStateI<3> EdgeNavStatePVR;//PVRi, PVRj, Bi, total 3 vertices
+// typedef EdgeNavStateI<6> EdgeNavStatePRVBS;//add scale optimization variable
 
 /**
  * \brief EdgeNavStateBias(binary edge),EdgeNavStatePriorPRVBias,EdgeNavStatePriorPVRBias
@@ -427,26 +541,22 @@ public:
     }
 };
 
+//Later part is unused and left undesigned
 /*
  * IDP, (I)nverse (d)epth vertex for a map(p)oint
  */
-class VertexIDP : public BaseVertex<1, double>
-{
+class VertexIDP : public BaseVertex<1, double>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    VertexIDP() : BaseVertex<1, double>(){}
     bool read(std::istream &is) {return true;}
     bool write(std::ostream &os) const {return true;}
 
-    virtual void setToOriginImpl() {
-        _estimate = 1;
-    }
+    virtual void setToOriginImpl() {_estimate = 1;}
 
     virtual void oplusImpl(const double* update_) {
-        _estimate += update_[0];
-        if(_estimate < 1e-6) _estimate = 1e-6;  //todo
+      _estimate += update_[0];
+      if(_estimate < 1e-6) _estimate = 1e-6;  //todo
     }
-
 };
 
 /*
@@ -456,13 +566,10 @@ public:
  * Vertex 2: current frame PR
  * Vertex 3: extrinsic pose Tbc(or Tcb)
  */
-class EdgePRIDP : public BaseMultiEdge<2, Vector2d>
-{
+class EdgePRIDP : public BaseMultiEdge<2, Vector2d>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    EdgePRIDP() : BaseMultiEdge<2, Vector2d>() {
-        resize(4);
-    }
+    EdgePRIDP() : BaseMultiEdge<2, Vector2d>() {resize(4);}
     bool read(std::istream& is) {return true;}
     bool write(std::ostream& os) const {return true;}
     void computeError(){}
@@ -490,9 +597,8 @@ public:
         Vector3d Pc = computePc();
         return Pc(2)>0.01;
     }
-
     Vector3d computePc(){}
-
+    
 protected:
     // [x,y] in normalized image plane in reference KF
     double refnormxy[2];

@@ -23,13 +23,13 @@ public:
   //though copy constructor/operator = already deep, please don't copy the list when preintegration is not related to the statei...j
   virtual ~OdomPreIntegratorBase(){}
   // Odom PreIntegration List Setting
-  virtual void SetPreIntegrationList(typename std::list<_OdomData>::const_iterator begin,typename std::list<_OdomData>::const_iterator pback){
+  virtual void SetPreIntegrationList(const typename std::list<_OdomData>::const_iterator &begin,typename std::list<_OdomData>::const_iterator pback){
     mlOdom.clear();
     mlOdom.insert(mlOdom.begin(),begin,++pback);
   }
   const std::list<_OdomData>& getlOdom(){return mlOdom;}//the list of Odom, for KFCulling()
   // Odom PreIntegration
-  virtual void PreIntegration(const double timeStampi,const double timeStampj){assert(0&&"You called an empty virtual function!!!");}
+  virtual void PreIntegration(const double timeStampi,const double timeStampj){assert(0&&"You called an empty virtual function!!!");}//cannot use =0 for we allow transformed in derived class
   
 };
 
@@ -49,7 +49,9 @@ public:
     mdelxEij=pre.mdelxEij;mSigmaEij=pre.mSigmaEij;
     return *this;
   }
-  void PreIntegration(const double &timeStampi,const double &timeStampj);//rewrite
+  void PreIntegration(const double &timeStampi,const double &timeStampj,
+		      const std::list<EncData>::const_iterator &iterBegin,const std::list<EncData>::const_iterator &iterEnd);//rewrite
+  void PreIntegration(const double &timeStampi,const double &timeStampj){PreIntegration(timeStampi,timeStampj,mlOdom.begin(),mlOdom.end());}//rewrite, inline
 };
 
 typedef Eigen::Matrix<double, 9, 9> Matrix9d;
@@ -85,7 +87,11 @@ public:
   }
   virtual ~IMUPreIntegratorBase(){}
   
-  void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar);//rewrite, like override
+  void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar,
+		      const typename std::list<IMUDataBase>::const_iterator &iterBegin,const typename std::list<IMUDataBase>::const_iterator &iterEnd);//rewrite, like override but different
+  void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar){//inline
+    PreIntegration(timeStampi,timeStampj,bgi_bar,bai_bar,this->mlOdom.begin(),this->mlOdom.end());
+  }//rewrite
   // incrementally update 1)delta measurements, 2)jacobians, 3)covariance matrix
   void update(const Vector3d& omega, const Vector3d& acc, const double& dt);//don't allow dt<0!
   inline Quaterniond normalizeRotationQ(const Quaterniond& r)
@@ -117,21 +123,21 @@ public:
 };
 //when template<>: specialized definition should be defined in .cpp(avoid redefinition) or use inline/static(not good) in .h and template func. in template class can't be specialized(only fully) when its class is not fully specialized
 template<class IMUDataBase>
-void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar){
+void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar,
+						       const typename std::list<IMUDataBase>::const_iterator &iterBegin,const typename std::list<IMUDataBase>::const_iterator &iterEnd){
   //TODO: refer to the code by JingWang
-  if (!this->mlOdom.empty()){
+  if (iterBegin!=iterEnd){//default parameter = !mlOdom.empty()
     // Reset pre-integrator first
     reset();
     // remember to consider the gap between the last KF and the first IMU
     // integrate each imu
-    typename std::list<IMUDataBase>::iterator iterEnd=this->mlOdom.end();
-    for (typename std::list<IMUDataBase>::iterator iterj=this->mlOdom.begin();iterj!=iterEnd;){
-      typename std::list<IMUDataBase>::iterator iterjm1=iterj++;//iterj-1
+    for (typename std::list<IMUDataBase>::const_iterator iterj=iterBegin;iterj!=iterEnd;){
+      typename std::list<IMUDataBase>::const_iterator iterjm1=iterj++;//iterj-1
       
       // delta time
       double dt,tj,tj_1;
-      if (iterjm1==this->mlOdom.begin()) tj_1=timeStampi; else tj_1=iterjm1->mtm;
-      if (iterj==this->mlOdom.end()) tj=timeStampj; else tj=iterj->mtm;
+      if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
+      if (iterj==iterEnd) tj=timeStampj; else tj=iterj->mtm;
       dt=tj-tj_1;
       if (dt==0) continue;//for we use [nearest imu data at timeStampi, nearest but <=timeStampj] or [/(timeStampi,timeStampj], when we concate them in KeyFrameCulling(), dt may be 0
       
@@ -204,7 +210,7 @@ public:
   Matrix3d mSigmaPhiij;// SigmaPhiij by qIMU, 3*3*float
 
   IMUPreIntegratorDerived():mdelxRji(Matrix3d::Identity()),mSigmaPhiij(Matrix3d::Zero()){}
-  void SetPreIntegrationList(std::list<IMUDataDerived>::iterator begin,std::list<IMUDataDerived>::iterator pback){
+  void SetPreIntegrationList(const std::list<IMUDataDerived>::const_iterator &begin,const std::list<IMUDataDerived>::const_iterator &pback){//rewrite, will override the base class one
     this->mlOdom.clear();
     this->mlOdom.push_front(*begin);this->mlOdom.push_back(*pback);
   }

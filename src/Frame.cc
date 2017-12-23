@@ -63,30 +63,30 @@ void Frame::UpdateNavStatePVRFromTcw()
 }
 
 //created by zzh
-template <>//specialized
-void Frame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator &begin,typename std::list<IMUData>::iterator &pback){
-  mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
-}
+// template <>//specialized
+// void Frame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback){
+//   mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
+// }
 template <>
-void Frame::PreIntegration<IMUData>(Frame* pLastF){
+void Frame::PreIntegration<IMUData>(Frame* pLastF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj){
   Eigen::Vector3d bgi_bar=pLastF->mNavState.mbg,bai_bar=pLastF->mNavState.mba;//we can directly use mNavState here
 #ifndef TRACK_WITH_IMU
-  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp);
+  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,iteri,iterj);
 #else
-  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
+  mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar,iteri,iterj);
 #endif
 }
 template <>
-void Frame::PreIntegration<EncData>(KeyFrame* pLastKF){
-  mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const std::list<EncData>::const_iterator &iteri,const std::list<EncData>::const_iterator &iterj){
+  mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,iteri,iterj);
 }
 template <>
-void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF){
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj){
   Eigen::Vector3d bgi_bar=pLastKF->GetNavState().mbg,bai_bar=pLastKF->GetNavState().mba;
 #ifndef TRACK_WITH_IMU
-  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp);
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,iteri,iterj);
 #else
-  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
+  mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar,iteri,iterj);
 #endif
 }
 

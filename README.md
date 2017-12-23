@@ -10,11 +10,12 @@ Now this project is revised by zzh
 4.A Stereo/RGBD version with Encoder+IMU will soon come
 
 
-Dec. 14
+Dec. 24
 ----------------------------------------
 Tested on:
 
-EuRoC ASL Dataset Format: V101,V103,V202,V203,MH04,MH05.
+EuRoC ASL Dataset Format: (All Clear!) V101(1.4cm),V102(1.8),V103(4.4),V201(1.2),V202(1.3),V203(2.6),MH01(6.7),MH02(5.7),MH03(6.3),MH04(5.9),MH05(9.4).
+(Available GT RMSE(cm) of Full BA VIORBSLAM)
 
 
 Usage:

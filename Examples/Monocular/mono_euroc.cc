@@ -204,19 +204,20 @@ int main(int argc, char **argv)
 
     // Stop all threads
     SLAM.Shutdown();
-    
+//     cout<<"Please enter s to save!"<<endl;
+//     while (cin.get()!='s') {sleep(1);}
     //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
     //load if Full BA just after IMU Initialized
     cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
-    cv::FileNode fnFBA=fSettings["IMU.FullBA"];
+    cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
+    SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
     if (!fnFBA.empty()){
       if((int)fnFBA){
-	SLAM.FinalGBA(15,false);
-	cout<<azureSTR"Execute FullBA!"<<whiteSTR<<endl;
+	SLAM.FinalGBA(fnFBA,false);
+	cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
       }
     }else{
-      cout<<redSTR"Default execute FullBA!"<<whiteSTR<<endl;
-      SLAM.FinalGBA(15,false);
+      cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
     }
 
     // Tracking time statistics

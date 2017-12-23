@@ -47,9 +47,9 @@ cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const
   return Tcw;
 }
 void System::FinalGBA(int nIterations,bool bRobust){
-  if (mpIMUInitiator->GetSensorIMU())//zzh, Full BA
-    Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),nIterations,NULL,0,bRobust);
-  else
+  if (mpIMUInitiator->GetVINSInited()){//zzh, Full BA, GetVINSInited() instead of GetSensorIMU() for pure-vision+IMU Initialization mode
+    Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),nIterations,NULL,0,bRobust,true);
+  }else
     Optimizer::GlobalBundleAdjustment(mpMap,nIterations,NULL,0,bRobust);
 }
 
@@ -303,7 +303,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run,mpLocalMapper);
 
     //Initialize the Loop Closing thread and launch
-    mpLoopCloser = new LoopClosing(mpMap, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR);
+    mpLoopCloser = new LoopClosing(mpMap, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, strSettingsFile);
     mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);
 
     //Initialize the Viewer thread and launch

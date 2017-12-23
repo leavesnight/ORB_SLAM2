@@ -66,7 +66,7 @@ void KeyFrame::UpdateNavStatePVRFromTcw()
 }
 
 template <>//specialized
-void KeyFrame::SetPreIntegrationList<IMUData>(typename std::list<IMUData>::iterator begin,typename std::list<IMUData>::iterator pback){
+void KeyFrame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback){
   unique_lock<mutex> lock(mMutexOdomData);
   mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
 }
@@ -79,6 +79,15 @@ void KeyFrame::PreIntegration<IMUData>(KeyFrame* pLastKF){
 #else
   mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,bgi_bar,bai_bar);
 #endif
+}
+
+std::set<KeyFrame *> KeyFrame::GetConnectedKeyFramesByWeight(int w){
+  vector<KeyFrame*> vConnectedKFw=GetCovisiblesByWeight(w);
+  unique_lock<mutex> lock(mMutexConnections);
+  set<KeyFrame*> s;
+  for(vector<KeyFrame*>::iterator vit=vConnectedKFw.begin();vit!=vConnectedKFw.end();++vit)
+    s.insert(*vit);
+  return s;
 }
   
 //created by zzh over.
