@@ -36,7 +36,8 @@ public:
   // incremental addition, dx = [dP, dV, dPhi, dBa, dBg] for oplusImpl(), see Manifold paper (70)
   template <int D>//default is for 6, IncSmallPR
   void IncSmall(const Matrix<double,D,1> &dPR){//also inline
-    mpwb+=dPR.template segment<3>(0);//mpwb+=mRwb*deltax.segment<3>(0);//here dp=R*dp(in paper On-Manifold Preintegration)
+//     mpwb+=mRwb*dPR.template segment<3>(0);//here dp<-p+R*dp(in paper On-Manifold Preintegration)
+    mpwb+=dPR.template segment<3>(0);//here p<-p+dp, dp=R*dp(in paper On-Manifold Preintegration)
     mRwb*=Sophus::SO3::exp(dPR.template segment<3>(3));//right distrubance model
   }
   inline void IncSmallBias(const Vector6d &dBias){
@@ -52,7 +53,9 @@ inline void NavState::IncSmall<3>(const Vector3d &dV){
 }//IncSmallV
 template<>
 inline void NavState::IncSmall<9>(const Vector9d &dPVR){
-  mpwb+=dPVR.segment<3>(0);mvwb+=dPVR.segment<3>(3);
+//   mpwb+=mRwb*dPVR.segment<3>(0);//here dp<-p+R*dp(in paper On-Manifold Preintegration)
+  mpwb+=dPVR.segment<3>(0);//we don't discover improvement using p<-p+R*dp, so we prefer the simple form p<-p+dp
+  mvwb+=dPVR.segment<3>(3);
   mRwb*=Sophus::SO3::exp(dPVR.segment<3>(6));
 }//IncSmallPVR
 

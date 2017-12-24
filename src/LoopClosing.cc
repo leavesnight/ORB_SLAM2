@@ -66,7 +66,8 @@ LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, 
     }
     cv::FileNode fnIter[2]={fSettings["GBA.iterations"],fSettings["GBA.initIterations"]};
     if (fnIter[0].empty()||fnIter[1].empty()){
-      mnInitIterations=15;mnIterations=15;
+      mnInitIterations=15;//15 as the VIORBSLAM paper
+      mnIterations=10;//default 10 for real-time nice responce
       cout<<redSTR"No iterations,use default 15(normal),15(init)"<<whiteSTR<<endl;
     }else{
       mnIterations=fnIter[0];
@@ -708,14 +709,14 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     if (mpIMUInitiator->GetVINSInited()){
       if (!mpIMUInitiator->GetInitGBAOver()){//if it's 1st Full BA just after IMU Initialized(the before ones may be cancelled)
 	cout<<redSTR"Full BA just after IMU Initializated!"<<whiteSTR<<endl;
-	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);
+	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
 // 	mbFixScale=true;
       }else
-	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
+	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);
       bUseGBAPRV=true;
     }else{
       cout<<redSTR"pure-vision GBA!"<<whiteSTR<<endl;
-      Optimizer::GlobalBundleAdjustment(mpMap,10,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+      Optimizer::GlobalBundleAdjustment(mpMap,mnIterations,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
     }
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes

@@ -44,8 +44,13 @@ void EdgeNavStatePriorPRVBias::computeError()
 }
 void EdgeNavStatePriorPRVBias::linearizeOplus()
 {
-    Matrix<double,15,6> _jacobianOplusPR = Matrix<double,15,6>::Zero();//J_ej_dPRj=[-I Jrinv(phi_eRj)]
-    _jacobianOplusPR.block<3,3>(0,0)= - Matrix3d::Identity();
+    Matrix<double,15,6> _jacobianOplusPR = Matrix<double,15,6>::Zero();//J_ej_dPRj=[-I Jrinv(phi_eRj)](p<-p+dp); [-Rj ...](p<-p+R*dp)
+    
+//     const VertexNavStatePR* vNSPR=static_cast<const VertexNavStatePR*>(_vertices[0]);//PRj
+//     _jacobianOplusPR.block<3,3>(0,0)= - vNSPR->estimate().getRwb();//p<-p+R*dp
+    
+    _jacobianOplusPR.block<3,3>(0,0)= - Matrix3d::Identity();//p<-p+dp
+    
     _jacobianOplusPR.block<3,3>(3,3)=Sophus::SO3::JacobianRInv( _error.segment<3>(3));//P(R)VBgBa
     Matrix<double,15,3> _jacobianOplusV = Matrix<double,15,3>::Zero();//J_ej_dv=-I
     _jacobianOplusV.block<3,3>(6,0)= - Matrix3d::Identity();//wrong 6 in JingWang code
@@ -71,11 +76,16 @@ void EdgeNavStatePriorPVRBias::computeError()
 }
 void EdgeNavStatePriorPVRBias::linearizeOplus()
 {
-    _jacobianOplusXi= Matrix<double,15,9>::Zero();//J_ej_dPVRj=[-I -I Jrinv(phi_eRj)]
-    _jacobianOplusXi.block<3,3>(0,0)= - Matrix3d::Identity();
+    _jacobianOplusXi= Matrix<double,15,9>::Zero();//J_ej_dPVRj=[-I -I Jrinv(phi_eRj)](p<-p+dp); [-Rj ...](p<-p+R*dp)
+    
+//     const VertexNavStatePVR* vNSPVR=static_cast<const VertexNavStatePVR*>(_vertices[0]);//PVRj
+//     _jacobianOplusXi.block<3,3>(0,0)= - vNSPVR->estimate().getRwb();//p<-p+R*dp
+    
+    _jacobianOplusXi.block<3,3>(0,0)= - Matrix3d::Identity();//p<-p+dp
+    
     _jacobianOplusXi.block<3,3>(3,3)= - Matrix3d::Identity();
     _jacobianOplusXi.block<3,3>(6,6)=Sophus::SO3::JacobianRInv( _error.segment<3>(6));//PV(R)BgBa
-    _jacobianOplusXj = Matrix<double,15,6>::Zero();//j_ej_db=-I
+    _jacobianOplusXj = Matrix<double,15,6>::Zero();//J_ej_db=-I
     _jacobianOplusXj.block<3,3>(9,0)= - Matrix3d::Identity();_jacobianOplusXj.block<3,3>(12,3)= - Matrix3d::Identity();
 }
 
