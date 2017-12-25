@@ -12,22 +12,22 @@ Examples/ROS/ORB_SLAM2/build/
 Examples/Stereo/stereo_euroc
 Examples/Stereo/stereo_kitti
 KeyFrameTrajectory*.txt
-debug.txt
 Thirdparty/DBoW2/build/
 Thirdparty/DBoW2/lib/
 Thirdparty/g2o/build/
 Thirdparty/g2o/config.h
 Thirdparty/g2o/lib/
 Vocabulary/ORBvoc.txt
-Vocabulary/ORBvoc.bin
 build/
-build2/
 *~
 lib/
 
 #added by zzh
+build2/
+Vocabulary/ORBvoc.bin
 CameraTrajectory.txt
+debug.txt
 *.pcd
-kinect2*.yaml
 *.kdev4
+kinect*.yaml
 *.save*

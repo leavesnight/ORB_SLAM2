@@ -56,7 +56,7 @@ void System::FinalGBA(int nIterations,bool bRobust){
 void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc){
     cout << endl << "Saving keyframe NavState to " << filename << " ..." << endl;
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
-    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+//     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);//set of KFs in Map is already sorted, so it's useless
 
     // Transform all keyframes so that the first keyframe is at the origin.
     // After a loop closure the first keyframe might not be at the origin.
@@ -84,7 +84,156 @@ void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc)
     f.close();
     cout << endl << "NavState trajectory saved!" << endl;
 }
-void System::SaveMap(const string &filename){//maybe can be rewritten in Tracking.cc
+void System::LoadMap(const string &filename,bool bPCL){
+  if (!bPCL){
+    cout << endl << "Loading Map: 1st step...Keyframe NavState from " << filename << " ..." << endl;
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+    ifstream f;f.open(filename.c_str(),ios_base::in|ios_base::binary);
+    
+    map<size_t,KeyFrame*> mapIdpKF;//make a map from mnId to KeyFrame*
+    double pdData[3];
+    double pdData4[4];
+    vector<vector<long unsigned int>> vpKFMPIdMatches(vpKFs.size());//cache matched MPs' id
+    for(size_t i=0; i<vpKFs.size(); ++i){
+      KeyFrame* pKF = vpKFs[i];
+      // pKF->SetPose(pKF->GetPose()*Two);
+      if(pKF->isBad()) continue;
+
+      //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
+      NavState ns;
+      f.read((char*)pdData,sizeof(pdData));ns.mpwb<<pdData[0],pdData[1],pdData[2];//txyz
+      f.read((char*)pdData4,sizeof(pdData4));ns.mRwb.setQuaternion(Eigen::Quaterniond(pdData4));//qxyzw
+      f.read((char*)pdData,sizeof(pdData));ns.mvwb<<pdData[0],pdData[1],pdData[2];//vxyz
+      f.read((char*)pdData,sizeof(pdData));ns.mbg<<pdData[0],pdData[1],pdData[2];//bgxyz
+      f.read((char*)pdData,sizeof(pdData));ns.mba<<pdData[0],pdData[1],pdData[2];//baxyz
+      f.read((char*)pdData,sizeof(pdData));ns.mdbg<<pdData[0],pdData[1],pdData[2];//dbgxyz
+      f.read((char*)pdData,sizeof(pdData));ns.mdba<<pdData[0],pdData[1],pdData[2];//dbaxyz
+      pKF->SetNavState(ns);
+      
+      mapIdpKF[pKF->mnId]=pKF;
+      size_t NMPMatches;
+      f.read((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
+      vpKFMPIdMatches[i].resize(NMPMatches);
+      for (int j=0;j<NMPMatches;++j){
+	f.read((char*)&vpKFMPIdMatches[i][j],sizeof(vpKFMPIdMatches[i][j]));//MP's id(if ULONG_MAX meaning unmatched)
+      }
+    }
+    
+    cout << "2nd step...MapPoint old Id & Position & refKFId & observations from " << filename << " ..." << endl;
+    map<size_t,MapPoint*> mapIdpMP;//make a map from mnId to MapPoint*
+    long unsigned int nlData;//for id
+    float pdfData[3];//for Xw
+    mpMap->clearMPs();
+    size_t NMPs;
+    f.read((char*)&NMPs,sizeof(NMPs));//size of observations
+    cout<<NMPs<<endl;
+    for (size_t i=0;i<NMPs;++i){
+      long unsigned int oldId;
+      f.read((char*)&oldId,sizeof(oldId));//old Id
+      f.read((char*)pdfData,sizeof(pdfData));//float xyz
+      cv::Mat X3D=(cv::Mat_<float>(3,1) << pdfData[0], pdfData[1], pdfData[2]);
+      f.read((char*)&nlData,sizeof(nlData));//refKF's id
+      assert(mapIdpKF.count(nlData)==1);
+      MapPoint* pMP=new MapPoint(X3D,mapIdpKF[nlData],mpMap);
+      
+      size_t Nobs;
+      f.read((char*)&Nobs,sizeof(Nobs));//size of observations
+      for(int j=0;j<Nobs;++j){
+        f.read((char*)&nlData,sizeof(nlData));//obs: KFj's id
+	assert(mapIdpKF.count(nlData)==1);
+	size_t idKeyPoint;
+	f.read((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
+	pMP->AddObservation(mapIdpKF[nlData],idKeyPoint);
+      }
+      pMP->ComputeDistinctiveDescriptors();
+      pMP->UpdateNormalAndDepth();
+      mpMap->AddMapPoint(pMP);
+      
+      mapIdpMP[oldId]=pMP;
+    }
+//     pKFini->AddMapPoint(pNewMP,i);
+
+    cout<<"3rd step...Add matched MapPoints to KeyFrames..."<<endl;
+    for (int i=0;i<vpKFMPIdMatches.size();++i){
+      KeyFrame* pKF = vpKFs[i];
+      for (int j=0;j<vpKFMPIdMatches[i].size();++j){
+	if (vpKFMPIdMatches[i][j]==ULONG_MAX){//unmatched
+	  pKF->EraseMapPointMatch(j);
+	}else{
+	  assert(mapIdpMP.count(vpKFMPIdMatches[i][j])==1);
+	  pKF->AddMapPoint(mapIdpMP[vpKFMPIdMatches[i][j]],j);
+	}
+      }
+    }
+    
+    return;
+  }
+}
+void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc){//maybe can be rewritten in Tracking.cc
+  if (!bPCL){
+    cout << endl << "Saving Map: 1st step...Keyframe NavState & matched MapPoints' old Id to " << filename << " ..." << endl;
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+    ofstream f;f.open(filename.c_str(),ios_base::out|ios_base::binary);
+    
+    double* pdData;
+    long unsigned int nlData;
+    long unsigned int* pnlData;//for id
+    for(size_t i=0; i<vpKFs.size(); ++i){
+      KeyFrame* pKF = vpKFs[i];
+      // pKF->SetPose(pKF->GetPose()*Two);
+      if(pKF->isBad()) continue;
+
+      //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
+      if (bUseTbc) pKF->UpdateNavStatePVRFromTcw();//for Monocular
+      NavState ns=pKF->GetNavState();
+      Eigen::Quaterniond q=ns.mRwb.unit_quaternion();//qwb from Rwb
+      pdData=ns.mpwb.data();f.write((char*)pdData,sizeof(*pdData)*3);//txyz
+      pdData=q.coeffs().data();f.write((char*)pdData,sizeof(*pdData)*4);//qxyzw
+      pdData=ns.mvwb.data();f.write((char*)pdData,sizeof(*pdData)*3);//vxyz
+      pdData=ns.mbg.data();f.write((char*)pdData,sizeof(*pdData)*3);//bgxyz
+      pdData=ns.mba.data();f.write((char*)pdData,sizeof(*pdData)*3);//baxyz
+      pdData=ns.mdbg.data();f.write((char*)pdData,sizeof(*pdData)*3);//dbgxyz
+      pdData=ns.mdba.data();f.write((char*)pdData,sizeof(*pdData)*3);//dbaxyz
+      
+      vector<MapPoint*> vpMPMatches=pKF->GetMapPointMatches();
+      size_t NMPMatches=vpMPMatches.size();
+      f.write((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
+      for (int j=0;j<NMPMatches;++j){
+	if (vpMPMatches[j]==NULL||vpMPMatches[j]->isBad()){
+	  nlData=ULONG_MAX;
+	  f.write((char*)&nlData,sizeof(nlData));//unmatched MPs' id
+	}else{
+	  pnlData=&vpMPMatches[j]->mnId;f.write((char*)pnlData,sizeof(*pnlData));//matched MPs' id
+	}
+      }
+    }
+    
+    cout << "2nd step...MapPoint's old Id & Position & refKFId & observations to " << filename << " ..." << endl;
+    mpMap->ClearBadMPs();
+    vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();
+    size_t NMPs=vpMPs.size();cout<<NMPs<<endl;
+    f.write((char*)&NMPs,sizeof(NMPs));//size of observations
+    for (size_t i=0;i<NMPs;++i){
+      MapPoint* pMP=vpMPs[i];
+      assert(pMP&&!(pMP->isBad()));
+      
+      pnlData=&pMP->mnId;f.write((char*)pnlData,sizeof(*pnlData));//old Id
+      f.write((char*)(pMP->GetWorldPos().data),sizeof(float)*3);//float xyz
+      assert(!(pMP->GetReferenceKeyFrame()->isBad()));
+      pnlData=&pMP->GetReferenceKeyFrame()->mnId;f.write((char*)pnlData,sizeof(*pnlData));//refKF's id
+      map<KeyFrame*,size_t> observations=pMP->GetObservations();//observations
+      size_t Nobs=observations.size();
+      f.write((char*)&Nobs,sizeof(Nobs));//size of observations
+      for(map<KeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; ++mit){
+	assert(!(mit->first->isBad()));
+        pnlData=&mit->first->mnId;f.write((char*)pnlData,sizeof(*pnlData));//obs: KFj's id
+	size_t idKeyPoint=mit->second;f.write((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
+      }
+    }
+    
+    return;
+  }
+  
   //typedef
   typedef pcl::PointXYZRGB PointT;
 

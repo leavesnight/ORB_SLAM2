@@ -55,6 +55,8 @@ public:
     unique_lock<mutex> lock(mMutexMap);
     return mnChangeIdx;
   }
+  void ClearBadMPs();
+  void clearMPs();
   
 //created by zzh over.
   

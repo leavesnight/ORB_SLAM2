@@ -339,8 +339,8 @@ void EdgeNavStateProjectXYZWithScale<DE,DV>::linearizeOplus(){
   JNavState.template block<DE,3>(0,DV-3)=JdRwb;//only for 9(J_e_dV=0)/6
   _jacobianOplus[1]=JNavState;
   
-  //Jacobian of error(-pc) w.r.t dXw/dPw: J_e_dXw=JdXw=J_e_Pc*J_Pc_dPw=Jproj*Rcw=-JdPwb
-   _jacobianOplus[0]=Jproj*Rcw*scale;//Pw<-Pw+dPw, Pw_true=sPw
+  //Jacobian of error(-pc) w.r.t dXw/dPw: J_e_dXw=JdXw=J_e_Pc*J_Pc_dPw=Jproj*Rcw=-JdPwb*s(for scaled pwb) / -JdPwb(for unscaled pwb)
+   _jacobianOplus[0]=JdPwb*(-scale);//Jproj*Rcw*scale; Pw<-Pw+dPw, Pw_true=sPw
   
   //Jacobian of error(-pc) w.r.t ds: J_e_ds=Jds=J_e_Pc*J_Pc_ds
 //   _jacobianOplus[2]=Jproj*Rcw*(Pw-ns.mpwb+RwcPcb);//for unscaled pwb: J_Pc_ds=Rcw*(Pw-(twb-Rwc*tcb)), easy to prove
@@ -431,15 +431,15 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   Vector3d eR=_error.segment<3>(idR);//r_deltaRij/eR/r_Phiij
   //J_rpij_dxi
   JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(pj-pi-vi*deltat-gw*(deltat*deltat/2)));//J_rpij_dPhi_i
-//   JPRVi.block<3,3>(0,0)=-Matrix3d::Identity();//J_rpij_dpi=-I3x3, notice here use pi->pi+Ri*dpi
-  JPRVi.block<3,3>(0,0)=-RiT;//J_rpij_dpi, notice here use pi->pi+dpi not the form pi->pi+Ri*dpi in the paper!
+//   JPRVi.block<3,3>(0,0)=-Matrix3d::Identity();//J_rpij_dpi=-I3x3, notice here use pi<-pi+Ri*dpi
+  JPRVi.block<3,3>(0,0)=-RiT;//J_rpij_dpi, notice here use pi<-pi+dpi not the form pi<-pi+Ri*dpi in the paper!
   JPRVi.block<3,3>(0,idV)=-RiT*deltat;//J_rpij_dvi
   JBiasi.block<3,3>(0,0)=-_measurement.mJgpij;//J_rpij_ddbgi
   JBiasi.block<3,3>(0,3)=-_measurement.mJapij;//J_rpij_ddbai
   //J_rpij_dxj
   JPRVj.block<3,3>(0,idR)=O3x3;//J_rpij_dPhi_j
 //   JPRVj.block<3,3>(0,0)=RiT*nsPRj.getRwb();//J_rpij_dpj=Ri.t()*Rj, notice here use pj<-pj+Rj*dpj
-  JPRVj.block<3,3>(0,0)=RiT;//J_rpij_dpj, notice here use pj<-pj+dpj not the form pj->pj+Rj*dpj in the paper!
+  JPRVj.block<3,3>(0,0)=RiT;//J_rpij_dpj, notice here use pj<-pj+dpj not the form pj<-pj+Rj*dpj in the paper!
   JPRVj.block<3,3>(0,idV)=O3x3;//J_rpij_dvj
   //J_rvij_dxi
   JPRVi.block<3,3>(idV,idR)=Sophus::SO3::hat(RiT*(vj-vi-gw*deltat));//J_rvij_dPhi_i

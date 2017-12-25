@@ -28,6 +28,24 @@ namespace ORB_SLAM2
 bool Map::KFIdComapre::operator ()(const KeyFrame* kfleft,const KeyFrame* kfright) const{//zzh
     return kfleft->mnId < kfright->mnId;
 }
+void Map::ClearBadMPs(){
+  unique_lock<mutex> lock(mMutexMap);
+  mvpReferenceMapPoints.clear();
+  for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++){
+    if ((*sit)->isBad()){
+      delete *sit;
+      mspMapPoints.erase(*sit);
+    }
+  }
+}
+void Map::clearMPs(){
+  for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++)
+    delete *sit;
+  mspMapPoints.clear();
+  mvpReferenceMapPoints.clear();
+}
+
+//created by zzh over
 
 Map::Map():mnMaxKFid(0),mnBigChangeIdx(0),
 mnChangeIdx(0)//zzh

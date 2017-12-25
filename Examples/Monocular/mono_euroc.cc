@@ -211,6 +211,7 @@ int main(int argc, char **argv)
     cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
     cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
+//     SLAM.SaveMap("KeyFrameTrajectoryMap.bin",false);
     if (!fnFBA.empty()){
       if((int)fnFBA){
 	SLAM.FinalGBA(fnFBA,false);
@@ -233,7 +234,7 @@ int main(int argc, char **argv)
 
     // Save camera trajectory
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");  
     //SLAM.SaveTrajectoryTUM("FrameTrajectory.txt");
     //SLAM.SaveMap("Map.pcd");//zzh
     //wait for pOdomThread finished
