@@ -86,6 +86,8 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
   return cv::Mat();
 }
 
+size_t gnCheck=0;
+
 void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
@@ -94,8 +96,23 @@ void Tracking::PreIntegration(const char type){
 //   cout<<"encdata over"<<endl;
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
 //   cout<<"over"<<endl;
-   if (type==2){
-     cout<<"List size: "<<mpReferenceKF->GetListIMUData().size()<<endl;
+  /*
+  if (!mpIMUInitiator->GetVINSInited()) return;
+  if (type==1||type==3) ++gnCheck;
+  static unsigned int lastRelocId=mnLastRelocFrameId;
+  static bool firstEnter=true;*/
+  if (type==2){
+    size_t N=mpReferenceKF->GetListIMUData().size();
+    cout<<"List size: "<<N<<endl;/*
+    if (lastRelocId!=mnLastRelocFrameId){
+      firstEnter=true;
+    }
+    if (!firstEnter){
+      assert(gnCheck*10==N-1);
+    }else{
+      firstEnter=false;
+    }
+    gnCheck=0;*/
 //      if (mpReferenceKF->GetListIMUData().size()==0) cout<<fixed<<setprecision(6)<<"Last:"<<mpLastKeyFrame->mTimeStamp<<" Cur:"<<mCurrentFrame.mTimeStamp<<endl;
 // #ifndef TRACK_WITH_IMU
 //     Eigen::AngleAxisd angax(mpReferenceKF->GetIMUPreInt().mdelxRji);
@@ -103,23 +120,23 @@ void Tracking::PreIntegration(const char type){
 // #else
 //     cout<<Sophus::SO3::log(Sophus::SO3(mpReferenceKF->GetIMUPreInt().mRij)).transpose()<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #endif
-   }else if (0&&(type==3||type==1)){
-     if (0&&type==1){
-       const list<IMUData> &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
-       cout<<blueSTR"List size between 2Frames: "<<limu.size()<<whiteSTR<<endl;
-       for (auto data:limu) cout<<data.mtm<<": a="<<data.ma.transpose()<<" w="<<data.mw.transpose()<<", ";
-       cout<<endl;
-     }
-     NavState ns;
-     if (type==3) ns=mpLastKeyFrame->GetNavState(); else ns=mLastFrame.mNavState;
-     cout<<"lastF/KF's bg="<<ns.mbg.transpose()<<", ba="<<ns.mba.transpose()<<", dbg="<<ns.mdbg.transpose()<<" ,dba="<<ns.mdba.transpose()<<endl;
-     cout<<"last F/KF(i) to CurF(j): delta_pij="<<mCurrentFrame.mOdomPreIntIMU.mpij.transpose()<<endl;/*
-     cout<<"gw="<<mpIMUInitiator->GetGravityVec().t()<<endl;
-     cv::Mat Tji;
-     if (type==3) Tji=mlRelativeFramePoses.back();else Tji=mVelocity;//Tcjci
-     Tji=Frame::mTbc*Tji*Converter::toCvMatInverse(Frame::mTbc);//Tbjbi=Tbc*Tcjci*Tcb
-     cout<<"pij by camera="<<-(Tji.rowRange(0,3).colRange(0,3).t()*Tji.rowRange(0,3).col(3)).t()<<endl;*/
-   }
+  }else if (0&&(type==3||type==1)){
+    if (0&&type==1){
+      const list<IMUData> &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
+      cout<<blueSTR"List size between 2Frames: "<<limu.size()<<whiteSTR<<endl;
+      for (auto data:limu) cout<<data.mtm<<": a="<<data.ma.transpose()<<" w="<<data.mw.transpose()<<", ";
+      cout<<endl;
+    }
+    NavState ns;
+    if (type==3) ns=mpLastKeyFrame->GetNavState(); else ns=mLastFrame.mNavState;
+    cout<<"lastF/KF's bg="<<ns.mbg.transpose()<<", ba="<<ns.mba.transpose()<<", dbg="<<ns.mdbg.transpose()<<" ,dba="<<ns.mdba.transpose()<<endl;
+    cout<<"last F/KF(i) to CurF(j): delta_pij="<<mCurrentFrame.mOdomPreIntIMU.mpij.transpose()<<endl;/*
+    cout<<"gw="<<mpIMUInitiator->GetGravityVec().t()<<endl;
+    cv::Mat Tji;
+    if (type==3) Tji=mlRelativeFramePoses.back();else Tji=mVelocity;//Tcjci
+    Tji=Frame::mTbc*Tji*Converter::toCvMatInverse(Frame::mTbc);//Tbjbi=Tbc*Tcjci*Tcb
+    cout<<"pij by camera="<<-(Tji.rowRange(0,3).colRange(0,3).t()*Tji.rowRange(0,3).col(3)).t()<<endl;*/
+  }
 }
 bool Tracking::TrackWithIMU(bool bMapUpdated){
     ORBmatcher matcher(0.9,true);//here 0.9 is useless

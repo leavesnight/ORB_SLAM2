@@ -333,6 +333,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
       if (!mlOdomEnc.empty()){
 	double curTime=mCurrentFrame.mTimeStamp;
 	typename list<EncData>::const_iterator iter=mlOdomEnc.end();
+	cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
 	iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg);//we just find the nearest iteri(for next time) to curTime, don't need to judge if it's true
 	
 	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
@@ -346,6 +347,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	double curFTime=pCurF->mTimeStamp,lastFTime=pLastF->mTimeStamp;
 	typename list<EncData>::const_iterator iter=mlOdomEnc.end();
 	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastFTime,miterLastEnc,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+// 	  assert((miterLastEnc->mtm-lastFTime)==0&&(iter->mtm-curFTime)==0);
 // 	  cout<<redSTR"ID="<<pCurF->mnId<<"; LastDiff:"<<miterLastEnc->mtm-lastFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
 	  pCurF->PreIntegration<EncData>(pLastF,miterLastEnc,iter);//it is optimized without copy
 	}
@@ -362,6 +364,8 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	double curTime=mpReferenceKF->mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
 	typename list<EncData>::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();//iterj, iteri
 	if (iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+// 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curTime)==0);
+// 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curTime<<whiteSTR<<" LastTime="<<fixed<<setprecision(9)<<lastKFTime<<"; cur="<<mCurrentFrame.mTimeStamp<<endl;
 	  mpReferenceKF->SetPreIntegrationList<EncData>(iteri,iter);//save odom data list in curKF for KeyFrameCulling()
 	}
 	
@@ -377,6 +381,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
 	double curFTime=mCurrentFrame.mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
 	typename list<EncData>::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();
 	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+// 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curFTime)==0);
 // 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
 	  mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame,iteri,iter);//it is optimized without copy, Notice here should start from last KF!
 	}

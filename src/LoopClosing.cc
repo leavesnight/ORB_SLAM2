@@ -709,8 +709,8 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     if (mpIMUInitiator->GetVINSInited()){
       if (!mpIMUInitiator->GetInitGBAOver()){//if it's 1st Full BA just after IMU Initialized(the before ones may be cancelled)
 	cout<<redSTR"Full BA just after IMU Initializated!"<<whiteSTR<<endl;
-	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
-// 	mbFixScale=true;
+	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper; for MH05/04: true seems not too much different
+// 	mbFixScale=true;//not good for V203 when used
       }else
 	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);
       bUseGBAPRV=true;
