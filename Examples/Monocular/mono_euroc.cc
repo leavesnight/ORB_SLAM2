@@ -204,8 +204,7 @@ int main(int argc, char **argv)
 
     // Stop all threads
     SLAM.Shutdown();
-//     cout<<"Please enter s to save!"<<endl;
-//     while (cin.get()!='s') {sleep(1);}
+    
     //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
     //load if Full BA just after IMU Initialized
     cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
@@ -235,7 +234,7 @@ int main(int argc, char **argv)
     // Save camera trajectory
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
-    //SLAM.SaveTrajectoryTUM("FrameTrajectory.txt");
+    //SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
     //SLAM.SaveMap("Map.pcd");//zzh
     //wait for pOdomThread finished
     if (pOdomThread!=NULL)//zzh

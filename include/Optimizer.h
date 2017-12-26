@@ -232,7 +232,6 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
 	  }
 	  else  // Stereo observation
 	  {
-	      assert(0&&"Now we just test Mono!but u enter the wrong section!");
 	      nInitialCorrespondences++;
 	      pFrame->mvbOutlier[i] = false;
 

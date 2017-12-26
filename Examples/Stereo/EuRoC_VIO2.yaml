@@ -53,7 +53,7 @@ Camera.Tco:
   0.000000000,  0.000000000,  0.000000000,  1.000000000]
 
 # Local Window size(0 means pure-vision+IMU Initialzation but no IMU error in BA): JW is 20, VIORBSLAM paper uses 10, but 5 for V203 in my PC
-LocalMapping.LocalWindowSize: 5
+LocalMapping.LocalWindowSize: 10
 
 # the Error allow between "simultaneous" IMU data(Timu=Timu+delaytoimu) & Image's mTimeStamp(Timg): Timu=[Timg-err,Timg+err]; out of this range, no IMU data is used between 2KFs/Fs, max 1/fps; we suppose ErrEncImg=ErrIMUImg
 ErrIMUImg: 0.03
@@ -76,10 +76,10 @@ Loop.More: 0
 #--------------------------------------------------------------------------------------------
 
 # Camera calibration and distortion parameters (OpenCV) 
-Camera.fx: 435.2046959714599
-Camera.fy: 435.2046959714599
-Camera.cx: 367.4517211914062
-Camera.cy: 252.2008514404297
+Camera.fx: 435.2616200843788
+Camera.fy: 435.2616200843788
+Camera.cx: 367.4154319763184
+Camera.cy: 252.1711006164551
 
 Camera.k1: 0.0
 Camera.k2: 0.0
@@ -93,7 +93,7 @@ Camera.height: 480
 Camera.fps: 20.0
 
 # stereo baseline times fx
-Camera.bf: 47.90639384423901
+Camera.bf: 47.9126599277578
 
 # Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
 Camera.RGB: 1
@@ -126,7 +126,7 @@ LEFT.P:  !!opencv-matrix
    rows: 3
    cols: 4
    dt: d
-   data: [435.2046959714599, 0, 367.4517211914062, 0,  0, 435.2046959714599, 252.2008514404297, 0,  0, 0, 1, 0]
+   data: [435.2616200843788, 0, 367.4154319763184, 0,  0, 435.2616200843788, 252.1711006164551, 0,  0, 0, 1, 0]
 
 RIGHT.height: 480
 RIGHT.width: 752
@@ -149,7 +149,7 @@ RIGHT.P:  !!opencv-matrix
    rows: 3
    cols: 4
    dt: d
-   data: [435.2046959714599, 0, 367.4517211914062, -47.90639384423901, 0, 435.2046959714599, 252.2008514404297, 0, 0, 0, 1, 0]
+   data: [435.2616200843788, 0, 367.4154319763184, -47.9126599277578, 0, 435.2616200843788, 252.1711006164551, 0, 0, 0, 1, 0]
 
 #--------------------------------------------------------------------------------------------
 # ORB Parameters

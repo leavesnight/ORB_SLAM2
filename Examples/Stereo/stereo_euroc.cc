@@ -34,11 +34,87 @@ using namespace std;
 void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
                 vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps);
 
+//zzh
+ORB_SLAM2::System* g_pSLAM;
+double g_simulateTimestamp=-1;
+bool g_brgbdFinished=false;
+mutex g_mutex;
+
+//a new thread simulating the odom serial threads
+void odomRun(ifstream &finOdomdata,int totalNum){//must use &
+  //read until reading over
+  int nTotalNum=6;//wx~z,ax~z
+  if (totalNum!=0) nTotalNum=totalNum;
+  double* odomdata=new double[nTotalNum];
+  double timestamp,tmstpLast=-1;
+  
+  while (!g_pSLAM){//if it's NULL
+    usleep(15000);//wait 15ms
+  }
+  while (!finOdomdata.eof()){
+    string strTmp;
+    getline(finOdomdata,strTmp);
+    int posLast=strTmp.find(',');
+    timestamp=atof(strTmp.substr(0,posLast).c_str())/1e9;
+    ++posLast;
+    while (1){//until the image reading time is reached
+      {
+      unique_lock<mutex> lock(g_mutex);
+      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+	break;
+      }
+      usleep(1000);//allow 1ms delay
+    }
+    for (int i=0;i<nTotalNum;++i){//we should change wxyz,axyz to the order of axyz,wxyz in odomdata
+      int pos=strTmp.find(',',posLast);
+      string::size_type posNum;if (pos!=string::npos) posNum=pos-posLast;else posNum=string::npos;
+      double dtmp=atof(strTmp.substr(posLast,posNum).c_str());
+      if (i<nTotalNum/2)
+	odomdata[nTotalNum/2+i]=dtmp;
+      else
+	odomdata[i-nTotalNum/2]=dtmp;
+      posLast=pos+1;
+    }
+    //for (int i=0;i<6;++i) cout<<odomdata[i]<<" ";cout<<endl;
+    if (timestamp>tmstpLast)//avoid == condition
+      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::IMU);//for EuRoC dataset
+    //cout<<green<<timestamp<<whiteSTR<<endl;
+    tmstpLast=timestamp;
+  }
+  delete []odomdata;
+  finOdomdata.close();
+  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
+}
+//zzh over
+
 int main(int argc, char **argv)
 {
-    if(argc != 6)
-    {
+    thread* pOdomThread=NULL;
+    ifstream finOdomdata;
+    int totalNum=0;
+    cout<<fixed<<setprecision(6)<<endl;
+  
+    switch (argc){
+      case 6:
+	break;
+      case 8:
+	totalNum=atoi(argv[7]);
+      case 7:
+	{
+	finOdomdata.open(argv[6]);
+	if (!finOdomdata.is_open()){
+	  cerr<< redSTR"Please check the last path_to_odometryData"<<endl;
+	  return -1;
+	}
+        string strTmp;
+	getline(finOdomdata,strTmp);//EuRoC's data.csv only has one unused line
+        pOdomThread=new thread(&odomRun,ref(finOdomdata),totalNum);//must use ref()
+        cout<<"OdomThread created!"<<endl;
+	}
+	break;
+      default:
         cerr << endl << "Usage: ./stereo_euroc path_to_vocabulary path_to_settings path_to_left_folder path_to_right_folder path_to_times_file" << endl;
+	cerr << redSTR"Or: ./stereo_euroc path_to_vocabulary path_to_settings path_to_left_folder path_to_right_folder path_to_times_file path_to_odometryData (number of odometryData)"<<endl;
         return 1;
     }
 
@@ -102,6 +178,7 @@ int main(int argc, char **argv)
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO,true);
+    g_pSLAM=&SLAM;//zzh
 
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
@@ -137,6 +214,10 @@ int main(int argc, char **argv)
         cv::remap(imRight,imRightRect,M1r,M2r,cv::INTER_LINEAR);
 
         double tframe = vTimeStamp[ni];
+	{//zzh
+	unique_lock<mutex> lock(g_mutex);
+	g_simulateTimestamp=tframe;//update g_simulateTimestamp
+	}
 
 
 #ifdef COMPILEDWITHC11
@@ -168,9 +249,35 @@ int main(int argc, char **argv)
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
     }
+    
+    //zzh
+    {
+    unique_lock<mutex> lock(g_mutex);
+    g_brgbdFinished=true;
+    }
+    if (SLAM.MapChanged()){
+      cout<<"Map is changing!Please enter s to stop!"<<endl;
+      while (cin.get()!='s') {sleep(1);}
+    }
+    //zzh over
 
     // Stop all threads
     SLAM.Shutdown();
+    
+    //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
+    //load if Full BA just after IMU Initialized
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
+    SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
+//     SLAM.SaveMap("KeyFrameTrajectoryMap.bin",false);
+    if (!fnFBA.empty()){
+      if((int)fnFBA){
+	SLAM.FinalGBA(fnFBA);
+	cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
+      }
+    }else{
+      cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
+    }
 
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());
@@ -184,8 +291,9 @@ int main(int argc, char **argv)
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
-    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
+    SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt"); 
+    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
 
     return 0;
 }
