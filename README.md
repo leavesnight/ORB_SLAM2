@@ -29,7 +29,8 @@ Modify the path in Examples/Monocular/EuRoC_VIO.yaml
 
 Normally use it like: 
 
-  cd ~/zzh/ORB_SLAM2/Examples/Monocular 
+  Monocular: cd ~/zzh/ORB_SLAM2/Examples/Monocular 
+  Stereo: cd ~/zzh/ORB_SLAM2/Examples/Stereo
   
   VIO:(LocalWindowSize<=0 for Monocular ORB-SLAM in that paper)
   
