@@ -30,9 +30,10 @@ Modify the path in Examples/Monocular/EuRoC_VIO.yaml
 Normally use it like: 
 
   Monocular: cd ~/zzh/ORB_SLAM2/Examples/Monocular 
+  
   Stereo: cd ~/zzh/ORB_SLAM2/Examples/Stereo
   
-  VIO:(LocalWindowSize<=0 for Monocular ORB-SLAM in that paper)
+  VIO:(LocalWindowSize<=0 for Monocular ORB-SLAM in that paper: ORB-SLAM+IMU Initialization)
   
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt ~/dataset/EuRoC/V202medium/mav0/imu0/data.csv 
     ./stereo_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml  ~/dataset/EuRoC/V103difficult/mav0/cam0/data ~/dataset/EuRoC/V103difficult/mav0/cam1/data ./EuRoC_TimeStamps/V103.txt ~/dataset/EuRoC/V103difficult/mav0/imu0/data.csv
