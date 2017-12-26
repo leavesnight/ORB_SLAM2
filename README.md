@@ -7,10 +7,12 @@ Now this project is revised by zzh
 
 3.It's a real-time code with full ba at last, PoseOptimization uses PVR vertex while localBA/GlobalBA use PR-V, No inverse depth parameterization, Loading uses .bin vocabulary, Some other related changes
 
-4.A Stereo/RGBD version with Encoder+IMU will soon come
+4.Stereo+IMU version is completed, thought it's slow, it doesn't have unstable initialization problem on V103 & may succeed totally on V203 if PC is nice & it usually has better non-GT scaled accuracy
+
+5.An RGBD version with Encoder+IMU will soon come
 
 
-Dec. 24
+Dec. 26
 ----------------------------------------
 Tested on:
 
@@ -32,11 +34,12 @@ Normally use it like:
   VIO:(LocalWindowSize<=0 for Monocular ORB-SLAM in that paper)
   
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt ~/dataset/EuRoC/V202medium/mav0/imu0/data.csv 
+    ./stereo_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml  ~/dataset/EuRoC/V103difficult/mav0/cam0/data ~/dataset/EuRoC/V103difficult/mav0/cam1/data ./EuRoC_TimeStamps/V103.txt ~/dataset/EuRoC/V103difficult/mav0/imu0/data.csv
     
   ORBSLAM2:(you can also use ./EuRoC.yaml with Tbc is default I)
   
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt 
-
+    ./stereo_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml  ~/dataset/EuRoC/V203difficult/mav0/cam0/data ~/dataset/EuRoC/V203difficult/mav0/cam1/data ./EuRoC_TimeStamps/V203.txt
 
 Please contact zhuzhanghao9331@yahoo.co.jp for more details.
 
