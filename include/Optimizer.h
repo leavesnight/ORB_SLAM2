@@ -56,7 +56,7 @@ public:
   void static LocalBAPRVIDP(KeyFrame *pKF, int Nlocal, bool* pbStopFlag, Map* pMap, cv::Mat &gw);
   void static LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool *pbStopFlag, Map *pMap, cv::Mat gw);//Nlocal>=1(if <1 it's 1)
   void static GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations=5, bool *pbStopFlag=NULL,
-				    const unsigned long nLoopKF=0, const bool bRobust = true, char nScaleOpt=0);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA, \
+				    const unsigned long nLoopKF=0, const bool bRobust = true, bool bScaleOpt=false);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA, \
   nScaleOpt==0 no scale optimized, ==1 scale of MapPoints' Pw/Xw optimized, ==2 scale of MapPoints' Xw && KeyFrames' pwb optimized
   
   template<class IMUKeyFrameInit>

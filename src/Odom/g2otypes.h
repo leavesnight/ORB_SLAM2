@@ -252,7 +252,7 @@ typedef EdgeNavStateProjectXYZ<3,9> EdgeStereoNavStatePVRPointXYZ;
 /**
  * \brief template for EdgeProjectXYZ(trinary edge, mono/stereo), similar to EdgeProjectXYZ(binary edge, just add one VertexScale)
  */
-template <int DE,int DV,bool STABLE=false>
+template <int DE,int DV>
 class EdgeNavStateProjectXYZWithScale:public BaseMultiEdge<DE, Matrix<double,DE,1> >{
   Matrix<double,DE,1> cam_project(const Vector3d &trans_xyz)const{
     const float invz=1.0f/trans_xyz[2];//normalize
@@ -275,12 +275,8 @@ public:
     const VertexScale* vScale=static_cast<const VertexScale*>(_vertices[2]);//Scale
     double scale=vScale->estimate();
     Matrix3d Rcw=Rcb*ns.getRwb().transpose();
-    Vector3d twb_true(ns.mpwb);
-    if (STABLE){//if we use twb_true we pursue for stable convergence
-      Vector3d RwcPcb=Rcw.transpose()*tcb;twb_true=scale*(ns.mpwb-RwcPcb)+RwcPcb;//for unscaled pwb
-    }
     //here we use Xw_truescale=s*Xw_currentscale;twb is nearly true scale at the end of execution, so here we don't use twb_true=s*twc+Rwc*tcb=s*(twb_current-Rwc*tcb)+Rwc*tcb for normal fast speed
-    this->_error=this->_measurement-cam_project(Rcw*(scale*pXw->estimate()-twb_true)+tcb);//Pc=Tcb*Tbw*Pw=Rcb*Rbw*Pw+Rcb*tbw(-Rcb*Rbw*twb)+tcb(-Rcb*tbc)=Rcb*Rbw*(Pw_true-twb_true)+tcb;
+    this->_error=this->_measurement-cam_project(Rcw*(scale*pXw->estimate()-ns.mpwb)+tcb);//Pc=Tcb*Tbw*Pw=Rcb*Rbw*Pw+Rcb*tbw(-Rcb*Rbw*twb)+tcb(-Rcb*tbc)=Rcb*Rbw*(Pw_true-twb_true)+tcb;
   }
   virtual void linearizeOplus();
   
@@ -305,8 +301,8 @@ protected:
   using Base::_vertices;
   using Base::_jacobianOplus;
 };
-template <int DE,int DV,bool STABLE>
-void EdgeNavStateProjectXYZWithScale<DE,DV,STABLE>::linearizeOplus(){
+template <int DE,int DV>
+void EdgeNavStateProjectXYZWithScale<DE,DV>::linearizeOplus(){
   const VertexSBAPointXYZ* pXw=static_cast<const VertexSBAPointXYZ*>(_vertices[0]);//Xw/Pw
   const Vector3d &Pw=pXw->estimate();
   const VertexNavState<DV>* vNS=static_cast<const VertexNavState<DV>*>(_vertices[1]);//Tbw
@@ -316,11 +312,7 @@ void EdgeNavStateProjectXYZWithScale<DE,DV,STABLE>::linearizeOplus(){
   double scale=vScale->estimate();
 
   Matrix3d Rcw=Rcb*Rwb.transpose();
-  Vector3d twb_true=ns.mpwb,RwcPcb;
-  if (STABLE){
-    RwcPcb=Rcw.transpose()*tcb;twb_true=scale*(ns.mpwb-RwcPcb)+RwcPcb;//for unscaled pwb
-  }
-  Vector3d Pc=Rcw*(scale*Pw-twb_true)+tcb;//Pc=Rcb*Rbw*(Pw_true-twb_true)+tcb
+  Vector3d Pc=Rcw*(scale*Pw-ns.mpwb)+tcb;//Pc=Rcb*Rbw*(Pw_true-twb_true)+tcb
   double x=Pc[0],y=Pc[1],invz=1/Pc[2],invz_2=invz*invz;
 
   // Jacobian of camera projection, par((K*Pc)(0:1))/par(Pc)=J_e_Pc, error = obs - pi( Pc )
@@ -329,20 +321,11 @@ void EdgeNavStateProjectXYZWithScale<DE,DV,STABLE>::linearizeOplus(){
 				  0, -fy*invz, y*fy*invz_2;
   if (DE>2) Jproj.template block<1,3>(2,0)<<Jproj(0,0), 0, Jproj(0,2)-bf*invz_2;//ur=ul-b*fx/dl,dl=z => J_e_P'=J_e_Pc=-[fx/z 0 -fx*x/z^2; 0 fy/z -fy*y/z^2; fx/z 0 -fx*x/z^2+bf/z^2]
 
-  Matrix<double,DE,3> JdPwb;
-  Vector3d Paux;
-  if (STABLE){
-    // Jacobian of error w.r.t dPwb = JdPwb=J_e_Pc*J_Pc_dPwb, notcie we use pwb->pwb+dpwb increment model in the corresponding Vertex, so here is the same, a bit dfferent from (21)
-    JdPwb=Jproj*Rcw*(-scale);//J_Pc_dPwb = -Rcw*scale; for unscaled pwb & p<-p+dp, we can rectify it at the end
-    // Jacobian of error w.r.t dRwb
-    Paux=Rcb*Rwb.transpose()*(scale*(Pw-ns.mpwb));//for unscaled pwb: J_Pc_dRwb=(Rcw*(s*Pw-s*twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
-  }else{
-    // Jacobian of error w.r.t dPwb
-//     JdPwb=Jproj*(-Rcb);//J_Pc_dPwb = -Rcw*Rwb= -Rcb(p<-p+R*dp)
-    JdPwb=Jproj*(-Rcw);//J_Pc_dPwb = -Rcw(p<-p+dp)
-    // Jacobian of error w.r.t dRwb
-    Paux=Rcb*Rwb.transpose()*(scale*Pw-ns.mpwb);//J_Pc_dRwb=(Rcw*(s*Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
-  }
+  // Jacobian of error w.r.t dPwb = JdPwb=J_e_Pc*J_Pc_dPwb, notcie we use pwb->pwb+dpwb increment model in the corresponding Vertex, so here is the same, a bit dfferent from (21)
+//   Matrix<double,DE,3> JdPwb=Jproj*(-Rcb);//J_Pc_dPwb = -Rcw*Rwb= -Rcb(p<-p+R*dp)
+  Matrix<double,DE,3> JdPwb=Jproj*(-Rcw);//J_Pc_dPwb = -Rcw(p<-p+dp)
+  // Jacobian of error w.r.t dRwb
+  Vector3d Paux=Rcb*Rwb.transpose()*(scale*Pw-ns.mpwb);//J_Pc_dRwb=(Rcw*(s*Pw-twb))^Rcb, using right disturbance model/Rwb->Rwb*Exp(dphi) or Rbw->Exp(-dphi)*Rbw, see Manifold paper (20)
   Matrix<double,DE,3> JdRwb=Jproj*(Sophus::SO3::hat(Paux)*Rcb);
 
   // Jacobian of error w.r.t NavStatePR, order in 'update_': dP, dPhi
@@ -351,21 +334,16 @@ void EdgeNavStateProjectXYZWithScale<DE,DV,STABLE>::linearizeOplus(){
   JNavState.template block<DE,3>(0,DV-3)=JdRwb;//only for 9(J_e_dV=0)/6
   _jacobianOplus[1]=JNavState;
   
-  if (STABLE){
-    //Jacobian of error(-pc) w.r.t dXw/dPw: J_e_dXw=JdXw=J_e_Pc*J_Pc_dPw=Jproj*Rcw=-JdPwb*s(for scaled pwb) / -JdPwb(for unscaled pwb)
-    _jacobianOplus[0]=-JdPwb;//*(-scale);//Jproj*Rcw*scale; Pw<-Pw+dPw, Pw_true=sPw
-    //Jacobian of error(-pc) w.r.t ds: J_e_ds=Jds=J_e_Pc*J_Pc_ds
-    _jacobianOplus[2]=Jproj*Rcw*(Pw-ns.mpwb+RwcPcb);//for unscaled pwb: J_Pc_ds=Rcw*(Pw-(twb-Rwc*tcb)), easy to prove
-  }else{
-    _jacobianOplus[0]=JdPwb*(-scale);//Jproj*Rcw*scale; Pw<-Pw+dPw, Pw_true=sPw
-    _jacobianOplus[2]=Jproj*Rcw*Pw;//J_Pc_ds=Rcw*Pw, easy to prove
-  }
+  //Jacobian of error(-pc) w.r.t dXw/dPw: J_e_dXw=JdXw=J_e_Pc*J_Pc_dPw=Jproj*Rcw*scale=-JdPwb*scale
+  _jacobianOplus[0]=JdPwb*(-scale);//Jproj*Rcw*scale; Pw<-Pw+dPw, Pw_true=sPw
+  
+  //Jacobian of error(-pc) w.r.t ds: J_e_ds=Jds=J_e_Pc*J_Pc_ds
+  _jacobianOplus[2]=Jproj*Rcw*Pw;//J_Pc_ds=Rcw*Pw, easy to prove
 }
 
 typedef EdgeNavStateProjectXYZWithScale<2,6> EdgeNavStatePRSPointXYZ;
 typedef EdgeNavStateProjectXYZWithScale<3,6> EdgeStereoNavStatePRSPointXYZ;
-typedef EdgeNavStateProjectXYZWithScale<2,6,true> EdgeNavStatePRSPointXYZStable;
-typedef EdgeNavStateProjectXYZWithScale<3,6,true> EdgeStereoNavStatePRSPointXYZStable;
+// typedef EdgeNavStateProjectXYZWithScale<2,6,true> EdgeNavStatePRSPointXYZStable;
 
 /**
  * \brief template for EdgeNavStateI(multi edge)
@@ -373,10 +351,8 @@ typedef EdgeNavStateProjectXYZWithScale<3,6,true> EdgeStereoNavStatePRSPointXYZS
 template <int NV>
 class EdgeNavStateI:public BaseMultiEdge<9, IMUPreintegrator>{
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Sophus::SO3 Rbc;Vector3d tcb;// Camera-IMU extrinsics, for unscaled pwb
-    
-    EdgeNavStateI() : BaseMultiEdge<9, IMUPreintegrator>(){resize(NV);if (NV==7) resize(6);}
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
+    EdgeNavStateI() : BaseMultiEdge<9, IMUPreintegrator>(){resize(NV);}
     
     bool read(std::istream& is){return true;}
     bool write(std::ostream& os) const{return true;}
@@ -398,19 +374,10 @@ void EdgeNavStateI<NV>::computeError(){
   const Sophus::SO3 RiT=nsPRi.mRwb.inverse();
   //get vi,vj,dbi in PRV/PVR situation
   Vector3d vi,vj,dbgi,dbai;
-  double scale=1.;
-  Vector3d twbj_true=nsPRj.mpwb,twbi_true=nsPRi.mpwb;//true scaled pwb
   if (NV>=5){//PRV
     vi=static_cast<const VertexNavStateV*>(_vertices[2])->estimate().mvwb;//vwbi
     vj=static_cast<const VertexNavStateV*>(_vertices[3])->estimate().mvwb;//vwbj
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[4])->estimate();
-    if (NV==6||NV==7){//for unscaled pwb, more stable convergence!
-      scale=static_cast<const VertexScale*>(_vertices[5])->estimate();
-      Vector3d RwcjPcb=nsPRj.mRwb*Rbc*tcb;
-      twbj_true=scale*(nsPRj.mpwb-RwcjPcb)+RwcjPcb;//nsPRj.mpwb
-      Vector3d RwciPcb=nsPRi.mRwb*Rbc*tcb;
-      twbi_true=scale*(nsPRi.mpwb-RwciPcb)+RwciPcb;//nsPRi.mpwb
-    }
   }else{//PVR
     vi=nsPRi.mvwb;vj=nsPRj.mvwb;//nsPVRi/j
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[2])->estimate();
@@ -418,9 +385,8 @@ void EdgeNavStateI<NV>::computeError(){
   dbgi=pBiasi->mdbg;dbai=pBiasi->mdba;
   double deltat=_measurement.mdeltatij;//deltatij
   
-  if (NV==7){vi*=scale;vj*=scale;}
   //see VIORBSLAM paper (6)/ Manifold (45)
-  _error.segment<3>(0)=RiT*(twbj_true-twbi_true-vi*deltat-gw*(deltat*deltat/2))-//r_deltapij/ep=Rbiw*(pwbj-pwbi-vwbi*deltatij-1/2*gw*deltatij^2)-
+  _error.segment<3>(0)=RiT*(nsPRj.mpwb-nsPRi.mpwb-vi*deltat-gw*(deltat*deltat/2))-//r_deltapij/ep=Rbiw*(pwbj-pwbi-vwbi*deltatij-1/2*gw*deltatij^2)-
   (_measurement.mpij+_measurement.mJgpij*dbgi+_measurement.mJapij*dbai);//(deltapij+J_g_deltap*dbgi+J_a_deltap*dbai),here deltapij=delta~pij(bi_bar)
   int idR=(NV>=5)?3:6;//if NV==5 then error_PRV else ePVR
   _error.segment<3>(idR)=((Sophus::SO3(_measurement.mRij)*Sophus::SO3::exp(_measurement.mJgRij*dbgi)).inverse()*RiT*nsPRj.mRwb).log();//eR=Log((deltaRij*Exp(Jg_deltaR*dbgi)).t()*Rbiw*Rwbj)
@@ -432,28 +398,17 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   const VertexNavStateNV* vPRi = static_cast<const VertexNavStateNV*>(_vertices[0]);
   const VertexNavStateNV* vPRj = static_cast<const VertexNavStateNV*>(_vertices[1]);
   const NavState &nsPRi=vPRi->estimate(),&nsPRj=vPRj->estimate(),*pBiasi;
-  const Vector3d &pi=nsPRi.mpwb,&pj=nsPRj.mpwb;//pi_true,pj_true
+  const Vector3d &pi=nsPRi.mpwb,&pj=nsPRj.mpwb;//here is regarded as true scaled pwb
   const Matrix3d RiT=nsPRi.getRwb().transpose();
   Vector3d vi,vj,dbgi;
-  double scale=1.;
-  Vector3d twbj_true=nsPRj.mpwb,twbi_true=nsPRi.mpwb,Rbctcb;//true scaled pwb
   if (NV>=5){//PRV
     vi=static_cast<const VertexNavStateV*>(_vertices[2])->estimate().mvwb;//vwbi
     vj=static_cast<const VertexNavStateV*>(_vertices[3])->estimate().mvwb;//vwbj
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[4])->estimate();
-    if (NV==6||NV==7){//for unscaled pwb, more stable convergence!
-      scale=static_cast<const VertexScale*>(_vertices[5])->estimate();
-      Vector3d RwcjPcb=nsPRj.mRwb*Rbc*tcb;
-      twbj_true=scale*(nsPRj.mpwb-RwcjPcb)+RwcjPcb;//nsPRj.mpwb
-      Vector3d RwciPcb=nsPRi.mRwb*Rbc*tcb;
-      twbi_true=scale*(nsPRi.mpwb-RwciPcb)+RwciPcb;//nsPRi.mpwb
-      Rbctcb=Rbc*tcb;//very useful term
-    }
   }else{//PVR
     vi=nsPRi.mvwb;vj=nsPRj.mvwb;//nsPVRi/j
     pBiasi=&static_cast<const VertexNavStateBias*>(_vertices[2])->estimate();
   }
-  if (NV==7){vi*=scale;vj*=scale;}
   dbgi=pBiasi->mdbg;
   double deltat=_measurement.mdeltatij;//deltatij
   //see Manifold (74)~(81)
@@ -467,20 +422,14 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   }
   Vector3d eR=_error.segment<3>(idR);//r_deltaRij/eR/r_Phiij
   //J_rpij_dxi
-  if (NV==6||NV==7)//for unscaled pwb, more stable convergence! for pwb=s*pwb'+Rwb*Rbc*tcb*(1-s) so J_rpij_dRwb needs rectifying (the other rvij/rRij doesn't contain pi/pj so keep the same)
-    JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(twbj_true-pi*scale-vi*deltat-gw*(deltat*deltat/2)));//J_rpij_dPhi_i
-  else
-    JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(pj-pi-vi*deltat-gw*(deltat*deltat/2)));//J_rpij_dPhi_i
+  JPRVi.block<3,3>(0,idR)=Sophus::SO3::hat(RiT*(pj-pi-vi*deltat-gw*(deltat*deltat/2)));//J_rpij_dPhi_i
 //   JPRVi.block<3,3>(0,0)=-Matrix3d::Identity();//J_rpij_dpi=-I3x3, notice here use pi<-pi+Ri*dpi
   JPRVi.block<3,3>(0,0)=-RiT;//J_rpij_dpi, notice here use pi<-pi+dpi not the form pi<-pi+Ri*dpi in the paper!
   JPRVi.block<3,3>(0,idV)=-RiT*deltat;//J_rpij_dvi
   JBiasi.block<3,3>(0,0)=-_measurement.mJgpij;//J_rpij_ddbgi
   JBiasi.block<3,3>(0,3)=-_measurement.mJapij;//J_rpij_ddbai
   //J_rpij_dxj
-  if (NV==6||NV==7)//for unscaled pwb, more stable convergence! for pwb=s*pwb'+Rwb*Rbc*tcb*(1-s) so J_rpij_dRwb needs rectifying (the other rvij/rRij doesn't contain pi/pj so keep the same)
-    JPRVj.block<3,3>(0,idR)=-RiT*nsPRj.getRwb()*Sophus::SO3::hat(Rbctcb*(1-scale));//J_rpij_dPhi_j=-Ri.t()*Rj*hat(Rbc*tcb*(1-s))
-  else
-    JPRVj.block<3,3>(0,idR)=O3x3;//J_rpij_dPhi_j
+  JPRVj.block<3,3>(0,idR)=O3x3;//J_rpij_dPhi_j
 //   JPRVj.block<3,3>(0,0)=RiT*nsPRj.getRwb();//J_rpij_dpj=Ri.t()*Rj, notice here use pj<-pj+Rj*dpj
   JPRVj.block<3,3>(0,0)=RiT;//J_rpij_dpj, notice here use pj<-pj+dpj not the form pj<-pj+Rj*dpj in the paper!
   JPRVj.block<3,3>(0,idV)=O3x3;//J_rpij_dvj
@@ -506,20 +455,6 @@ void EdgeNavStateI<NV>::linearizeOplus(){
   JPRVj.block<3,3>(idR,idR)=Jrinv;//J_rRij_dPhi_j
   JPRVj.block<3,3>(idR,0)=O3x3;//J_rRij_dpj(pj<-pj+dpj), also(pj<-pj+Rj*dpj)
   JPRVj.block<3,3>(idR,idV)=O3x3;//J_rRij_dvj
-  //J_XXX_dpi/j(rectify) & J_XXX_ds
-  if (NV==6||NV==7){//for unscaled pwb, more stable convergence!
-    JPRVi.block<3,3>(0,0)*=scale;JPRVj.block<3,3>(0,0)*=scale;//rectify J_drpij_dpi/j use *dp/dp'=*scale; p=s*p'+Rwb*Rbc*tcb*(1-s)
-    //the other J_drv/Rij_dpi/j=O3x3, so nothing changed
-    //J_XXX_ds = 9*1
-    _jacobianOplus[5].block<3,1>(0,0)=RiT*(pj-pi-nsPRj.mRwb*Rbctcb+nsPRi.mRwb*Rbctcb);//J_rpij_ds=Ri.t()*(pj'-pi'-(Rwbj-Rwbi)*Rbc*tcb), s<-s+ds
-    _jacobianOplus[5].block<3,1>(idV,0).setZero();//J_rvij_ds=0
-    _jacobianOplus[5].block<3,1>(idR,0).setZero();//J_rRij_ds=0
-    if (NV==7){//vi/scale=vi'
-      JPRVi.block<3,3>(0,idV)*=scale;JPRVi.block<3,3>(idV,idV)*=scale;JPRVj.block<3,3>(idV,idV)*=scale;//dv/dv'=s
-      _jacobianOplus[5].block<3,1>(0,0)+=RiT*(-vi/scale*deltat);
-      _jacobianOplus[5].block<3,1>(idV,0)=RiT*(vj-vi)/scale;
-    }
-  }
   
   if (NV>=5){//J_ePRV_PRi,PRj,Vi,Vj,Bi = 9*24
     _jacobianOplus[0]=JPRVi.block<9,6>(0,0);_jacobianOplus[1]=JPRVj.block<9,6>(0,0);
@@ -533,8 +468,8 @@ void EdgeNavStateI<NV>::linearizeOplus(){
 
 typedef EdgeNavStateI<5> EdgeNavStatePRV;//PRi, PRj, Vi, Vj, Bi, total 5 vertices
 typedef EdgeNavStateI<3> EdgeNavStatePVR;//PVRi, PVRj, Bi, total 3 vertices
-typedef EdgeNavStateI<6> EdgeNavStatePRVBS;//add scale optimization variable(for unscaled pwb)
-typedef EdgeNavStateI<7> EdgeNavStatePRVBSV;//add scale optimization variable(for unscaled pwb & vwb)
+// typedef EdgeNavStateI<6> EdgeNavStatePRVBS;//add scale optimization variable(for unscaled pwb)
+// typedef EdgeNavStateI<7> EdgeNavStatePRVBSV;//add scale optimization variable(for unscaled pwb & vwb)
 
 /**
  * \brief EdgeNavStateBias(binary edge),EdgeNavStatePriorPRVBias,EdgeNavStatePriorPVRBias

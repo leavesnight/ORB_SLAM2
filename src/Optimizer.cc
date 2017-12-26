@@ -501,12 +501,12 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
   
   pMap->InformNewChange();//zzh
 }
-void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations, bool *pbStopFlag,const unsigned long nLoopKF, const bool bRobust, char nScaleOpt){
+void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, int nIterations, bool *pbStopFlag,const unsigned long nLoopKF, const bool bRobust, bool bScaleOpt){
   vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
   vector<MapPoint*> vpMP = pMap->GetAllMapPoints();
   
   // Extrinsics
-  Matrix3d Rcb = Frame::meigRcb;Sophus::SO3 so3Rbc;
+  Matrix3d Rcb = Frame::meigRcb;
   Vector3d tcb = Frame::meigtcb;
   // Gravity vector in world frame
   Vector3d GravityVec = Converter::toVector3d(gw);
@@ -551,12 +551,11 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
       if(idKF+2>maxKFid) maxKFid=idKF+2;//update maxKFid
   }
   // Set Scale vertex
-  if (nScaleOpt>0){//if dInitialScale>0 the Full BA includes scale's optimization
+  if (bScaleOpt){//if dInitialScale>0 the Full BA includes scale's optimization
     g2o::VertexScale *pvScale=new g2o::VertexScale();
     pvScale->setEstimate(1.);
     pvScale->setId(++maxKFid);
     pvScale->setFixed(false);optimizer.addVertex(pvScale);
-    if (nScaleOpt>1) so3Rbc=Sophus::SO3(Rcb).inverse();//for unscaled pwb
   }
   
   // Set IMU/KF-KF/PRV(B)+B edges
@@ -577,45 +576,17 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
     notice we don't exclude the situation that KFi has no imupreint but KFj has for KFi's NavState is updated in TrackLocalMapWithIMU()
     //IMU_I/PRV(B) edges
     int idKF0=3*pKF0->mnId,idKF1=3*pKF1->mnId;
-    if (nScaleOpt<=1){//0 or 1 use true scaled pwb
-      g2o::EdgeNavStatePRV * eprv = new g2o::EdgeNavStatePRV();
-      eprv->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//PRi 0
-      eprv->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//PRj 1
-      eprv->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+1)));//Vi 2
-      eprv->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1+1)));//Vj 3
-      eprv->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+2)));//Bi 4
-      eprv->setMeasurement(imupreint);
-      eprv->setInformation(imupreint.mSigmaijPRV.inverse());
-      eprv->SetParams(GravityVec);
-      if (bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eprv->setRobustKernel(rk);rk->setDelta(thHuberNavStatePRV);}//here false
-      optimizer.addEdge(eprv);
-    }else if (nScaleOpt==2){//2 use unscaled pwb
-      g2o::EdgeNavStatePRVBS *eprv=new g2o::EdgeNavStatePRVBS();
-      eprv->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//PRi 0
-      eprv->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//PRj 1
-      eprv->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+1)));//Vi 2
-      eprv->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1+1)));//Vj 3
-      eprv->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+2)));//Bi 4
-      eprv->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid)));eprv->Rbc=so3Rbc;eprv->tcb=tcb;//Scale 5
-      eprv->setMeasurement(imupreint);
-      eprv->setInformation(imupreint.mSigmaijPRV.inverse());
-      eprv->SetParams(GravityVec);
-      if (bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eprv->setRobustKernel(rk);rk->setDelta(thHuberNavStatePRV);}//here false
-      optimizer.addEdge(eprv);
-    }else{//3
-      g2o::EdgeNavStatePRVBSV *eprv=new g2o::EdgeNavStatePRVBSV();
-      eprv->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//PRi 0
-      eprv->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//PRj 1
-      eprv->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+1)));//Vi 2
-      eprv->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1+1)));//Vj 3
-      eprv->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+2)));//Bi 4
-      eprv->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid)));eprv->Rbc=so3Rbc;eprv->tcb=tcb;//Scale 5
-      eprv->setMeasurement(imupreint);
-      eprv->setInformation(imupreint.mSigmaijPRV.inverse());
-      eprv->SetParams(GravityVec);
-      if (bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eprv->setRobustKernel(rk);rk->setDelta(thHuberNavStatePRV);}//here false
-      optimizer.addEdge(eprv);
-    }
+    g2o::EdgeNavStatePRV * eprv = new g2o::EdgeNavStatePRV();
+    eprv->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//PRi 0
+    eprv->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//PRj 1
+    eprv->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+1)));//Vi 2
+    eprv->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1+1)));//Vj 3
+    eprv->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+2)));//Bi 4
+    eprv->setMeasurement(imupreint);
+    eprv->setInformation(imupreint.mSigmaijPRV.inverse());
+    eprv->SetParams(GravityVec);
+    if (bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eprv->setRobustKernel(rk);rk->setDelta(thHuberNavStatePRV);}//here false
+    optimizer.addEdge(eprv);
     //IMU_RW/Bias edge
     g2o::EdgeNavStateBias * ebias = new g2o::EdgeNavStateBias();
     ebias->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0+2)));//Bi 0
@@ -661,7 +632,7 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 	      Eigen::Matrix<double,2,1> obs;
 	      obs << kpUn.pt.x, kpUn.pt.y;
 	      
-	      if (nScaleOpt==0){//0 scaled Xw
+	      if (!bScaleOpt){//scaled Xw
 		g2o::EdgeNavStatePRPointXYZ* e = new g2o::EdgeNavStatePRPointXYZ();
 		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));//0 is point
 		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));//1 is pose Tbw(with Tbc)
@@ -676,19 +647,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 		e->SetParams(pKF->fx,pKF->fy,pKF->cx,pKF->cy,Rcb,tcb);//pKFi in localBA
 
 		optimizer.addEdge(e);
-	      }else if (nScaleOpt==1){//1 unscaled Xw but scaled pwb
+	      }else{//unscaled Xw but scaled pwb
 		g2o::EdgeNavStatePRSPointXYZ* e = new g2o::EdgeNavStatePRSPointXYZ();
-		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));//0 is point
-		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));//1 is pose Tbw(with Tbc)
-		e->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid)));
-		e->setMeasurement(obs);
-		const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];//1/sigma^2
-		e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);//Omega=Sigma^(-1)=(here)=I/sigma^2
-		if(bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;e->setRobustKernel(rk);rk->setDelta(thHuber2D);}
-		e->SetParams(pKF->fx,pKF->fy,pKF->cx,pKF->cy,Rcb,tcb);//pKFi in localBA
-		optimizer.addEdge(e);
-	      }else{//2 unscaled Xw & pwb
-		g2o::EdgeNavStatePRSPointXYZStable* e = new g2o::EdgeNavStatePRSPointXYZStable();
 		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));//0 is point
 		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));//1 is pose Tbw(with Tbc)
 		e->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid)));
@@ -702,12 +662,11 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 	  }
 	  else//stereo MPs uses 3*1 error
 	  {
-	      assert(0);
 	      Eigen::Matrix<double,3,1> obs;
 	      const float kp_ur = pKF->mvuRight[mit->second];
 	      obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-	      if (nScaleOpt==0){//0 scaled Xw
+	      if (!bScaleOpt){//scaled Xw
 		g2o::EdgeStereoNavStatePRPointXYZ* e = new g2o::EdgeStereoNavStatePRPointXYZ();
 		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
 		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));
@@ -723,7 +682,7 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 		e->SetParams(pKF->fx,pKF->fy,pKF->cx,pKF->cy,Rcb,tcb,&pKF->mbf);//parameter addition b(m)*f
 
 		optimizer.addEdge(e);
-	      }else if (nScaleOpt==1){//1 unscaled Xw but scaled pwb
+	      }else{//unscaled Xw but scaled pwb
 		g2o::EdgeStereoNavStatePRSPointXYZ* e = new g2o::EdgeStereoNavStatePRSPointXYZ();
 		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
 		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));
@@ -733,17 +692,6 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 		e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);//3*3, notice use Omega to make ||e||/sqrt(e'*Omega*e) has sigma=1, can directly use chi2 standard distribution
 		if(bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;e->setRobustKernel(rk);rk->setDelta(thHuber3D);}
 		e->SetParams(pKF->fx,pKF->fy,pKF->cx,pKF->cy,Rcb,tcb,&pKF->mbf);//parameter addition b(m)*f
-		optimizer.addEdge(e);
-	      }else{//2 unscaled Xw & pwb
-		g2o::EdgeStereoNavStatePRSPointXYZStable* e = new g2o::EdgeStereoNavStatePRSPointXYZStable();
-		e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));//0 is point
-		e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(3*pKF->mnId)));//1 is pose Tbw(with Tbc)
-		e->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid)));
-		e->setMeasurement(obs);
-		const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];//1/sigma^2
-		e->setInformation(Eigen::Matrix3d::Identity()*invSigma2);//Omega=Sigma^(-1)=(here)=I/sigma^2
-		if(bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;e->setRobustKernel(rk);rk->setDelta(thHuber3D);}
-		e->SetParams(pKF->fx,pKF->fy,pKF->cx,pKF->cy,Rcb,tcb,&pKF->mbf);//pKFi in localBA
 		optimizer.addEdge(e);
 	      }
 	  }
@@ -765,11 +713,13 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   optimizer.optimize(nIterations);//10 same as pure inliers iterations in localBA/motion-only BA/Sim3Motion-only BA, maybe stopped by next CorrectLoop() in LoopClosing
 
   // Recover optimized data in an intermediate way
+  //Scale for Xw
   double scale=1.;
-  if (nScaleOpt>0){
+  if (bScaleOpt){
     scale=static_cast<g2o::VertexScale*>(optimizer.vertex(maxKFid))->estimate();
     cout<<azureSTR"Recovered scale is "<<scale<<whiteSTR<<endl;
   }
+  
   //Keyframes
   for(size_t i=0; i<vpKFs.size(); i++)//all KFs in mpMap
   {
@@ -784,12 +734,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
       NavState ns_recov=vNSPR->estimate();ns_recov.mvwb=vNSV->estimate().mvwb;
       const NavState &optBiasns=vNSBias->estimate();ns_recov.mdbg=optBiasns.mdbg;ns_recov.mdba=optBiasns.mdba;//don't need to update const bi_bar
       
-      if (nScaleOpt>1){//for unscaled pwb
-	Vector3d RwcPcb=ns_recov.mRwb*so3Rbc*tcb;
-	ns_recov.mpwb=scale*(ns_recov.mpwb-RwcPcb)+RwcPcb;
-	//suppose vwb is true scale for ProjectEdge only use PR
-	if (nScaleOpt==3) ns_recov.mvwb=scale*ns_recov.mvwb;//+ns_recov.getRwb()*skew(pKFi->GetListIMUData().back().mw)*Rcb.transpose()*tcb*(1-scale);//if we want to use complete unscaled vwb, we need to add rotation speed to the state!
-      }
+// 	ns_recov.mpwb=scale*(ns_recov.mpwb-RwcPcb)+RwcPcb;
+// 	if (nScaleOpt==3) ns_recov.mvwb=scale*ns_recov.mvwb;//+ns_recov.getRwb()*skew(pKFi->GetListIMUData().back().mw)*Rcb.transpose()*tcb*(1-scale);//if we want to use complete unscaled vwb, we need to add rotation speed to the state!
       if (nLoopKF==0){
 	pKFi->SetNavState(ns_recov);//it has already called the UpdatePoseFromNS()(SetPose())
       }else{
@@ -820,7 +766,7 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 	  continue;
       g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pMP->mnId+maxKFid+1));
 
-      if (nScaleOpt==0){
+      if (!bScaleOpt){
 	if(nLoopKF==0)//it's for final Full BA
 	{
 	    pMP->SetWorldPos(Converter::toCvMat(vPoint->estimate()));
@@ -832,7 +778,7 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 	    Converter::toCvMat(vPoint->estimate()).copyTo(pMP->mPosGBA);
 	    pMP->mnBAGlobalForKF = nLoopKF;
 	}
-      }else{//1/2 unscaled Xw so it needs recovering
+      }else{//unscaled Xw
 	if(nLoopKF==0){
 	    pMP->SetWorldPos(scale*Converter::toCvMat(vPoint->estimate()));
 	    pMP->UpdateNormalAndDepth();
