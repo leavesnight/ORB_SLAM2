@@ -350,7 +350,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
       std::cout<<std::endl<<"... Map scale & NavState updated ..."<<std::endl<<std::endl;
       // Run global BA/full BA after inited, we use LoopClosing thread to do this job for safety!
-//       Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,GetGravityVec(),15,NULL,0,false);SetInitGBAOver(true);//for MH05/04: not too much different full BA here or in GBA thread & true when sigma2a/ba is big
+//       Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,GetGravityVec(),15,NULL,0,false,1);SetInitGBAOver(true);//for MH05/04: not too much different full BA here or in GBA thread & 2/0 when sigma2a/ba is big
       SetInitGBA(true);
     }
   }

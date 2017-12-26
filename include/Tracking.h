@@ -333,8 +333,8 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
       if (!mlOdomEnc.empty()){
 	double curTime=mCurrentFrame.mTimeStamp;
 	typename list<EncData>::const_iterator iter=mlOdomEnc.end();
-	cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
 	iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg);//we just find the nearest iteri(for next time) to curTime, don't need to judge if it's true
+	cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
 	
 	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
 	miterLastEnc=mlOdomEnc.begin();//nearest iterj to curTime(next time it may not be the nearest iteri to lastKFTime when mlOdom.back().mtm<curTime); maybe end() but we handle it in the CacheOdom()
