@@ -40,7 +40,7 @@ bool g_brgbdFinished=false;
 mutex g_mutex;
 
 //a new thread simulating the odom serial threads
-void odomRun(ifstream &finOdomdata,int totalNum){//must use &
+void odomIMURun(ifstream &finOdomdata,int totalNum){//must use &
   //read until reading over
   int nTotalNum=2+4+3*3;
   if (totalNum!=0) nTotalNum=totalNum;
@@ -73,7 +73,47 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
 #ifndef TRACK_WITH_IMU
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
 #else
-      //g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
+      g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
+      //g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
+#endif
+    }
+    //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
+    tmstpLast=timestamp;
+  }
+  delete []odomdata;
+  finOdomdata.close();
+  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
+}
+void odomEncRun(ifstream &finOdomdata){//must use &
+  //read until reading over
+  int nTotalNum=2;
+  double* odomdata=new double[nTotalNum];
+  double timestamp,tmstpLast=-1;
+  string strTmp;
+  
+  while (!g_pSLAM){//if it's NULL
+    usleep(1e5);//wait 0.1s
+  }
+  while (!finOdomdata.eof()){
+    finOdomdata>>timestamp;
+    if (finOdomdata.eof())
+      break;
+    while (1){//until the image reading time is reached
+      {
+      unique_lock<mutex> lock(g_mutex);
+      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+	break;
+      }
+      usleep(1.5e4);//allow 15ms delay
+    }
+    for (int i=0;i<nTotalNum;++i){
+      finOdomdata>>odomdata[i];
+    }
+    getline(finOdomdata,strTmp);
+    if (timestamp>tmstpLast){//avoid == condition
+#ifndef TRACK_WITH_IMU
+      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
+#else
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
 #endif
     }
@@ -89,14 +129,20 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
 int main(int argc, char **argv)
 {
     char bMode=0;//0 for RGBD, 1 for MonocularVIO, 2 for Monocular
-    thread* pOdomThread=NULL;
-    ifstream finOdomdata;
-    int totalNum=0;
+    thread* pOdomThread=NULL,*pEncThread=NULL;
+    ifstream finOdomdata,finEncdata;
+    int totalNum=2;
     cout<<fixed<<setprecision(6)<<endl;
   
     switch (argc){
       case 5:
 	break;
+      case 9:
+	{
+	finEncdata.open(argv[8]);
+	string strTmp;
+	getline(finEncdata,strTmp);getline(finEncdata,strTmp);getline(finEncdata,strTmp);
+	}
       case 8:
 	bMode=atoi(argv[7]);if (bMode==2) break;
       case 7:
@@ -110,12 +156,17 @@ int main(int argc, char **argv)
 	}
         string strTmp;
 	getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);//odom.txt should have 3 unused lines
-        pOdomThread=new thread(&odomRun,ref(finOdomdata),totalNum);//must use ref()
+	if (totalNum==2)
+	  pOdomThread=new thread(&odomEncRun,ref(finOdomdata));//must use ref()
+	else{
+	  pOdomThread=new thread(&odomIMURun,ref(finOdomdata),totalNum);//must use ref()
+	  if (finEncdata.is_open()) pEncThread=new thread(&odomEncRun,ref(finEncdata));
+	}
 	}
 	break;
       default:
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
-	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData)"<<endl;
+	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData) (Mode) (path_to_EncData)"<<endl;
         return 1;
     }
 
@@ -259,6 +310,8 @@ int main(int argc, char **argv)
     //wait for pOdomThread finished
     if (pOdomThread!=NULL)
       pOdomThread->join();
+    if (pEncThread!=NULL)
+      pEncThread->join();
 
     return 0;
 }
