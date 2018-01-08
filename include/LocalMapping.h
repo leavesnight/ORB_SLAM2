@@ -43,7 +43,6 @@ class Map;
 
 class LocalMapping
 {
-  KeyFrame* mpLastKF;
   unsigned long mnLastOdomKFId;
   
   //Local Window size

@@ -66,7 +66,7 @@ void KeyFrame::UpdateNavStatePVRFromTcw()
 }
 
 template <>//specialized
-void KeyFrame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback){
+void KeyFrame::SetPreIntegrationList<IMUData>(const listeig(IMUData)::const_iterator &begin,const listeig(IMUData)::const_iterator &pback){
   unique_lock<mutex> lock(mMutexOdomData);
   mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
 }
@@ -408,16 +408,16 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 	  //add the link from this to pLastKF
 	  KFcounter[pLastKF]=0;
 	  unique_lock<mutex> lockCon(mMutexConnections);
-	  mConnectedKeyFrameWeights=KFcounter;
-	  mvpOrderedConnectedKeyFrames.clear();
-	  mvOrderedWeights.clear();
-	  mvpOrderedConnectedKeyFrames.push_back(pLastKF);
-	  mvOrderedWeights.push_back(0);//0 means it's an Odom link
+// 	  mConnectedKeyFrameWeights=KFcounter;//?
+// 	  mvpOrderedConnectedKeyFrames.clear();
+// 	  mvOrderedWeights.clear();
+// 	  mvpOrderedConnectedKeyFrames.push_back(pLastKF);
+// 	  mvOrderedWeights.push_back(0);//0 means it's an Odom link
 	  
 	  //if first connected then update spanning tree
 	  if (mbFirstConnection&&mnId!=0){
 	    mbFirstConnection=false;
-	    mpParent=mvpOrderedConnectedKeyFrames.front();//the closer, the first connection is better
+	    mpParent=pLastKF;//the closer, the first connection is better
 	    mpParent->AddChild(this);
 	  }
 	}
@@ -666,14 +666,22 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
       mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
       mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
       //AppendIMUDataToFront, qIMU can speed up!
-      list<IMUData> limunew=mpNextKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't  copy list!
+      listeig(IMUData) limunew=mpNextKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't copy list!
       {
 	unique_lock<mutex> lock(mMutexOdomData);
 	limunew.insert(limunew.begin(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
 	mpNextKeyFrame->SetPreIntegrationList<IMUData>(limunew.begin(),--limunew.end());
       }
+      //AppendEncDataToFront
+      listeig(EncData) lencnew=mpNextKeyFrame->GetListEncData();//notice GetEncPreInt() doesn't copy list!
+      {
+	unique_lock<mutex> lock(mMutexOdomData);
+	lencnew.insert(lencnew.begin(),mOdomPreIntEnc.getlOdom().begin(),mOdomPreIntEnc.getlOdom().end());
+	mpNextKeyFrame->SetPreIntegrationList<EncData>(lencnew.begin(),--lencnew.end());
+      }
       //ComputePreInt
       mpNextKeyFrame->PreIntegration<IMUData>(mpPrevKeyFrame);
+      mpNextKeyFrame->PreIntegration<EncData>(mpPrevKeyFrame);
       mpPrevKeyFrame=mpNextKeyFrame=NULL;//clear this KF's pointer, I think it's not necessary
     }
 

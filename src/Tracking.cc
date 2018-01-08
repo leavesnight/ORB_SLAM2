@@ -51,6 +51,7 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
 	miterLastEnc=mlOdomEnc.begin();
       }else
 	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
+      ;//mbSensorIMU=false;
       break;
     case System::IMU://only q/awIMU
       if (mlOdomIMU.empty()){
@@ -102,8 +103,8 @@ void Tracking::PreIntegration(const char type){
   static unsigned int lastRelocId=mnLastRelocFrameId;
   static bool firstEnter=true;*/
   if (type==2){
-    size_t N=mpReferenceKF->GetListIMUData().size();
-    cout<<"List size: "<<N<<endl;/*
+    size_t N=mpReferenceKF->GetListIMUData().size(),N2=mpReferenceKF->GetListEncData().size();
+    cout<<"List size: "<<N<<" "<<N2<<endl;/*
     if (lastRelocId!=mnLastRelocFrameId){
       firstEnter=true;
     }
@@ -116,13 +117,13 @@ void Tracking::PreIntegration(const char type){
 //      if (mpReferenceKF->GetListIMUData().size()==0) cout<<fixed<<setprecision(6)<<"Last:"<<mpLastKeyFrame->mTimeStamp<<" Cur:"<<mCurrentFrame.mTimeStamp<<endl;
 // #ifndef TRACK_WITH_IMU
 //     Eigen::AngleAxisd angax(mpReferenceKF->GetIMUPreInt().mdelxRji);
-//     cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<"t, "<<angax.angle()*angax.axis()[1]<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
+     cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<endl;
 // #else
 //     cout<<Sophus::SO3::log(Sophus::SO3(mpReferenceKF->GetIMUPreInt().mRij)).transpose()<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #endif
   }else if (0&&(type==3||type==1)){
     if (0&&type==1){
-      const list<IMUData> &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
+      const listeig(IMUData) &limu=mCurrentFrame.mOdomPreIntIMU.getlOdom();
       cout<<blueSTR"List size between 2Frames: "<<limu.size()<<whiteSTR<<endl;
       for (auto data:limu) cout<<data.mtm<<": a="<<data.ma.transpose()<<" w="<<data.mw.transpose()<<", ";
       cout<<endl;
@@ -137,6 +138,38 @@ void Tracking::PreIntegration(const char type){
     Tji=Frame::mTbc*Tji*Converter::toCvMatInverse(Frame::mTbc);//Tbjbi=Tbc*Tcjci*Tcb
     cout<<"pij by camera="<<-(Tji.rowRange(0,3).colRange(0,3).t()*Tji.rowRange(0,3).col(3)).t()<<endl;*/
   }
+}
+bool Tracking::GetVelocityByEnc(bool bMapUpdated){
+  char type=1;
+//   if(bMapUpdated){// Map updated, optimize with last KeyFrame
+//     type=3;//preintegrate from LastKF to curF
+//   }
+//   else{// Map not updated, optimize with last Frame
+//     type=1;//preintegrate from LastF to curF
+//   }
+  {
+    unique_lock<mutex> lock(mMutexOdom);
+    PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
+  }
+  if (mCurrentFrame.mOdomPreIntEnc.mdeltatij==0){
+    return false;//check PreIntegration() failed when mdeltatij==0, so mCurrentFrame.mTcw==cv::Mat()
+  }
+  
+  using namespace Eigen;
+  //motion update/prediction by Enc motion model
+  const EncPreIntegrator &encpreint=mCurrentFrame.mOdomPreIntEnc;//problem exits
+  double deltat=encpreint.mdeltatij;
+  //get To1o2:p12 R12
+  Vector3d pij(encpreint.mdelxEij[1],encpreint.mdelxEij[2],0);
+  Matrix3d Rij=IMUPreintegrator::Expmap(Vector3d(0,0,encpreint.mdelxEij[0]));
+  cv::Mat Tij=Converter::toCvSE3(Rij,pij);
+  //get Tc2c1
+  cv::Mat Toc=Converter::toCvMatInverse(Frame::mTco);
+  mVelocity=Frame::mTco*Converter::toCvMatInverse(Tij)*Toc;
+//   cout<<encpreint.mdelxEij[0]<<endl;
+//   cout<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<endl;
+  
+  return true;
 }
 bool Tracking::TrackWithIMU(bool bMapUpdated){
     ORBmatcher matcher(0.9,true);//here 0.9 is useless
@@ -327,7 +360,7 @@ void Tracking::RecomputeIMUBiasAndCurrentNavstate(){//see VIORBSLAM paper IV-E
   // Step1. Estimate gyr bias / see VIORBSLAM paper IV-A
   // compute initial IMU pre-integration for bgi_bar=0 as for the KFs' mOdomPreIntIMU in IMU Initialization
   size_t N=mv20pFramesReloc.size();
-  std::list<IMUData>::const_iterator iterTmp=miterLastIMU;
+  listeig(IMUData)::const_iterator iterTmp=miterLastIMU;
   for(size_t i=0; i<N-1; ++i){
     unique_lock<mutex> lock(mMutexOdom);
     //so vKFInit[i].mOdomPreIntIMU is based on bg_bar=0,ba_bar=0; dbg=0 but dba/ba waits to be optimized
@@ -734,7 +767,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
     }else{//then delay some ms to ensure some Odom data to come if it runs well
       lock2.unlock();
       mtmGrabDelay+=chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double>(mDelayCache));//delay default=20ms
-      while (chrono::steady_clock::now()<mtmGrabDelay) sleep(0.001);//allow 1ms delay error
+      while (chrono::steady_clock::now()<mtmGrabDelay) usleep(1000);//allow 1ms delay error
     }//if still no Odom data comes, deltax~ij will be set unknown
     }
     
@@ -793,6 +826,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		      }
 		    }
 		}else{
+		  if (!mLastFrame.mTcw.empty()) GetVelocityByEnc();//try to utilize the Encoder's data
+		  else cout<<redSTR<<"LastFrame has no Tcw!"<<whiteSTR<<endl;
 		  if(mVelocity.empty()){// || mCurrentFrame.mnId<mnLastRelocFrameId+2){//if last frame relocalized, there's no motion could be calculated, so I think 2nd condition is useless
 //   		    if (!mVelocity.empty()) cerr<<redSTR"Error in Velocity.empty()!!!"<<endl;//check if right
 		    bOK = TrackReferenceKeyFrame();//match with rKF, use lF as initial & m-o BA
@@ -929,35 +964,14 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	}else{//we shouldn't make it LOST for robustness
             //mState=LOST;
 	    //use Odom data to get mCurrentFrame.mTcw
-	    if (!mLastTwcOdom.empty()){//when odom data comes we suppose it cannot be empty() again
-	      assert(0&&"Test should not go here!");
-	      {
-		if (mtimestampOdom>mLastTimestamp){
-		  mVelocity=mTcwOdom*mLastTwcOdom;//try directly using odom result, Tc2c1
-		  mVtmspan=mtimestampOdom-mLastTimestamp;//update deltat
-		}else{//==0 then keep the old mVelocity and deltat
-		}
-	      }
-	      if (!mVelocity.empty()){
-		cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
-		
-		if (mVtmspan==0){
-		  mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w, !mLastFrame.mTcw.empty() must be true
-		  cout<<redSTR<<"mVtmspan == 0!"<<whiteSTR<<endl;
-		}else{
-		  Eigen::AngleAxisd angAxis(Converter::toMatrix3d(mVelocity.rowRange(0,3).colRange(0,3)));
-		  Eigen::AngleAxisd angAxisToUse(angAxis.angle()*(mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp)/mVtmspan,angAxis.axis());
-		  Eigen::Vector3d trans(mVelocity.at<float>(0,3),mVelocity.at<float>(1,3),mVelocity.at<float>(2,3));
-		  mCurrentFrame.SetPose(Converter::toCvSE3(angAxisToUse.matrix(),trans*(mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp)/mVtmspan)
-		  *mLastFrame.mTcw);
-		}
-		//it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
-		mState=ODOMOK;
-		cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
-	      }else{
-		mState=LOST;
-		cout<<redSTR"Error when mVelocity.empty()"<<whiteSTR<<endl;
-	      }
+	    if (mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//though it may introduce error, it ensure the completeness of the Map
+	      assert(!mVelocity.empty());
+	      mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
+	      //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
+	      mState=ODOMOK;
+	      cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
+	      cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
+// 	      cin.get();
 	    }else{
 	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	      // Clear Frame vectors for reloc bias computation
@@ -981,7 +995,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                 mLastFrame.GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
                 mLastFrame.GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
                 mVelocity = mCurrentFrame.mTcw*LastTwc;//Tc2c1/Tcl
-                //mVtmspan=mCurrentFrame.mTimeStamp-mLastFrame.mTimeStamp;
             }
             else{
                 mVelocity = cv::Mat();//can use odometry data here!
@@ -1013,14 +1026,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             // Check if we need to insert a new keyframe!!
             if(NeedNewKeyFrame()){
                 CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
-		/*unique_lock<std::mutex> lock(mpSystem->mMutexPose);
-		static double stlastUpdateSysTOdomStamp=-1;
-		if (!mpSystem->mTcwOdom.empty()&&stlastUpdateSysTOdomStamp+3<mCurrentFrame.mTimeStamp){//allow 3s drift
-		  mpSystem->mTcwOdom=mCurrentFrame.mTcw;
-		  mpSystem->mTwcOdom=mCurrentFrame.mTcw.inv();
-		  mpSystem->mtimestampOdom=mCurrentFrame.mTimeStamp;
-		  stlastUpdateSysTOdomStamp=mCurrentFrame.mTimeStamp;
-		}*/
 	    }
 
             // We allow points with high innovation (considererd outliers by the Huber Function)
@@ -1040,12 +1045,11 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	    
 	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
 	    if(NeedNewKeyFrame()){
-                CreateNewKeyFrame(img,mState);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+              CreateNewKeyFrame(img,mState);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
 	    }
-	    for(int i=0; i<mCurrentFrame.N;i++)
-            {//new created MPs' mvbOutlier[j] is default false
-                if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
-                    mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
+	    for(int i=0; i<mCurrentFrame.N;i++){//new created MPs' mvbOutlier[j] is default false
+              if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
+                mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
             }
 	}
 
@@ -1075,12 +1079,6 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
         mlpReferences.push_back(mpReferenceKF);
         mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
         mlbLost.push_back(mState==LOST);//false if it isn't lost, when it has Tcw, it stll can be LOST for not enough inlier MapPoints
-	
-	if (!mTcwOdom.empty()){
-	  assert(0&&"Check Code!!!");
-	  mLastTwcOdom=mTwcOdom.clone();
-	  mLastTimestamp=mtimestampOdom;
-	}
     }
     else
     {
@@ -1133,6 +1131,7 @@ void Tracking::StereoInitialization(cv::Mat img[2])
 
         mpLocalMapper->InsertKeyFrame(pKFini);//add it to the local mapper KF list
 
+        mCurrentFrame.mpReferenceKF = pKFini;//I think it should be put before mLastFrame=!
         mLastFrame = Frame(mCurrentFrame);
         mnLastKeyFrameId=mCurrentFrame.mnId;
         mpLastKeyFrame = pKFini;
@@ -1140,7 +1139,6 @@ void Tracking::StereoInitialization(cv::Mat img[2])
         mvpLocalKeyFrames.push_back(pKFini);
         mvpLocalMapPoints=mpMap->GetAllMapPoints();
         mpReferenceKF = pKFini;
-        mCurrentFrame.mpReferenceKF = pKFini;
 
         mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
 
@@ -1467,6 +1465,7 @@ bool Tracking::TrackWithMotionModel()
 
     // Update last frame pose according to its reference keyframe for rKF may be rectified
     // Create "visual odometry" points if in Localization Mode
+
     UpdateLastFrame();
 
     mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);//Tc2c1*Tc1w

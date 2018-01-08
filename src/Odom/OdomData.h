@@ -16,6 +16,9 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+//for typedef listEncData
+#include <list>
+
 namespace ORB_SLAM2{
 
 using namespace Eigen;
@@ -79,6 +82,8 @@ public:
   EncData& operator=(const EncData& encdata){mv[0]=encdata.mv[0];mv[1]=encdata.mv[1];mtm=encdata.mtm;return *this;}
   
 };
+
+#define listeig(EncData) std::list<EncData,Eigen::aligned_allocator<EncData> >
 
 }
     

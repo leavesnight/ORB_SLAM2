@@ -31,7 +31,7 @@ namespace ORB_SLAM2
 LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-    mpLastKF(NULL),mnLastOdomKFId(0)
+    mnLastOdomKFId(0)
 {//zzh
   cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
@@ -88,7 +88,7 @@ void LocalMapping::Run()
             if((!CheckNewKeyFrames()) && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
+                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
 		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
 		  
 		  if(!mpIMUInitiator->GetVINSInited()){
@@ -186,17 +186,15 @@ void LocalMapping::ProcessNewKeyFrame()
     }    
 
     // Update links in the Covisibility Graph
-    if (mpLastKF!=NULL&&mpLastKF->getState()==Tracking::ODOMOK
-      &&mpCurrentKeyFrame->getState()==Tracking::ODOMOK){//not a good start then delete the last Odom KF and its Odom MPs
-	KeyFrame* pKFTmp=mpLastKF;
-	mpLastKF=mpLastKF->GetParent();
-	pKFTmp->SetBadFlag();
-	cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+    KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
+    if (pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK
+      &&mpCurrentKeyFrame->getState()==Tracking::ODOMOK){
+      pLastKF->SetBadFlag();
+      cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+//       cin.get();
     }
-    //mpCurrentKeyFrame->UpdateConnections(mpLastKF);
-    mpCurrentKeyFrame->UpdateConnections();
-    //if (mpCurrentKeyFrame->getState()==(char)Tracking::OK)
-    mpLastKF=mpCurrentKeyFrame;
+    mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
+//     mpCurrentKeyFrame->UpdateConnections();
 
     // Insert Keyframe in Map
     mpMap->AddKeyFrame(mpCurrentKeyFrame);
@@ -709,6 +707,9 @@ void LocalMapping::KeyFrameCulling()
     {
         KeyFrame* pKF = *vit;
         if(pKF->mnId==0) continue;//cannot erase the initial KF
+        //cannot erase ODOMOK & its parent!
+        KeyFrame* pNextKF=pKF->GetNextKeyFrame();
+        if (pKF->getState()==Tracking::ODOMOK||pNextKF&&pNextKF->getState()==Tracking::ODOMOK) continue;
         
         //timespan restriction is implemented as the VIORBSLAM paper III-B
         double tmNext=-1;
@@ -777,9 +778,6 @@ void LocalMapping::KeyFrameCulling()
         }  
 
         if(nRedundantObservations>0.9*nMPs){
-	    if (mpLastKF==pKF){
-	      mpLastKF=pKF->GetParent();
-	    }
 	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
 	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
 	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;

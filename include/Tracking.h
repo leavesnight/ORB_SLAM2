@@ -61,9 +61,11 @@ class Tracking
   //Created by zzh
   // Odom PreIntegration
   template<class EncData>
-  inline bool iterijFind(const list<EncData> &mlOdomEnc,const double &curTime,typename list<EncData>::const_iterator &iter,const double&errOdomImg,bool bSearchBack=true);
+  inline bool iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTime,
+			 typename listeig(EncData)::const_iterator &iter,const double&errOdomImg,bool bSearchBack=true);
   template<class _OdomData>
-  void PreIntegration(const char type,list<_OdomData> &mlOdom,typename list<_OdomData>::const_iterator &miterLastEnc,Frame *pLastF=NULL,Frame *pCurF=NULL);//0 for initialize,1 for inter-Frame PreInt.,2 for inter-KF PreInt. \
+  void PreIntegration(const char type,listeig(_OdomData) &mlOdom,
+		      typename listeig(_OdomData)::const_iterator &miterLastEnc,Frame *pLastF=NULL,Frame *pCurF=NULL);//0 for initialize,1 for inter-Frame PreInt.,2 for inter-KF PreInt. \
   0/2 also is used to cull the data in 2 lists whose tm is (mLastKeyFrame.mTimeStamp,mCurrentKeyFrame.mTimeStamp], \
   culling strategy: tm<mtmSyncOdom is discarded & tm>mCurrentFrame.mTimeStamp is reserved in lists & the left is needed for deltax~ij calculation, \
   for the case Measurement_j-1 uses (M(tj)+M(tj-1))/2, we also reserved last left one in 2 lists(especially for Enc); \
@@ -75,6 +77,9 @@ class Tracking
   //IMUPreintegrator GetIMUPreIntSinceLastKF();
   bool TrackLocalMapWithIMU(bool bMapUpdated);//track local map with IMU motion-only BA, if no imu data it degenerates to TrackLocalMap()
   void RecomputeIMUBiasAndCurrentNavstate();//recompute bias && mCurrentFrame.mNavState when 19th Frame after reloc.
+  
+  // Get mVelocity by Encoder data
+  bool GetVelocityByEnc(bool bMapUpdated=false);
   
   // Flags for relocalization. Create new KF once bias re-computed & flag for preparation for bias re-compute
   bool mbRelocBiasPrepare;//true means preparing/not prepared
@@ -93,11 +98,11 @@ class Tracking
   //Variables
   std::chrono::steady_clock::time_point mtmGrabDelay;//for delay control(we found our Enc&IMU's response has some delay=20ms)
   //cache queue for vl,vr/IMU & its own timestamp from LastKF
-  std::list<EncData> mlOdomEnc;
-  std::list<IMUData> mlOdomIMU;
+  listeig(EncData) mlOdomEnc;
+  listeig(IMUData) mlOdomIMU;
   std::mutex mMutexOdom;//for 2 lists' multithreads' operation
-  std::list<EncData>::const_iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
-  std::list<IMUData>::const_iterator miterLastIMU;//Last IMUData pointer in LastFrame, we don't change the OdomData's content
+  listeig(EncData)::const_iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
+  listeig(IMUData)::const_iterator miterLastIMU;//Last IMUData pointer in LastFrame, we don't change the OdomData's content
   
   //the odom data's timestamp (now only for Encoder)
   double mtimestampOdom;
@@ -286,8 +291,9 @@ protected:
 
 //created by zzh
 template<class EncData>
-bool Tracking::iterijFind(const list<EncData> &mlOdomEnc,const double &curTime,typename list<EncData>::const_iterator &iter,const double&errOdomImg,bool bSearchBack){
-  typename list<EncData>::const_iterator iter1;//iter-1 or iter+1
+bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTime,
+			  typename listeig(EncData)::const_iterator &iter,const double&errOdomImg,bool bSearchBack){
+  typename listeig(EncData)::const_iterator iter1;//iter-1 or iter+1
   double minErr=errOdomImg+1;
   if (bSearchBack){//should==mlOdomEnc.end()
     while (iter!=mlOdomEnc.begin()){//begin is min >= lastKFTime-err
@@ -327,12 +333,13 @@ bool Tracking::iterijFind(const list<EncData> &mlOdomEnc,const double &curTime,t
   return false;//if iteri/j is not in allowed err, returned iter points to nearest one to curTime or end()
 }
 template<class EncData>
-void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename list<EncData>::const_iterator &miterLastEnc,Frame *pLastF,Frame *pCurF){
+void Tracking::PreIntegration(const char type,listeig(EncData) &mlOdomEnc,
+			      typename listeig(EncData)::const_iterator &miterLastEnc,Frame *pLastF,Frame *pCurF){
   switch (type){//0/2 will cull 2 Odom lists,1 will shift the pointer
     case 0://for 0th keyframe/frame: erase all the data whose tm<=mCurrentFrame.mTimeStamp but keep the last one, like list.clear()
       if (!mlOdomEnc.empty()){
 	double curTime=mCurrentFrame.mTimeStamp;
-	typename list<EncData>::const_iterator iter=mlOdomEnc.end();
+	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
 	iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg);//we just find the nearest iteri(for next time) to curTime, don't need to judge if it's true
 	cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
 	
@@ -345,7 +352,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
       if (!mlOdomEnc.empty()){
 	if (pLastF==NULL) pLastF=&mLastFrame;if (pCurF==NULL) pCurF=&mCurrentFrame;
 	double curFTime=pCurF->mTimeStamp,lastFTime=pLastF->mTimeStamp;
-	typename list<EncData>::const_iterator iter=mlOdomEnc.end();
+	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
 	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastFTime,miterLastEnc,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
 // 	  assert((miterLastEnc->mtm-lastFTime)==0&&(iter->mtm-curFTime)==0);
 // 	  cout<<redSTR"ID="<<pCurF->mnId<<"; LastDiff:"<<miterLastEnc->mtm-lastFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
@@ -362,7 +369,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
       //PreIntegration between 2 KFs & cull 2 odom lists: erase all the data whose tm<=mpReferenceKF(curKF)->mTimeStamp but keep the last one
       if (!mlOdomEnc.empty()){
 	double curTime=mpReferenceKF->mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
-	typename list<EncData>::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();//iterj, iteri
+	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();//iterj, iteri
 	if (iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
 // 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curTime)==0);
 // 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curTime<<whiteSTR<<" LastTime="<<fixed<<setprecision(9)<<lastKFTime<<"; cur="<<mCurrentFrame.mTimeStamp<<endl;
@@ -379,7 +386,7 @@ void Tracking::PreIntegration(const char type,list<EncData> &mlOdomEnc,typename 
       //PreIntegration between lastKF & curF
       if (!mlOdomEnc.empty()){
 	double curFTime=mCurrentFrame.mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
-	typename list<EncData>::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();
+	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();
 	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
 // 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curFTime)==0);
 // 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;

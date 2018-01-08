@@ -14,7 +14,7 @@ class OdomPreIntegratorBase{//base class
   OdomPreIntegratorBase& operator=(const OdomPreIntegratorBase &other){;return *this;}//do nothing, don't want the list to be assigned in any situation, this makes the derived class unable to use default =!
   
 protected:
-  std::list<_OdomData> mlOdom;//for IMUPreIntegrator: IMU list
+  listeig(_OdomData) mlOdom;//for IMUPreIntegrator: IMU list
   
 public:
   double mdeltatij;//0 means not preintegrated
@@ -23,14 +23,15 @@ public:
   //though copy constructor/operator = already deep, please don't copy the list when preintegration is not related to the statei...j
   virtual ~OdomPreIntegratorBase(){}
   // Odom PreIntegration List Setting
-  virtual void SetPreIntegrationList(const typename std::list<_OdomData>::const_iterator &begin,typename std::list<_OdomData>::const_iterator pback){
+  virtual void SetPreIntegrationList(const typename listeig(_OdomData)::const_iterator &begin,typename listeig(_OdomData)::const_iterator pback){
     mlOdom.clear();
     mlOdom.insert(mlOdom.begin(),begin,++pback);
   }
-  const std::list<_OdomData>& getlOdom(){return mlOdom;}//the list of Odom, for KFCulling()
+  const listeig(_OdomData)& getlOdom(){return mlOdom;}//the list of Odom, for KFCulling()
   // Odom PreIntegration
   virtual void PreIntegration(const double timeStampi,const double timeStampj){assert(0&&"You called an empty virtual function!!!");}//cannot use =0 for we allow transformed in derived class
   
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 using namespace Eigen;
@@ -50,8 +51,10 @@ public:
     return *this;
   }
   void PreIntegration(const double &timeStampi,const double &timeStampj,
-		      const std::list<EncData>::const_iterator &iterBegin,const std::list<EncData>::const_iterator &iterEnd);//rewrite
+		      const listeig(EncData)::const_iterator &iterBegin,const listeig(EncData)::const_iterator &iterEnd);//rewrite
   void PreIntegration(const double &timeStampi,const double &timeStampj){PreIntegration(timeStampi,timeStampj,mlOdom.begin(),mlOdom.end());}//rewrite, inline
+  
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 typedef Eigen::Matrix<double, 9, 9> Matrix9d;
@@ -88,7 +91,7 @@ public:
   virtual ~IMUPreIntegratorBase(){}
   
   void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar,
-		      const typename std::list<IMUDataBase>::const_iterator &iterBegin,const typename std::list<IMUDataBase>::const_iterator &iterEnd);//rewrite, like override but different
+		      const typename listeig(IMUDataBase)::const_iterator &iterBegin,const typename listeig(IMUDataBase)::const_iterator &iterEnd);//rewrite, like override but different
   void PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar){//inline
     PreIntegration(timeStampi,timeStampj,bgi_bar,bai_bar,this->mlOdom.begin(),this->mlOdom.end());
   }//rewrite
@@ -124,15 +127,15 @@ public:
 //when template<>: specialized definition should be defined in .cpp(avoid redefinition) or use inline/static(not good) in .h and template func. in template class can't be specialized(only fully) when its class is not fully specialized
 template<class IMUDataBase>
 void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar,
-						       const typename std::list<IMUDataBase>::const_iterator &iterBegin,const typename std::list<IMUDataBase>::const_iterator &iterEnd){
+						       const typename listeig(IMUDataBase)::const_iterator &iterBegin,const typename listeig(IMUDataBase)::const_iterator &iterEnd){
   //TODO: refer to the code by JingWang
   if (iterBegin!=iterEnd){//default parameter = !mlOdom.empty()
     // Reset pre-integrator first
     reset();
     // remember to consider the gap between the last KF and the first IMU
     // integrate each imu
-    for (typename std::list<IMUDataBase>::const_iterator iterj=iterBegin;iterj!=iterEnd;){
-      typename std::list<IMUDataBase>::const_iterator iterjm1=iterj++;//iterj-1
+    for (typename listeig(IMUDataBase)::const_iterator iterj=iterBegin;iterj!=iterEnd;){
+      typename listeig(IMUDataBase)::const_iterator iterjm1=iterj++;//iterj-1
       
       // delta time
       double dt,tj,tj_1;
@@ -210,11 +213,13 @@ public:
   Matrix3d mSigmaPhiij;// SigmaPhiij by qIMU, 3*3*float
 
   IMUPreIntegratorDerived():mdelxRji(Matrix3d::Identity()),mSigmaPhiij(Matrix3d::Zero()){}
-  void SetPreIntegrationList(const std::list<IMUDataDerived>::const_iterator &begin,const std::list<IMUDataDerived>::const_iterator &pback){//rewrite, will override the base class one
+  void SetPreIntegrationList(const listeig(IMUDataDerived)::const_iterator &begin,const listeig(IMUDataDerived)::const_iterator &pback){//rewrite, will override the base class one
     this->mlOdom.clear();
     this->mlOdom.push_front(*begin);this->mlOdom.push_back(*pback);
   }
   void PreIntegration(const double &timeStampi,const double &timeStampj);//rewrite
+  
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 #ifndef TRACK_WITH_IMU

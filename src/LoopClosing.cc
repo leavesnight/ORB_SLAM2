@@ -160,8 +160,6 @@ bool LoopClosing::DetectLoop()
     // This is the lowest score to a connected keyframe in the covisibility graph
     // We will impose loop candidates to have a higher similarity than this (higher score)
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
-    //const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetCovisiblesByWeight(15);//all 1st layer covisibility KFs/localKFs/connectedKFs in covisibility graph, \
-    except the one with weight==0(odom edge)/>=15(threshold used in old UpdateConnections())! modified by zzh
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
     float minScore = 1;//score is [0,1]
     for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
@@ -309,7 +307,7 @@ bool LoopClosing::ComputeSim3()
 	corresponding to pKF1/mpCurrentKF in LoopClosing
 
 	cout<<redSTR<<i<<": "<<nmatches<<endl;
-        if(nmatches<20)//same threshold in TrackWithMotionModel(), new 10
+        if(nmatches<10)//20)//same threshold in TrackWithMotionModel(), new 10
         {
             vbDiscarded[i] = true;
             continue;
@@ -317,7 +315,7 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);//how?
-            pSolver->SetRansacParameters(0.99,10,300);//20 is stricter than Relocalization()s
+            pSolver->SetRansacParameters(0.99,10,300);//20 is stricter than Relocalization()s, old 20
             vpSim3Solvers[i] = pSolver;
         }
 

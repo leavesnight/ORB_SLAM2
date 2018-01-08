@@ -62,10 +62,6 @@ public:
   template<class IMUKeyFrameInit>
   static Eigen::Vector3d OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> &vpKFInit,bool bInfo=true);//if bInfo==true, use the R part of SigmaPRV as the Infomation matrix else use Identity(); \
   and if use<Frame> please compute mOdomPreIntIMU before
-//   Vector3d static OptimizeInitialGyroBias(const std::list<KeyFrame*> &lLocalKeyFrames);
-//   Vector3d static OptimizeInitialGyroBias(const std::vector<KeyFrame*> &vLocalKeyFrames);
-//   Vector3d static OptimizeInitialGyroBias(const std::vector<Frame> &vFrames);
-//  Vector3d static OptimizeInitialGyroBias(const vector<cv::Mat>& vTwc, const vector<IMUPreintegrator>& vImuPreInt);
   
 //created by zzh over.
   
@@ -473,6 +469,8 @@ Vector3d Optimizer::OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> 
   for(int i=0; i<N; i++){
       if(i==0) continue;// Ignore the first KF
       const IMUPreintegrator& imupreint=vpKFInit[i]->mOdomPreIntIMU;//notice this should be computed before calling this function
+      if (imupreint.mdeltatij==0) continue;
+      assert(imupreint.mdeltatij>0);
 
       g2o::EdgeGyrBias * eBiasg = new g2o::EdgeGyrBias();
       eBiasg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));

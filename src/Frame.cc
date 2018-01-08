@@ -68,7 +68,7 @@ void Frame::UpdateNavStatePVRFromTcw()
 //   mOdomPreIntIMU.SetPreIntegrationList(begin,pback);
 // }
 template <>
-void Frame::PreIntegration<IMUData>(Frame* pLastF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj){
+void Frame::PreIntegration<IMUData>(Frame* pLastF,const listeig(IMUData)::const_iterator &iteri,const listeig(IMUData)::const_iterator &iterj){
   Eigen::Vector3d bgi_bar=pLastF->mNavState.mbg,bai_bar=pLastF->mNavState.mba;//we can directly use mNavState here
 #ifndef TRACK_WITH_IMU
   mOdomPreIntIMU.PreIntegration(pLastF->mTimeStamp,mTimeStamp,iteri,iterj);
@@ -77,11 +77,11 @@ void Frame::PreIntegration<IMUData>(Frame* pLastF,const std::list<IMUData>::cons
 #endif
 }
 template <>
-void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const std::list<EncData>::const_iterator &iteri,const std::list<EncData>::const_iterator &iterj){
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const listeig(EncData)::const_iterator &iteri,const listeig(EncData)::const_iterator &iterj){
   mOdomPreIntEnc.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,iteri,iterj);
 }
 template <>
-void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const std::list<IMUData>::const_iterator &iteri,const std::list<IMUData>::const_iterator &iterj){
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const listeig(IMUData)::const_iterator &iteri,const listeig(IMUData)::const_iterator &iterj){
   Eigen::Vector3d bgi_bar=pLastKF->GetNavState().mbg,bai_bar=pLastKF->GetNavState().mba;
 #ifndef TRACK_WITH_IMU
   mOdomPreIntIMU.PreIntegration(pLastKF->mTimeStamp,mTimeStamp,iteri,iterj);

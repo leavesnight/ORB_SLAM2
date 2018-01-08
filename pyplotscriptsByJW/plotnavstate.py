@@ -3,7 +3,9 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
 filepathOut = '/home/leavesnight/tmp/zzh/';
-filepath = '/home/leavesnight/zzh/ORB_SLAM2/Examples/Monocular/';
+#filepath = '/home/leavesnight/zzh/ORB_SLAM2/Examples/Monocular/';
+#filepath = '/home/leavesnight/zzh/ORB_SLAM2/Examples/Stereo/';
+filepath = '/home/leavesnight/zzh/ORB_SLAM2/Examples/RGB-D/';
 filename = filepath+'KeyFrameTrajectoryIMU.txt';
 
 NS = np.loadtxt(filename);

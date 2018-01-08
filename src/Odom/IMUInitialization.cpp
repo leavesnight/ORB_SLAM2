@@ -9,7 +9,7 @@ using namespace Eigen;
 IMUKeyFrameInit::IMUKeyFrameInit(KeyFrame& kf):mTimeStamp(kf.mTimeStamp),mTwc(kf.GetPoseInverse()),mTcw(kf.GetPose()), mpPrevKeyFrame(NULL),//GetPose() already return .clone()
 mOdomPreIntIMU(kf.GetIMUPreInt()){//this func. for IMU Initialization cache of KFs, so need deep copy
   mbg_=mba_=Vector3d::Zero();//as stated in IV-A in VIORBSLAM paper 
-  const list<IMUData> limu=kf.GetListIMUData();
+  const listeig(IMUData) limu=kf.GetListIMUData();
   mOdomPreIntIMU.SetPreIntegrationList(limu.begin(),--limu.end());
 }
 
@@ -36,7 +36,7 @@ void IMUInitialization::Run(){
     ResetIfRequested();
     if(GetFinishRequest()) break;
 //     usleep(3000);
-    sleep(mdSleepTime);//3,1,0.5
+    usleep(mnSleepTime);//3,1,0.5
   }
   SetFinish(true);
   cout<<"VINSInitThread is Over."<<endl;
@@ -82,7 +82,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Cache KFs / wait for KeyFrameCulling() over
   while(GetCopyInitKFs()) usleep(1000);
   SetCopyInitKFs(true);//stop KeyFrameCulling() when this copying KFs
-  if(mpMap->KeyFramesInMap()<4){ SetCopyInitKFs(false);return false;}//ensure no KeyFrameCulling() during the start of this func. till here
+//   if(mpMap->KeyFramesInMap()<4){ SetCopyInitKFs(false);return false;}//ensure no KeyFrameCulling() during the start of this func. till here
 
   //see VIORBSLAM paper IV, here N=all KFs in map, not the meaning of local KFs' number
   // Use all KeyFrames in map to compute
@@ -108,7 +108,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   // Step 1. / see VIORBSLAM paper IV-A
   // Try to compute initial gyro bias, using optimization with Gauss-Newton
   Vector3d bgest=Optimizer::OptimizeInitialGyroBias<IMUKeyFrameInit>(vKFInit);//nothing changed, just return the optimized result bg*
-//   cout<<"bgest: "<<bgest<<endl;
+  cout<<"bgest: "<<bgest<<endl;
 
   // Update biasg and pre-integration in LocalWindow(here all KFs).
   for(int i=0;i<N;++i) vKFInit[i]->mbg_=bgest;
@@ -120,12 +120,14 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cv::Mat A=cv::Mat::zeros(3*(N-2),4,CV_32F);//4 unknowns so N must >=4
   cv::Mat B=cv::Mat::zeros(3*(N-2),1,CV_32F);
   cv::Mat I3=cv::Mat::eye(3,3,CV_32F);
+  int numEquations=0;
   for(int i=0; i<N-2; ++i){
     IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3=vKFInit[i+2];
     double dt12 = pKF2->mOdomPreIntIMU.mdeltatij;//deltat12
     double dt23 = pKF3->mOdomPreIntIMU.mdeltatij;
-    assert(dt12!=0&&dt23!=0);//now let them not be 0
-    assert(dt12>0&&dt23>0);
+    if (dt12==0||dt23==0){ cout<<redSTR<<"Tm="<<pKF2->mTimeStamp<<" lack IMU data!"<<whiteSTR<<endl;continue;}
+    assert(dt12>0&&dt23>0);//now let them not be 0
+    ++numEquations;
     // Pre-integrated measurements
     cv::Mat dp12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mpij);//deltap12
     cv::Mat dv12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mvij);
@@ -149,6 +151,12 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     lambda.copyTo(A.rowRange(3*i+0,3*i+3).col(0));beta.copyTo(A.rowRange(3*i+0,3*i+3).colRange(1,4));//Ai
     gamma.copyTo(B.rowRange(3*i+0,3*i+3));//gamma/B(i), but called gamma(i) in the paper
     // JingWang tested the formulation in paper, -gamma. Then the scale and gravity vector is -xx, or we can say the papaer missed a minus before γ(i)
+  }
+  if (numEquations<4){//for more robust judgement instead of judging KeyFramesInMap()
+    for(int i=0;i<N;i++){//delete the newed pointer
+      if(vKFInit[i]) delete vKFInit[i];
+    }
+    return false;
   }
   // Use svd to compute A*x=B, x=[s,gw] 4x1 vector
   // A=u*S*vt=u*w*vt, u*w*vt*x=B => x=vt'*winv*u'*B, or we call the pseudo inverse of A/A.inv()=(A.t()*A).inv()*A.t(), in SVD we have A.inv()=v*winv*u.t() where winv is the w with all nonzero term is the reciprocal of the corresponding singular value
@@ -198,6 +206,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       const IMUPreintegrator &imupreint12=pKF2->mOdomPreIntIMU,&imupreint23=pKF3->mOdomPreIntIMU;
       //d means delta
       double dt12=imupreint12.mdeltatij;double dt23=imupreint23.mdeltatij;
+      if (dt12==0||dt23==0) continue;
       cv::Mat dp12=Converter::toCvMat(imupreint12.mpij);cv::Mat dp23=Converter::toCvMat(imupreint23.mpij);
       cv::Mat dv12=Converter::toCvMat(imupreint12.mvij);cv::Mat Jav12=Converter::toCvMat(imupreint12.mJavij);
       cv::Mat Jap12 = Converter::toCvMat(imupreint12.mJapij);cv::Mat Jap23=Converter::toCvMat(imupreint23.mJapij);
@@ -241,7 +250,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 
   // Record data for analysis
   cv::Mat gwbefore=Rwi*GI,gwafter=Rwi_*GI;//direction of gwbefore is the same as gwstar, but value is different!
-
+  cout<<"gwbefore="<<gwbefore<<", gwafter="<<gwafter<<endl;
+  
   cout<<"Time: "<<pNewestKF->mTimeStamp-mdStartTime<<", sstar: "<<sstar<<", s: "<<s_<<endl;//Debug the frequency & sstar2&sstar
   //<<" bgest: "<<bgest.transpose()<<", gw*(gwafter)="<<gwafter.t()<<", |gw*|="<<cv::norm(gwafter)<<", norm(gwbefore,gwstar)"<<cv::norm(gwbefore.t())<<" "<<cv::norm(gwstar.t())<<endl;
   if (mTmpfilepath.length()>0){//Debug the Rwistar2

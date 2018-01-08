@@ -87,10 +87,14 @@ public:
     unique_lock<mutex> lock(mMutexOdomData);
     return mOdomPreIntIMU;//call copy constructor
   }
-  std::list<IMUData> GetListIMUData(){
+  listeig(IMUData) GetListIMUData(){
     unique_lock<mutex> lock(mMutexOdomData);
     return mOdomPreIntIMU.getlOdom();//call copy constructor
   }//used in LocalMapping && IMUInitialization threads
+  listeig(EncData) GetListEncData(){
+    unique_lock<mutex> lock(mMutexOdomData);
+    return mOdomPreIntEnc.getlOdom();//call copy constructor
+  }
   KeyFrame* GetPrevKeyFrame(void){//for localBA fixing N+1th KF
       unique_lock<mutex> lock(mMutexPNConnections);
       return mpPrevKeyFrame;//return copy of int
@@ -111,7 +115,8 @@ public:
   
   // Odom PreIntegration
   template <class _OdomData>
-  void SetPreIntegrationList(const typename std::list<_OdomData>::const_iterator &begin,const typename std::list<_OdomData>::const_iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
+  void SetPreIntegrationList(const typename listeig(_OdomData)::const_iterator &begin,
+			     const typename listeig(_OdomData)::const_iterator &pback){//notice template definition should be written in the same file! & typename should be added before nested type!
     unique_lock<mutex> lock(mMutexOdomData);
     mOdomPreIntEnc.SetPreIntegrationList(begin,pback);
   }
@@ -320,7 +325,7 @@ protected:
 
 //created by zzh
 template <>//specialized
-void KeyFrame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback);
+void KeyFrame::SetPreIntegrationList<IMUData>(const listeig(IMUData)::const_iterator &begin,const listeig(IMUData)::const_iterator &pback);
 template <>
 void KeyFrame::PreIntegration<IMUData>(KeyFrame* pLastKF);
 

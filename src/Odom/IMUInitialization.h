@@ -60,7 +60,8 @@ using namespace std;
 
 class IMUInitialization{//designed for multi threads
   string mTmpfilepath;
-  double mdInitTime,mdSleepTime,mdFinalTime;
+  double mdInitTime,mdFinalTime;
+  unsigned int mnSleepTime;
   double mdStartTime;//for reset
   //cv::Mat mRwiInit;//unused
   
@@ -131,11 +132,11 @@ public:
     }
     cv::FileNode fnTime[3]={fSettings["IMU.InitTime"],fSettings["IMU.SleepTime"],fSettings["IMU.FinalTime"]};
     if (fnTime[0].empty()||fnTime[1].empty()||fnTime[2].empty()){
-      mdInitTime=0;mdSleepTime=1;mdFinalTime=15;
+      mdInitTime=0;mnSleepTime=1e6;mdFinalTime=15;
       cout<<redSTR"No IMU.InitTime&SleepTime&FinalTime, we use default 0s & 1s & 15s!"<<whiteSTR<<endl;
     }else{
       mdInitTime=fnTime[0];
-      mdSleepTime=fnTime[1];
+      mnSleepTime=(double)fnTime[1]*1e6;
       mdFinalTime=fnTime[2];
     }
   }
