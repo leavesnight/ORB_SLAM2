@@ -714,7 +714,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
       bUseGBAPRV=true;
     }else{
       cout<<redSTR"pure-vision GBA!"<<whiteSTR<<endl;
-      Optimizer::GlobalBundleAdjustment(mpMap,mnIterations,&mbStopGBA,nLoopKF,false);//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
+      Optimizer::GlobalBundleAdjustment(mpMap,mnIterations,&mbStopGBA,nLoopKF,false,mpIMUInitiator->GetSensorEnc());//GlobalBA(GBA),10 iterations same in localBA/motion-only/Sim3motion-only BA, may be stopped by next CorrectLoop()
     }
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes

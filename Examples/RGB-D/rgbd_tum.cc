@@ -66,10 +66,10 @@ void odomIMURun(ifstream &finOdomdata,int totalNum){//must use &
       finOdomdata>>odomdata[i];
     }
     if (timestamp>tmstpLast){//avoid == condition
-      if (nTotalNum>=9&&(odomdata[nTotalNum-5]>-0.5||odomdata[nTotalNum-5]<-1.5)){//ay:2+4+3+2 -1
-	cout<<redSTR"Wrong imu data! t: "<<timestamp<<whiteSTR<<endl;
-	continue;
-      }
+//       if (nTotalNum>=9&&(odomdata[nTotalNum-5]>-0.5||odomdata[nTotalNum-5]<-1.5)){//ay:2+4+3+2 -1
+// 	cout<<redSTR"Wrong imu data! t: "<<timestamp<<whiteSTR<<endl;
+// 	continue;
+//       }
 #ifndef TRACK_WITH_IMU
       g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
 #else

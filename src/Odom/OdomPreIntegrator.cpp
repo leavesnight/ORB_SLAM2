@@ -8,6 +8,7 @@ namespace ORB_SLAM2{
 
 using namespace Eigen;
 
+double EncPreIntegrator::msigma2Model=1e-4;
 void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &timeStampj,
 				      const listeig(EncData)::const_iterator &iterBegin,const listeig(EncData)::const_iterator &iterEnd){
   if (iterBegin!=iterEnd){ 

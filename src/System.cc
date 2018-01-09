@@ -50,7 +50,7 @@ void System::FinalGBA(int nIterations,bool bRobust){
   if (mpIMUInitiator->GetVINSInited()){//zzh, Full BA, GetVINSInited() instead of GetSensorIMU() for pure-vision+IMU Initialization mode
     Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),nIterations,NULL,0,bRobust,true);
   }else
-    Optimizer::GlobalBundleAdjustment(mpMap,nIterations,NULL,0,bRobust);
+    Optimizer::GlobalBundleAdjustment(mpMap,nIterations,NULL,0,bRobust,mpIMUInitiator->GetSensorEnc());
 }
 
 void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc){

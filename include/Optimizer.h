@@ -68,15 +68,15 @@ public:
 public:
     void static BundleAdjustment(const std::vector<KeyFrame*> &vpKF, const std::vector<MapPoint*> &vpMP,
                                  int nIterations = 5, bool *pbStopFlag=NULL, const unsigned long nLoopKF=0,
-                                 const bool bRobust = true);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA
+                                 const bool bRobust = true,const bool bEnc=false);//add all KFs && MPs(having edges(monocular/stereo) to some KFs) to optimizer, optimize their Pose/Pos and save it in KF.mTcwGBA && MP.mPosGBA
     void static GlobalBundleAdjustment(Map* pMap, int nIterations=5, bool *pbStopFlag=NULL,
-                                       const unsigned long nLoopKF=0, const bool bRobust = true);//pass all KFs && MPs in pMap to BundleAdjustment(KFs,MPs...)
+                                       const unsigned long nLoopKF=0, const bool bRobust = true,const bool bEnc=false);//pass all KFs && MPs in pMap to BundleAdjustment(KFs,MPs...)
     
-    void static LocalBundleAdjustment(KeyFrame* pKF, bool *pbStopFlag, Map *pMap);//local BA, pKF && its covisible neighbors->SetPose(optimizer,vertex(KFid)), pMPs->SetWorldPos(optimizer.vertex(pMP->mnId+maxKFid+1));\
+    void static LocalBundleAdjustment(KeyFrame* pKF, bool *pbStopFlag, Map *pMap,int Nlocal=0);//local BA, pKF && its covisible neighbors->SetPose(optimizer,vertex(KFid)), pMPs->SetWorldPos(optimizer.vertex(pMP->mnId+maxKFid+1));\
     (all 1st layer covisibility KFs as rectifying KFs(vertices1), MPs seen in these KFs as rectifying MPs(vertices0),\
     left KFs observing MPs as fixed KFs(vertices1,fixed), connecting edges between MPs && KFs as mono/stereo(KF has >=0 ur) edges, after addition of vertices and edges it still can return by pbStopFlag\
     optimize(5)(can be stopped by pbStopFlag), then if mbAbortBA==false-> optimize only inliers(10), update KFs' Pose && MPs' Pos,normal)
-    int static PoseOptimization(Frame* pFrame);//motion-only BA, rectify pFrame->mvbOutlier && pFrame->SetPose(optimizer.vertex(0)), return number of inliers
+    int static PoseOptimization(Frame* pFrame,Frame* pLastF=NULL);//motion-only BA, rectify pFrame->mvbOutlier && pFrame->SetPose(optimizer.vertex(0)), return number of inliers
 
     // if bFixScale is true, 6DoF optimization (stereo,rgbd), 7DoF otherwise (mono)
     void static OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,

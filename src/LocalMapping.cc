@@ -92,7 +92,10 @@ void LocalMapping::Run()
 		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
 		  
 		  if(!mpIMUInitiator->GetVINSInited()){
-		    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
+		    if (!mpIMUInitiator->GetSensorEnc())
+		      Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
+		    else
+		      Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap,mnLocalWindowSize);//local BA
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);

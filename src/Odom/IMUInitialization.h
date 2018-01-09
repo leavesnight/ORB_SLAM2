@@ -65,6 +65,7 @@ class IMUInitialization{//designed for multi threads
   double mdStartTime;//for reset
   //cv::Mat mRwiInit;//unused
   
+  CREATOR_VAR_MULTITHREADS(SensorEnc,bool,b);
   CREATOR_VAR_MULTITHREADS(SensorIMU,bool,b);//for auto reset judgement of this system, automatically check if IMU exists, for it needs initialization with a quite long period of tracking without LOST
   CREATOR_VAR_MULTITHREADS(VINSInited,bool,b)//if IMU initialization is over
   cv::Mat mGravityVec; // gravity vector in world frame
@@ -110,6 +111,7 @@ public:
   bool mbUsePureVision;//for pure-vision+IMU Initialization mode!
   
   IMUInitialization(Map* pMap,const bool bMonocular,const string& strSettingPath):mpMap(pMap),mbMonocular(bMonocular),mbFinish(true),mbFinishRequest(false),mbReset(false){
+    mbSensorEnc=false;
     mdStartTime=-1;mbSensorIMU=false;mpCurrentKeyFrame=NULL;
     mbVINSInited=false;
     mbCopyInitKFs=false;

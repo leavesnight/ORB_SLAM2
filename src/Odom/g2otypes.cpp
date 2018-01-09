@@ -89,4 +89,58 @@ void EdgeNavStatePriorPVRBias::linearizeOplus()
     _jacobianOplusXj.block<3,3>(9,0)= - Matrix3d::Identity();_jacobianOplusXj.block<3,3>(12,3)= - Matrix3d::Identity();
 }
 
+void EdgeEnc::computeError()
+{
+  const VertexSE3Expmap* vi=static_cast<const VertexSE3Expmap*>(_vertices[0]);
+  const VertexSE3Expmap* vj=static_cast<const VertexSE3Expmap*>(_vertices[1]);
+  Quaterniond qRiw=vi->estimate().rotation(),qRjw=vj->estimate().rotation();
+  Vector3d piw=vi->estimate().translation(),pjw=vj->estimate().translation();
+  Vector3d rEij;
+  Sophus::SO3 so3Roioj=Sophus::SO3(qRco.conjugate()*qRiw*qRjw.conjugate()*qRco);
+  rEij[0]=so3Roioj.log()[2]-_measurement[0];//(Log(Roc*Rciw*Rwcj*Rco)-delta~phiij).z
+//   rEij[0]=Sophus::SO3::log(Sophus::SO3::exp(Vector3d(0,0,_measurement[0])).inverse()*so3Roioj)[2];//Log(delta~Rij.t()*Roioj)
+  Vector3d deltapij=qRco.conjugate()*(piw-qRiw*qRjw.conjugate()*pjw-pco+qRiw*qRjw.conjugate()*pco);//Roc*[pciw-Rciw*Rcjw.t()*pcjw-pco+Rciw*Rcjw.t()*pco]
+  rEij.segment<2>(1)=deltapij.segment<2>(0)-_measurement.segment<2>(1);//deltapij-delta~pij
+  _error=rEij;
+}
+
+void EdgeEnc::linearizeOplus()
+{
+  const VertexSE3Expmap* vi=static_cast<const VertexSE3Expmap*>(_vertices[0]);
+  const VertexSE3Expmap* vj=static_cast<const VertexSE3Expmap*>(_vertices[1]);
+  Quaterniond qRiw=vi->estimate().rotation(),qRjw=vj->estimate().rotation();
+  Vector3d piw=vi->estimate().translation(),pjw=vj->estimate().translation();
+  
+  //calculate Je_drhoi/j
+  Matrix<double,1,3> O1x3=Matrix<double,1,3>::Zero();//JeR_drhoi/j=0
+  Matrix3d Jep_drhoi,Jep_drhoj;
+  Matrix3d Roc=qRco.conjugate().toRotationMatrix();
+  Jep_drhoi=Roc*Sophus::SO3::JacobianL(Sophus::SO3(qRiw).log());//Jep_drhoi=Roc*Jl(phi_iw)
+  Quaterniond qRij=qRiw*qRjw.conjugate();
+  Quaterniond qRocRij=qRco.conjugate()*qRij;
+  Jep_drhoj=-(qRocRij).toRotationMatrix()*Sophus::SO3::JacobianL(Sophus::SO3(qRjw).log());
+  
+  //calculate Je_dphi_i/j
+  Matrix3d Jep_dphii,Jep_dphij;
+  Jep_dphii=Roc*Sophus::SO3::hat(qRij*(pjw-pco));//Jep_dphii=Roc*[Riw*Rwj*(pjw-pco)]^
+  Jep_dphij=qRocRij.toRotationMatrix()*Sophus::SO3::hat(pco-pjw);//Roc*Riw*Rwj*(pco-pjw)^
+  Matrix3d JeR_dphii,JeR_dphij;
+  Vector3d eRpart=Sophus::SO3(qRocRij*qRco).log();
+  JeR_dphii=Sophus::SO3::JacobianLInv(eRpart)*Roc;
+  JeR_dphij=-Sophus::SO3::JacobianRInv(eRpart)*Roc;
+//   Sophus::SO3 deltaRjiM=Sophus::SO3::exp(Vector3d(0,0,_measurement[0])).inverse();
+//   Vector3d eR=Sophus::SO3(deltaRjiM.unit_quaternion()*qRocRij*qRco).log();
+//   JeR_dphii=Sophus::SO3::JacobianRInv(eR)*Roc*qRij.conjugate().toRotationMatrix();
+//   JeR_dphij=-Sophus::SO3::JacobianRInv(eR)*Roc;
+  
+  _jacobianOplusXi.block<1,3>(0,0)=O1x3;
+  _jacobianOplusXi.block<2,3>(1,0)=Jep_drhoi.block<2,3>(0,0);
+  _jacobianOplusXi.block<1,3>(0,3)=JeR_dphii.block<1,3>(2,0);
+  _jacobianOplusXi.block<2,3>(1,3)=Jep_dphii.block<2,3>(0,0);
+  _jacobianOplusXj.block<1,3>(0,0)=O1x3;
+  _jacobianOplusXj.block<2,3>(1,0)=Jep_drhoj.block<2,3>(0,0);
+  _jacobianOplusXj.block<1,3>(0,3)=JeR_dphij.block<1,3>(2,0);
+  _jacobianOplusXj.block<2,3>(1,3)=Jep_dphij.block<2,3>(0,0);
+}
+
 }

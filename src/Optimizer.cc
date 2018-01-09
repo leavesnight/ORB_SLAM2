@@ -218,6 +218,8 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
 
+  cv::Mat Tbo=Frame::mTbc*Frame::mTco;//for Enc
+  Quaterniond qRbo=Quaterniond(Converter::toMatrix3d(Tbo.rowRange(0,3).colRange(0,3)));Vector3d tbo=Converter::toVector3d(Tbo.rowRange(0,3).col(3));//for Enc
   for(list<KeyFrame*>::const_iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++){
     KeyFrame* pKF1 = *lit;                      // Current KF, store the IMU pre-integration between previous-current
     KeyFrame* pKF0 = pKF1->GetPrevKeyFrame();   // Previous KF
@@ -247,6 +249,19 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
     rk = new g2o::RobustKernelHuber;ebias->setRobustKernel(rk);rk->setDelta(thHuberNavStateBias);
     optimizer.addEdge(ebias);
     vpEdgesNavStateBias.push_back(ebias);
+    
+    // Set Enc edge(binary edge) between LastF-Frame
+    const EncPreIntegrator &encpreint=pKF1->GetEncPreInt();
+    if (encpreint.mdeltatij==0) continue;
+    g2o::EdgeEncNavStatePR* eEnc = new g2o::EdgeEncNavStatePR();
+    eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
+    eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//curF,j
+    eEnc->setMeasurement(encpreint.mdelxEij);
+    Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
+    eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
+    eEnc->qRbo=qRbo;eEnc->pbo=tbo;//SetParams
+    rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+    optimizer.addEdge(eEnc);
   }
 
   // Set MapPoint vertices && MPs-KFs' edges
@@ -566,6 +581,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
   
+  cv::Mat Tbo=Frame::mTbc*Frame::mTco;//for Enc
+  Quaterniond qRbo=Quaterniond(Converter::toMatrix3d(Tbo.rowRange(0,3).colRange(0,3)));Vector3d tbo=Converter::toVector3d(Tbo.rowRange(0,3).col(3));//for Enc
   for(size_t i=0; i<vpKFs.size(); i++){
     KeyFrame* pKF1 = vpKFs[i];                      // KFj, store the IMU pre-integration between previous-current
     if (pKF1->isBad())//don't add the bad KFs to optimizer
@@ -595,6 +612,21 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
     ebias->setInformation(InvCovBgaRW/imupreint.mdeltatij);// see Manifold paper (47), notice here is Omega_d/Sigma_d.inverse()
     if (bRobust){g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;ebias->setRobustKernel(rk);rk->setDelta(thHuberNavStateBias);}//here false
     optimizer.addEdge(ebias);
+    
+    // Set Enc edge(binary edge) between LastF-Frame
+    const EncPreIntegrator &encpreint=pKF1->GetEncPreInt();
+    if (encpreint.mdeltatij==0) continue;
+    g2o::EdgeEncNavStatePR* eEnc = new g2o::EdgeEncNavStatePR();
+    eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
+    eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//curF,j
+    eEnc->setMeasurement(encpreint.mdelxEij);
+    Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
+    eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
+    eEnc->qRbo=qRbo;eEnc->pbo=tbo;//SetParams
+//     if (bRobust){
+      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+//     }
+    optimizer.addEdge(eEnc);
   }
 
   const float thHuber2D = sqrt(5.99);//chi2(0.05,2), sqrt(e'*Omega*e)<=delta, here unused
@@ -794,16 +826,16 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
 
 //created by zzh over.
 
-void Optimizer::GlobalBundleAdjustment(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
+void Optimizer::GlobalBundleAdjustment(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust,const bool bEnc)
 {
     vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
     vector<MapPoint*> vpMP = pMap->GetAllMapPoints();
-    BundleAdjustment(vpKFs,vpMP,nIterations,pbStopFlag, nLoopKF, bRobust);
+    BundleAdjustment(vpKFs,vpMP,nIterations,pbStopFlag, nLoopKF, bRobust,bEnc);
 }
 
 
 void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
-                                 int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
+                                 int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust,const bool bEnc)
 {
     cout<<redSTR<<"Enter GBA"<<whiteSTR<<endl;
     vector<bool> vbNotIncludedMP;//true means this MP can not be used to optimize some KFs' Pose/is not added into optimizer/is not optimized
@@ -837,6 +869,34 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         optimizer.addVertex(vSE3);
         if(pKF->mnId>maxKFid)
             maxKFid=pKF->mnId;
+    }
+    
+    if (bEnc){
+      // Set Enc edges
+      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
+      Quaterniond qRco=Quaterniond(Rco);
+
+      for(size_t i=0; i<vpKFs.size(); i++){
+	KeyFrame* pKF1 = vpKFs[i];                      // KFj, store the Enc pre-integration between previous-current
+	if (pKF1->isBad())//don't add the bad KFs to optimizer
+	  continue;
+	KeyFrame* pKF0 = pKF1->GetPrevKeyFrame();   // Previous KF
+	EncPreIntegrator encpreint=pKF1->GetEncPreInt();
+	if(!pKF0||encpreint.mdeltatij==0) continue;//if no KFi/EncPreInt's info, this EncPreInt edge cannot be added for lack of vertices i / edge ij
+	//Enc edges
+	int idKF0=pKF0->mnId,idKF1=pKF1->mnId;
+	g2o::EdgeEnc * eEnc = new g2o::EdgeEnc();
+	eEnc->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//Ti 0
+	eEnc->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//Tj 1
+	eEnc->setMeasurement(encpreint.mdelxEij);
+	Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
+	eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
+	eEnc->qRco=qRco;eEnc->pco=tco;//SetParams
+// 	if (bRobust){
+	  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));
+// 	}//we found our dataset needs to add robust kernel for Enc edges
+	optimizer.addEdge(eEnc);
+      }
     }
 
     const float thHuber2D = sqrt(5.99);//chi2(0.05,2), sqrt(e'*Omega*e)<=delta, here unused
@@ -995,7 +1055,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
 }
 
-int Optimizer::PoseOptimization(Frame *pFrame)
+int Optimizer::PoseOptimization(Frame *pFrame,Frame* pLastF)
 {
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;//6*1 is Li algebra/se3, 3*1 is location of landmark, here only use unary edge of 6, 3 won't be optimized=>motion(6*1)-only BA
@@ -1015,6 +1075,27 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     vSE3->setId(0);
     vSE3->setFixed(false);
     optimizer.addVertex(vSE3);
+    
+    if (pLastF!=NULL&&pFrame->mOdomPreIntEnc.mdeltatij>0&&!pLastF->mTcw.empty()){
+      // Set LastFrame vertex
+      g2o::VertexSE3Expmap * vSE3Last = new g2o::VertexSE3Expmap();//6*1 vertex
+      vSE3Last->setEstimate(Converter::toSE3Quat(pLastF->mTcw));//here g2o vertex uses Tcw(different in default VertexSE3 using EdgeSE3); edge/measurement formula input ξ
+      vSE3Last->setId(1);
+      vSE3Last->setFixed(true);
+      optimizer.addVertex(vSE3Last);
+      // Set Enc edge(binary edge) between LastF-Frame
+      const EncPreIntegrator &encpreint=pFrame->mOdomPreIntEnc;
+      g2o::EdgeEnc* eEnc = new g2o::EdgeEnc();
+      eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(1)));//lastF,i
+      eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));//curF,j
+      eEnc->setMeasurement(encpreint.mdelxEij);
+      Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pFrame->mTimeStamp-pLastF->mTimeStamp));//here is deltatij
+      eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
+      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
+      eEnc->qRco=Quaterniond(Rco);eEnc->pco=tco;//SetParams
+      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+      optimizer.addEdge(eEnc);
+    }
 
     // Set MapPoint vertices
     const int N = pFrame->N;
@@ -1209,22 +1290,48 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     return nInitialCorrespondences-nBad;//number of inliers
 }
 
-void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
+void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap,int Nlocal)
 {    
+    KeyFrame* pKFlocal=NULL;//for Nlocal
     // Local KeyFrames: First Breath Search from Current Keyframe
     list<KeyFrame*> lLocalKeyFrames;
 
-    lLocalKeyFrames.push_back(pKF);
-    pKF->mnBALocalForKF = pKF->mnId;
-
-    //insert all 1st layer Covisibility KFs into lLocalKeyFrames(not best n)
-    const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
-    for(int i=0, iend=vNeighKFs.size(); i<iend; i++)
-    {
-        KeyFrame* pKFi = vNeighKFs[i];
-        pKFi->mnBALocalForKF = pKF->mnId;
-        if(!pKFi->isBad())
-            lLocalKeyFrames.push_back(pKFi);//no covisible KFs(mvpOrderedConnectedKeyFrames) are duplicated or pKF itself
+    if (Nlocal==0){
+      lLocalKeyFrames.push_back(pKF);
+      pKF->mnBALocalForKF = pKF->mnId;
+      
+      //insert all 1st layer Covisibility KFs into lLocalKeyFrames(not best n)
+      const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
+      for(int i=0, iend=vNeighKFs.size(); i<iend; i++)
+      {
+	  KeyFrame* pKFi = vNeighKFs[i];
+	  pKFi->mnBALocalForKF = pKF->mnId;
+	  if(!pKFi->isBad())
+	      lLocalKeyFrames.push_back(pKFi);//no covisible KFs(mvpOrderedConnectedKeyFrames) are duplicated or pKF itself
+      }
+    }else{
+      // All KeyFrames in Local window are optimized, get N last KFs as Local Window
+      const int NlocalIni=Nlocal;//for assert
+      pKFlocal=pKF;
+      do{
+	assert(pKFlocal&&!pKFlocal->isBad()&&"!pKFi. why??????");
+	pKFlocal->mnBALocalForKF=pKF->mnId;//avoid adding it into lFixedCameras
+	lLocalKeyFrames.push_front(pKFlocal);//notice the order is opposite
+	pKFlocal=pKFlocal->GetPrevKeyFrame();
+      }while (--Nlocal>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
+      cout<<blueSTR"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<whiteSTR<<endl;
+      assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
+      /*
+      //insert all 1st layer Covisibility KFs into lLocalKeyFrames(not best n)
+      const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
+      for(int i=0, iend=vNeighKFs.size(); i<iend; i++){
+	KeyFrame* pKFi = vNeighKFs[i];
+	if (pKFi->mnBALocalForKF!=pKF->mnId&&pKFi!=pKFlocal){
+	  pKFi->mnBALocalForKF = pKF->mnId;
+	  if(!pKFi->isBad())
+	    lLocalKeyFrames.push_back(pKFi);//no covisible KFs(mvpOrderedConnectedKeyFrames) are duplicated or pKF itself
+	}
+      }*/
     }
 
     // Local MapPoints seen in Local KeyFrames
@@ -1247,6 +1354,19 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 
     // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes, 2nd layer fixed neighbors(don't optimize them but contribute to the target min funcation)
     list<KeyFrame*> lFixedCameras;
+    if (Nlocal>0){
+      // Fixed Keyframes. Keyframes that see Local MapPoints and last (N+1)th KF but that are not Local Keyframes: \
+      2nd layer fixed neighbors(don't optimize them but contribute to the target min funcation)
+      //the last N+1th KF / Add the KeyFrame before local window.
+      KeyFrame* pKFPrevLocal = pKFlocal;//lLocalKeyFrames.front()->GetPrevKeyFrame();
+      if(pKFPrevLocal)
+      {
+	  assert(!pKFPrevLocal->isBad()&&pKFPrevLocal->mnBALocalForKF!=pKF->mnId && pKF->mnBAFixedForKF!=pKF->mnId);
+	  pKFPrevLocal->mnBAFixedForKF=pKF->mnId;
+	  if (!pKFPrevLocal->isBad())
+	    lFixedCameras.push_back(pKFPrevLocal);
+      }//else means mpMap->KeyFramesInMap()<N+1 / pKFPrevLocal point to nullptr
+    }
     for(list<MapPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++)
     {
         map<KeyFrame*,size_t> observations = (*lit)->GetObservations();
@@ -1303,6 +1423,32 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         optimizer.addVertex(vSE3);
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
+    }
+    
+    vector<g2o::EdgeEnc*> vpEdgesEnc;//Enc edges
+    if (Nlocal>0){
+      // Set Enc edges
+      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
+      Quaterniond qRco=Quaterniond(Rco);
+
+      for(list<KeyFrame*>::const_iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++){
+	KeyFrame* pKF1 = *lit;                      // Current KF, store the Enc pre-integration between previous-current
+	KeyFrame* pKF0 = pKF1->GetPrevKeyFrame();   // Previous KF
+	EncPreIntegrator encpreint=pKF1->GetEncPreInt();
+	if(!pKF0||encpreint.mdeltatij==0) continue;//if no KFi/EncPreInt's info, this EncPreInt edge cannot be added for lack of vertices i / edge ij
+	//Enc edges
+	int idKF0=pKF0->mnId,idKF1=pKF1->mnId;
+	g2o::EdgeEnc * eEnc = new g2o::EdgeEnc();
+	eEnc->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//Ti 0
+	eEnc->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//Tj 1
+	eEnc->setMeasurement(encpreint.mdelxEij);
+	Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
+	eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
+	eEnc->qRco=qRco;eEnc->pco=tco;//SetParams
+	g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));
+	optimizer.addEdge(eEnc);
+	vpEdgesEnc.push_back(eEnc);//for robust processing/ erroneous edges' culling
+      }
     }
 
     // Set MapPoint vertices && MPs-KFs' edges
@@ -1502,6 +1648,17 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
             vToErase.push_back(make_pair(pKFi,pMP));//ready to erase outliers of pKFi && pMP in stereo edges
         }
     }
+    
+#ifndef NDEBUG
+  for(size_t i=0, iend=vpEdgesEnc.size(); i<iend;i++){
+      g2o::EdgeEnc* e = vpEdgesEnc[i];
+      if(e->chi2()>7.815)//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+      {
+	  cout<<"Enc edge "<<i<<", chi2 "<<e->chi2()<<". ";
+      }
+  }
+  cout<<endl;
+#endif
 
     // Get Map Mutex
     unique_lock<mutex> lock(pMap->mMutexMapUpdate);

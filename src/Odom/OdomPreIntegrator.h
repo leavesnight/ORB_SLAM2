@@ -40,6 +40,7 @@ using namespace Eigen;
 class EncPreIntegrator:public OdomPreIntegratorBase<EncData>{
   //mlOdom: mlOdomEnc list for vl,vr& its own timestamp
 public:
+  static double msigma2Model;
   Vector3d mdelxEij;// delta~Phiijz,delta~pij(2*1) from Encoder PreIntegration, 3*1*float
   Matrix3d mSigmaEij;// by Enc, 3*3*float
   

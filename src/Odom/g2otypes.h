@@ -346,6 +346,94 @@ typedef EdgeNavStateProjectXYZWithScale<3,6> EdgeStereoNavStatePRSPointXYZ;
 // typedef EdgeNavStateProjectXYZWithScale<2,6,true> EdgeNavStatePRSPointXYZStable;
 
 /**
+ * \brief template for EdgeEnc(binary edge)
+ */
+class EdgeEnc:public BaseBinaryEdge<3, Vector3d, VertexSE3Expmap, VertexSE3Expmap>{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    
+    bool read(std::istream& is){return true;}
+    bool write(std::ostream& os) const{return true;}
+
+    void computeError();
+    virtual void linearizeOplus();
+    
+    Quaterniond qRco;Vector3d pco;
+protected:
+};
+template <int DV>
+class EdgeEncNavState:public BaseBinaryEdge<3, Vector3d, VertexNavState<DV>, VertexNavState<DV> >{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    
+    bool read(std::istream& is){return true;}
+    bool write(std::ostream& os) const{return true;}
+
+    void computeError();
+    virtual void linearizeOplus();
+    
+    Quaterniond qRbo;Vector3d pbo;
+protected:
+};
+template <int DV>
+void EdgeEncNavState<DV>::computeError(){
+  const VertexNavState<DV>* vi=static_cast<const VertexNavState<DV>* >(this->_vertices[0]);
+  const VertexNavState<DV>* vj=static_cast<const VertexNavState<DV>* >(this->_vertices[1]);
+  const NavState &nsi=vi->estimate(),&nsj=vj->estimate();
+  Quaterniond qRiw=nsi.mRwb.inverse().unit_quaternion(),qRwj=nsj.mRwb.unit_quaternion();
+  Vector3d pwi=nsi.mpwb,pwj=nsj.mpwb;
+  Vector3d rEij;
+  Sophus::SO3 so3Roioj=Sophus::SO3(qRbo.conjugate()*qRiw*qRwj*qRbo);
+  rEij[0]=so3Roioj.log()[2]-this->_measurement[0];//(Log(Rob*Rbiw*Rwbj*Rbo)-delta~phiij).z
+  Vector3d deltapij=qRbo.conjugate()*(-(qRiw*pwi)+qRiw*pwj-pbo+qRiw*qRwj*pbo);//Rob*[-Rbiw*pwbi+Rbiw*pwbj-pbo+Rbiw*Rbjw.t()*pbo]
+  rEij.segment<2>(1)=deltapij.segment<2>(0)-this->_measurement.template segment<2>(1);//deltapij-delta~pij
+  this->_error=rEij;
+}
+template <int DV>
+void EdgeEncNavState<DV>::linearizeOplus(){
+  const VertexNavState<DV>* vi=static_cast<const VertexNavState<DV>* >(this->_vertices[0]);
+  const VertexNavState<DV>* vj=static_cast<const VertexNavState<DV>* >(this->_vertices[1]);
+  const NavState &nsi=vi->estimate(),&nsj=vj->estimate();
+  Quaterniond qRiw=nsi.mRwb.inverse().unit_quaternion(),qRwj=nsj.mRwb.unit_quaternion();
+  Vector3d pwi=nsi.mpwb,pwj=nsj.mpwb;
+  
+  //calculate Je_drhoi/j
+  Matrix<double,1,3> O1x3=Matrix<double,1,3>::Zero();//JeR_drhoi/j=0
+  Matrix3d Jep_drhoi,Jep_drhoj;
+  Matrix3d Rob=qRbo.conjugate().toRotationMatrix();
+  Matrix3d RobRiw=(qRbo.conjugate()*qRiw).toRotationMatrix();
+  Jep_drhoi=-RobRiw*Sophus::SO3::JacobianL(nsi.mRwb.log());//Jep_drhoi=-Rob*Riw*Jl(phi_wi)
+  Jep_drhoj=RobRiw*Sophus::SO3::JacobianL(nsj.mRwb.log());//Jep_drhoj=Rob*Riw*Jl(phi_wj)
+  
+  //calculate Je_dphi_i/j
+  Matrix3d Jep_dphii,Jep_dphij;
+  Jep_dphii=Rob*Sophus::SO3::hat(qRiw*(pwj-pwi+qRwj*pbo));//Jep_dphii=Rob*[Riw*(pwj-pwi+Rwj*pbo)]^
+  Quaterniond qRobRij=qRbo.conjugate()*qRiw*qRwj;
+  Jep_dphij=-(qRobRij).toRotationMatrix()*Sophus::SO3::hat(pbo);//Jep_dphij=-Rob*Riw*Rwj*(pbo)^
+  Matrix3d JeR_dphii,JeR_dphij;
+  Vector3d eRpart=Sophus::SO3(qRobRij*qRbo).log();
+  JeR_dphii=-Sophus::SO3::JacobianLInv(eRpart)*Rob;
+  JeR_dphij=Sophus::SO3::JacobianRInv(eRpart)*Rob;
+  
+  if (DV==9){
+    this->_jacobianOplusXi.setZero();//Je_dVi/j=0
+    this->_jacobianOplusXj.setZero();
+  }
+  int idR=DV==6?3:6;
+  this->_jacobianOplusXi.template block<1,3>(0,0)=O1x3;
+  this->_jacobianOplusXi.template block<2,3>(1,0)=Jep_drhoi.block<2,3>(0,0);
+  this->_jacobianOplusXi.template block<1,3>(0,idR)=JeR_dphii.block<1,3>(2,0);
+  this->_jacobianOplusXi.template block<2,3>(1,idR)=Jep_dphii.block<2,3>(0,0);
+  this->_jacobianOplusXj.template block<1,3>(0,0)=O1x3;
+  this->_jacobianOplusXj.template block<2,3>(1,0)=Jep_drhoj.block<2,3>(0,0);
+  this->_jacobianOplusXj.template block<1,3>(0,idR)=JeR_dphij.block<1,3>(2,0);
+  this->_jacobianOplusXj.template block<2,3>(1,idR)=Jep_dphij.block<2,3>(0,0);
+}
+
+typedef EdgeEncNavState<6> EdgeEncNavStatePR;
+typedef EdgeEncNavState<9> EdgeEncNavStatePVR;
+
+/**
  * \brief template for EdgeNavStateI(multi edge)
  */
 template <int NV>

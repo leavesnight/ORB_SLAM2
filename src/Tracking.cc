@@ -51,7 +51,7 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
 	miterLastEnc=mlOdomEnc.begin();
       }else
 	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
-      ;//mbSensorIMU=false;
+      mpIMUInitiator->SetSensorEnc(true);
       break;
     case System::IMU://only q/awIMU
       if (mlOdomIMU.empty()){
@@ -76,6 +76,7 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
 	miterLastIMU=mlOdomIMU.begin();
       }else
 	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
+      mpIMUInitiator->SetSensorEnc(true);
 #ifndef TRACK_WITH_IMU
       ;//mbSensorIMU=false;
 #else
@@ -92,7 +93,10 @@ size_t gnCheck=0;
 void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
-  PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
+  if (type==3)
+    PreIntegration<EncData>(1,mlOdomEnc,miterLastEnc);
+  else
+    PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
 //   cout<<"!"<<mlOdomIMU.size()<<endl;
 //   cout<<"encdata over"<<endl;
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
@@ -117,7 +121,7 @@ void Tracking::PreIntegration(const char type){
 //      if (mpReferenceKF->GetListIMUData().size()==0) cout<<fixed<<setprecision(6)<<"Last:"<<mpLastKeyFrame->mTimeStamp<<" Cur:"<<mCurrentFrame.mTimeStamp<<endl;
 // #ifndef TRACK_WITH_IMU
 //     Eigen::AngleAxisd angax(mpReferenceKF->GetIMUPreInt().mdelxRji);
-     cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<endl;
+//      cout<<mpReferenceKF->GetEncPreInt().mdelxEij.transpose()<<" "<<mpReferenceKF->GetEncPreInt().mdeltatij<<endl;
 // #else
 //     cout<<Sophus::SO3::log(Sophus::SO3(mpReferenceKF->GetIMUPreInt().mRij)).transpose()<<" "<<mpReferenceKF->GetIMUPreInt().mdeltatij<<endl;
 // #endif
@@ -813,6 +817,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 			if (bOK=TrackReferenceKeyFrame()) mCurrentFrame.UpdateNavStatePVRFromTcw();//don't forget to update NavState though bg(bg_bar,dbg)/ba(ba_bar,dba) cannot be updated; 6,7
 		      }
 		    }else{//<20 Frames after reloc then use pure-vision tracking, but notice we can still use Encoder motion update!
+		      //we don't preintegrate Enc here for a simple process
 		      if (mVelocity.empty()){
 			if (bOK=TrackReferenceKeyFrame()) mCurrentFrame.UpdateNavStatePVRFromTcw();//match with rKF, use lF as initial & m-o BA
 			cout<<fixed<<setprecision(6)<<redSTR"TrackRefKF()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
@@ -972,6 +977,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	      cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
 	      cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
 // 	      cin.get();
+	      if (mpIMUInitiator->GetVINSInited())
+		mCurrentFrame.UpdateNavStatePVRFromTcw();
 	    }else{
 	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	      // Clear Frame vectors for reloc bias computation
@@ -1491,7 +1498,8 @@ bool Tracking::TrackWithMotionModel()
         return false;
 
     // Optimize frame pose with all matches
-    Optimizer::PoseOptimization(&mCurrentFrame);//motion-only BA
+    Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame);//motion-only BA
+//     Optimizer::PoseOptimization(&mCurrentFrame);//motion-only BA
 
     // Discard outliers
     int nmatchesMap = 0;
@@ -1533,7 +1541,8 @@ bool Tracking::TrackLocalMap()
     SearchLocalPoints();
 
     // Optimize Pose
-    Optimizer::PoseOptimization(&mCurrentFrame);//motion-only BA, for added matching MP&&KeyPoints in SearchLocalPoints();
+    Optimizer::PoseOptimization(&mCurrentFrame,&mLastFrame);//motion-only BA, for added matching MP&&KeyPoints in SearchLocalPoints();
+//     Optimizer::PoseOptimization(&mCurrentFrame);//motion-only BA, for added matching MP&&KeyPoints in SearchLocalPoints();
     mnMatchesInliers = 0;
 
     // Update MapPoints Statistics
