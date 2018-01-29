@@ -46,8 +46,8 @@ class KeyFrame;
 class Frame
 { 
 public:
-  //const Tbc,Tco, so it can be used in multi threads
-  static cv::Mat mTbc,mTco;
+  //const Tbc,Tce, so it can be used in multi threads
+  static cv::Mat mTbc,mTce;
   static Eigen::Matrix3d meigRcb;static Eigen::Vector3d meigtcb;
   
   // Odom PreIntegration, j means this frame, i means last frame(not KF), if no measurements it will be cv::Mat()

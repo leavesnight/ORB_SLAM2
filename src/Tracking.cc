@@ -164,12 +164,12 @@ bool Tracking::GetVelocityByEnc(bool bMapUpdated){
   const EncPreIntegrator &encpreint=mCurrentFrame.mOdomPreIntEnc;//problem exits
   double deltat=encpreint.mdeltatij;
   //get To1o2:p12 R12
-  Vector3d pij(encpreint.mdelxEij[1],encpreint.mdelxEij[2],0);
-  Matrix3d Rij=IMUPreintegrator::Expmap(Vector3d(0,0,encpreint.mdelxEij[0]));
+  Vector3d pij(encpreint.mdelxEij.segment<3>(3));
+  Matrix3d Rij=IMUPreintegrator::Expmap(encpreint.mdelxEij.segment<3>(0));
   cv::Mat Tij=Converter::toCvSE3(Rij,pij);
   //get Tc2c1
-  cv::Mat Toc=Converter::toCvMatInverse(Frame::mTco);
-  mVelocity=Frame::mTco*Converter::toCvMatInverse(Tij)*Toc;
+  cv::Mat Tec=Converter::toCvMatInverse(Frame::mTce);
+  mVelocity=Frame::mTce*Converter::toCvMatInverse(Tij)*Tec;
 //   cout<<encpreint.mdelxEij[0]<<endl;
 //   cout<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<endl;
   
@@ -469,12 +469,12 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
     
     //load Tbc,Tbo refer the Jing Wang's configparam.cpp
-    cv::FileNode fnT[2]={fSettings["Camera.Tbc"],fSettings["Camera.Tco"]};
+    cv::FileNode fnT[2]={fSettings["Camera.Tbc"],fSettings["Camera.Tce"]};
     Eigen::Matrix3d eigRtmp;
     mTbc=cv::Mat::eye(4,4,CV_32F);
     for (int i=0;i<2;++i){
       if (fnT[i].empty()){
-	cout<<redSTR"No Tbc/Tco, please check if u wanna use VIO!"<<whiteSTR<<endl;
+	cout<<redSTR"No Tbc/Tce, please check if u wanna use VIO!"<<whiteSTR<<endl;
       }else{
 	eigRtmp<<fnT[i][0],fnT[i][1],fnT[i][2],fnT[i][4],fnT[i][5],fnT[i][6],fnT[i][8],fnT[i][9],fnT[i][10];
 	eigRtmp=Eigen::Quaterniond(eigRtmp).normalized().toRotationMatrix();
@@ -484,12 +484,12 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 	    for (int k=0;k<3;++k) mTbc.at<float>(j,k)=eigRtmp(j,k);
 	  }
 	}else{
-	  mTco=cv::Mat::eye(4,4,CV_32F);
+	  mTce=cv::Mat::eye(4,4,CV_32F);
 	  for (int j=0;j<3;++j){
-	    mTco.at<float>(j,3)=fnT[i][j*4+3];
-	    for (int k=0;k<3;++k) mTco.at<float>(j,k)=eigRtmp(j,k);
+	    mTce.at<float>(j,3)=fnT[i][j*4+3];
+	    for (int k=0;k<3;++k) mTce.at<float>(j,k)=eigRtmp(j,k);
 	  }
-	  Frame::mTco=mTco.clone();
+	  Frame::mTce=mTce.clone();
 	}
       }
     }//cout<<mTbc<<endl<<mTbo<<endl;
@@ -505,13 +505,19 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
       IMUDataDerived::SetParam(eigRtmp,sigma2tmp,fnSig[2]);
     }
     //load rc,vscale,Sigma etad
-    cv::FileNode fnEnc[3]={fSettings["Encoder.scale"],fSettings["Encoder.rc"],fSettings["Encoder.Sigmad"]};
+    cv::FileNode fnEnc[3]={fSettings["Encoder.scale"],fSettings["Encoder.rc"],fSettings["Encoder.sigmad2"]};
     if (fnEnc[0].empty()||fnEnc[1].empty()||fnEnc[2].empty())
       cout<<redSTR"No Encoder.SimgaI or Encoder.scale or Encoder.rc!"<<whiteSTR<<endl;
     else{
-      Eigen::Matrix2d eig2Rtmp;
-      eig2Rtmp<<fnEnc[2][0],fnEnc[2][1],fnEnc[2][2],fnEnc[2][3];
-      EncData::SetParam(fnEnc[0],fnEnc[1],eig2Rtmp);
+      Eigen::Matrix2d eig2Rtmp;Eigen::Matrix<double,6,6> eig6Rtmp;
+      eig2Rtmp<<fnEnc[2][0],0,0,fnEnc[2][1];
+      eig6Rtmp<<fnEnc[2][2],0,0,0,0,0,
+		0,fnEnc[2][3],0,0,0,0,
+		0,0,fnEnc[2][4],0,0,0,
+		0,0,0,fnEnc[2][5],0,0,
+		0,0,0,0,fnEnc[2][6],0,
+		0,0,0,0,0,fnEnc[2][7];
+      EncData::SetParam(fnEnc[0],fnEnc[1],eig2Rtmp,eig6Rtmp);
     }
     //load delay
     cv::FileNode fnDelay[3]={fSettings["Camera.delaytoimu"],fSettings["Camera.delaytoenc"],fSettings["Camera.delayForPolling"]};
@@ -1624,6 +1630,15 @@ bool Tracking::NeedNewKeyFrame()
     }
 
     bool bNeedToInsertClose = (nTrackedClose<100) && (nNonTrackedClose>70);//τt=100(enough dis)( τc=70(enough info) for stereo/RGBD to insert a new KF
+    
+    double timegap = 0.5;
+//     if (!mpIMUInitiator->GetVINSInited()) timegap=0.1;//JW uses different timegap during IMU Initialization(0.1s)
+    bool cTimeGap =false;int minClose=70;
+    if (mpIMUInitiator->GetSensorIMU()){
+      cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+      bNeedToInsertClose=false;//for VIO+Stereo/RGB-D, we don't open this inerstion strategy for speed and cTimeGap can do similar jobs
+//       minClose=100;
+    }
 
     // Thresholds
     float thRefRatio = 0.75f;
@@ -1633,17 +1648,12 @@ bool Tracking::NeedNewKeyFrame()
     if(mSensor==System::MONOCULAR)
         thRefRatio = 0.9f;//JingWang uses 0.8f
     
-    double timegap = 0.5;
-//     if (!mpIMUInitiator->GetVINSInited()) timegap=0.1;//JW uses different timegap during IMU Initialization(0.1s)
-    bool cTimeGap =false;
-    if (mpIMUInitiator->GetSensorIMU()) cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
-    
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
     const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;//time span too long(1s)
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);//for minF=0, if LocalMapper is idle
     //Condition 1c: tracking is weak
-    const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;//rgbd/stereo tracking weak outside(large part are far points)
+    const bool c1c = mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;//rgbd/stereo tracking weak outside(large part are far points)
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);//not too close && not too far
     

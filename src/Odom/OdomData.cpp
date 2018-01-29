@@ -35,6 +35,7 @@ Matrix3d IMUDataDerived::getJacoright(){
 
 double EncData::mvscale=1,EncData::mrc=1;
 Matrix2d EncData::mSigmad=Matrix2d::Identity();
+Matrix6d EncData::mSigmamd=Matrix6d::Identity();
 EncData::EncData(const double* v,const double &tm):mtm(tm){
   mv[0]=v[0]*mvscale;mv[1]=v[1]*mvscale;
 }

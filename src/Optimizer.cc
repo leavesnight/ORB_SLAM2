@@ -218,8 +218,8 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
 
-  cv::Mat Tbo=Frame::mTbc*Frame::mTco;//for Enc
-  Quaterniond qRbo=Quaterniond(Converter::toMatrix3d(Tbo.rowRange(0,3).colRange(0,3)));Vector3d tbo=Converter::toVector3d(Tbo.rowRange(0,3).col(3));//for Enc
+  cv::Mat Tbe=Frame::mTbc*Frame::mTce;//for Enc
+  Quaterniond qRbe=Quaterniond(Converter::toMatrix3d(Tbe.rowRange(0,3).colRange(0,3)));Vector3d tbe=Converter::toVector3d(Tbe.rowRange(0,3).col(3));//for Enc
   for(list<KeyFrame*>::const_iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++){
     KeyFrame* pKF1 = *lit;                      // Current KF, store the IMU pre-integration between previous-current
     KeyFrame* pKF0 = pKF1->GetPrevKeyFrame();   // Previous KF
@@ -257,10 +257,9 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
     eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
     eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//curF,j
     eEnc->setMeasurement(encpreint.mdelxEij);
-    Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
-    eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
-    eEnc->qRbo=qRbo;eEnc->pbo=tbo;//SetParams
-    rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+    eEnc->setInformation(encpreint.mSigmaEij.inverse());
+    eEnc->qRbe=qRbe;eEnc->pbe=tbe;//SetParams
+    rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
     optimizer.addEdge(eEnc);
   }
 
@@ -581,8 +580,8 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
   InvCovBgaRW.topLeftCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmabg2;      	// Gyroscope bias random walk, covariance INVERSE
   InvCovBgaRW.bottomRightCorner(3,3)=Matrix3d::Identity()*IMUDataBase::mInvSigmaba2;   	// Accelerometer bias random walk, covariance INVERSE
   
-  cv::Mat Tbo=Frame::mTbc*Frame::mTco;//for Enc
-  Quaterniond qRbo=Quaterniond(Converter::toMatrix3d(Tbo.rowRange(0,3).colRange(0,3)));Vector3d tbo=Converter::toVector3d(Tbo.rowRange(0,3).col(3));//for Enc
+  cv::Mat Tbe=Frame::mTbc*Frame::mTce;//for Enc
+  Quaterniond qRbe=Quaterniond(Converter::toMatrix3d(Tbe.rowRange(0,3).colRange(0,3)));Vector3d tbe=Converter::toVector3d(Tbe.rowRange(0,3).col(3));//for Enc
   for(size_t i=0; i<vpKFs.size(); i++){
     KeyFrame* pKF1 = vpKFs[i];                      // KFj, store the IMU pre-integration between previous-current
     if (pKF1->isBad())//don't add the bad KFs to optimizer
@@ -620,11 +619,10 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
     eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
     eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//curF,j
     eEnc->setMeasurement(encpreint.mdelxEij);
-    Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
-    eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
-    eEnc->qRbo=qRbo;eEnc->pbo=tbo;//SetParams
+    eEnc->setInformation(encpreint.mSigmaEij.inverse());
+    eEnc->qRbe=qRbe;eEnc->pbe=tbe;//SetParams
 //     if (bRobust){
-      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
 //     }
     optimizer.addEdge(eEnc);
   }
@@ -873,8 +871,8 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     
     if (bEnc){
       // Set Enc edges
-      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
-      Quaterniond qRco=Quaterniond(Rco);
+      Matrix3d Rce=Converter::toMatrix3d(Frame::mTce.rowRange(0,3).colRange(0,3));Vector3d tce=Converter::toVector3d(Frame::mTce.rowRange(0,3).col(3));
+      Quaterniond qRce=Quaterniond(Rce);
 
       for(size_t i=0; i<vpKFs.size(); i++){
 	KeyFrame* pKF1 = vpKFs[i];                      // KFj, store the Enc pre-integration between previous-current
@@ -889,12 +887,11 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 	eEnc->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//Ti 0
 	eEnc->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//Tj 1
 	eEnc->setMeasurement(encpreint.mdelxEij);
-	Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
-	eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
-	eEnc->qRco=qRco;eEnc->pco=tco;//SetParams
+	eEnc->setInformation(encpreint.mSigmaEij.inverse());
+	eEnc->qRce=qRce;eEnc->pce=tce;//SetParams
 // 	if (bRobust){
-	  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));
-// 	}//we found our dataset needs to add robust kernel for Enc edges
+	  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
+// 	}//we found our dataset tends to use robust kernel for Enc edges
 	optimizer.addEdge(eEnc);
       }
     }
@@ -1089,11 +1086,10 @@ int Optimizer::PoseOptimization(Frame *pFrame,Frame* pLastF)
       eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(1)));//lastF,i
       eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));//curF,j
       eEnc->setMeasurement(encpreint.mdelxEij);
-      Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pFrame->mTimeStamp-pLastF->mTimeStamp));//here is deltatij
-      eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
-      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
-      eEnc->qRco=Quaterniond(Rco);eEnc->pco=tco;//SetParams
-      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));//chi2(0.05,3)
+      eEnc->setInformation(encpreint.mSigmaEij.inverse());
+      Matrix3d Rce=Converter::toMatrix3d(Frame::mTce.rowRange(0,3).colRange(0,3));Vector3d tce=Converter::toVector3d(Frame::mTce.rowRange(0,3).col(3));
+      eEnc->qRce=Quaterniond(Rce);eEnc->pce=tce;//SetParams
+      g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
       optimizer.addEdge(eEnc);
     }
 
@@ -1311,16 +1307,16 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
       }
     }else{
       // All KeyFrames in Local window are optimized, get N last KFs as Local Window
-      const int NlocalIni=Nlocal;//for assert
+      int NlocalCnt=Nlocal;//for assert
       pKFlocal=pKF;
       do{
 	assert(pKFlocal&&!pKFlocal->isBad()&&"!pKFi. why??????");
 	pKFlocal->mnBALocalForKF=pKF->mnId;//avoid adding it into lFixedCameras
 	lLocalKeyFrames.push_front(pKFlocal);//notice the order is opposite
 	pKFlocal=pKFlocal->GetPrevKeyFrame();
-      }while (--Nlocal>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
+      }while (--NlocalCnt>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
       cout<<blueSTR"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<whiteSTR<<endl;
-      assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
+      assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=Nlocal);
       /*
       //insert all 1st layer Covisibility KFs into lLocalKeyFrames(not best n)
       const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
@@ -1428,8 +1424,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
     vector<g2o::EdgeEnc*> vpEdgesEnc;//Enc edges
     if (Nlocal>0){
       // Set Enc edges
-      Matrix3d Rco=Converter::toMatrix3d(Frame::mTco.rowRange(0,3).colRange(0,3));Vector3d tco=Converter::toVector3d(Frame::mTco.rowRange(0,3).col(3));
-      Quaterniond qRco=Quaterniond(Rco);
+      Matrix3d Rce=Converter::toMatrix3d(Frame::mTce.rowRange(0,3).colRange(0,3));Vector3d tce=Converter::toVector3d(Frame::mTce.rowRange(0,3).col(3));
+      Quaterniond qRce=Quaterniond(Rce);
 
       for(list<KeyFrame*>::const_iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++){
 	KeyFrame* pKF1 = *lit;                      // Current KF, store the Enc pre-integration between previous-current
@@ -1442,10 +1438,9 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 	eEnc->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//Ti 0
 	eEnc->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF1)));//Tj 1
 	eEnc->setMeasurement(encpreint.mdelxEij);
-	Eigen::Matrix3d SigmaModeldij(Eigen::Matrix3d::Identity()*EncPreIntegrator::msigma2Model*(pKF1->mTimeStamp-pKF0->mTimeStamp));//here is deltatij
-	eEnc->setInformation((encpreint.mSigmaEij+SigmaModeldij).inverse());
-	eEnc->qRco=qRco;eEnc->pco=tco;//SetParams
-	g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(7.815));
+	eEnc->setInformation(encpreint.mSigmaEij.inverse());
+	eEnc->qRce=qRce;eEnc->pce=tce;//SetParams
+	g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
 	optimizer.addEdge(eEnc);
 	vpEdgesEnc.push_back(eEnc);//for robust processing/ erroneous edges' culling
       }
@@ -1652,7 +1647,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 #ifndef NDEBUG
   for(size_t i=0, iend=vpEdgesEnc.size(); i<iend;i++){
       g2o::EdgeEnc* e = vpEdgesEnc[i];
-      if(e->chi2()>7.815)//if chi2 error too big(5% wrong) or Zc<=0 then outlier
+      if(e->chi2()>12.592)//if chi2 error too big(5% wrong)
       {
 	  cout<<"Enc edge "<<i<<", chi2 "<<e->chi2()<<". ";
       }

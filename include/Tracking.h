@@ -90,7 +90,7 @@ class Tracking
   //Error allow between "simultaneous" IMU data(Timu) & Image's mTimeStamp(Timg): Timu=[Timg-err,Timg+err]
   double mdErrIMUImg;
   //Tbc,Tbo
-  cv::Mat mTbc,mTco;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
+  cv::Mat mTbc,mTce;//Tbc is from IMU frame to camera frame;Tbo is from IMU frame to encoder frame(the centre of 2 driving wheels, +x pointing to forward,+z pointing up)
   //delay time of Odom Data received(CacheOdom) relative to the Image entering(GrabImageX), or Camera.delayForPolling
   double mDelayCache;
   //delay time of the image's timestamp to odom's timestamp, or delaytoimu, delaytoenc: Timg=Todom+mDelayToOdom

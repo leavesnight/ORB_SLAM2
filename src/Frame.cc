@@ -26,7 +26,7 @@
 namespace ORB_SLAM2
 {
   
-cv::Mat Frame::mTbc,Frame::mTco;
+cv::Mat Frame::mTbc,Frame::mTce;
 Eigen::Matrix3d Frame::meigRcb;Eigen::Vector3d Frame::meigtcb;
 
 void Frame::UpdatePoseFromNS()

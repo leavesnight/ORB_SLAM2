@@ -257,7 +257,8 @@ int main(int argc, char **argv)
     }
     if (SLAM.MapChanged()){
       cout<<"Map is changing!Please enter s to stop!"<<endl;
-      while (cin.get()!='s') {sleep(1);}
+//       while (cin.get()!='s') {sleep(1);}
+      sleep(5);
     }
     //zzh over
 
@@ -287,7 +288,6 @@ int main(int argc, char **argv)
         totaltime+=vTimesTrack[ni];
     }
     cout << "-------" << endl << endl;
-    cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory

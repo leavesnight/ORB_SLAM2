@@ -67,16 +67,21 @@ typedef IMUDataDerived IMUData;
 typedef IMUDataBase IMUData;
 #endif
 
+typedef Eigen::Matrix<double, 6, 6> Matrix6d;
+
 class EncData{
 public:
   static double mvscale;//encoder coefficient to m/s
   static double mrc;//rc: 2 differential driving wheels' distance
   static Matrix2d mSigmad;// mSigmad Sigma etad of Enc
+  static Matrix6d mSigmamd;// mmSigmamd Sigma etamd of Enc
   double mv[2],mtm;//v[0]=vl,v[1]=vr(m/s),timestamp of EncoderData
   
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   EncData(const double v[2],const double &tm);
-  static void SetParam(const double &vscale,const double &rc,const Matrix2d &sigmad){mvscale=vscale;mrc=rc;mSigmad=sigmad;}
+  static void SetParam(const double &vscale,const double &rc,const Matrix2d &sigmad,const Matrix6d &sigmamd){
+    mvscale=vscale;mrc=rc;mSigmad=sigmad;mSigmamd=sigmamd;
+  }
   //need to overlap the default version to realize deep copy
   EncData(const EncData& encdata):mv{encdata.mv[0],encdata.mv[1]},mtm(encdata.mtm){}
   EncData& operator=(const EncData& encdata){mv[0]=encdata.mv[0];mv[1]=encdata.mv[1];mtm=encdata.mtm;return *this;}

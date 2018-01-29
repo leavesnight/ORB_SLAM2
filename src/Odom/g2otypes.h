@@ -348,7 +348,7 @@ typedef EdgeNavStateProjectXYZWithScale<3,6> EdgeStereoNavStatePRSPointXYZ;
 /**
  * \brief template for EdgeEnc(binary edge)
  */
-class EdgeEnc:public BaseBinaryEdge<3, Vector3d, VertexSE3Expmap, VertexSE3Expmap>{
+class EdgeEnc:public BaseBinaryEdge<6, Vector6d, VertexSE3Expmap, VertexSE3Expmap>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     
@@ -358,11 +358,11 @@ public:
     void computeError();
     virtual void linearizeOplus();
     
-    Quaterniond qRco;Vector3d pco;
+    Quaterniond qRce;Vector3d pce;
 protected:
 };
 template <int DV>
-class EdgeEncNavState:public BaseBinaryEdge<3, Vector3d, VertexNavState<DV>, VertexNavState<DV> >{
+class EdgeEncNavState:public BaseBinaryEdge<6, Vector6d, VertexNavState<DV>, VertexNavState<DV> >{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     
@@ -372,7 +372,7 @@ public:
     void computeError();
     virtual void linearizeOplus();
     
-    Quaterniond qRbo;Vector3d pbo;
+    Quaterniond qRbe;Vector3d pbe;
 protected:
 };
 template <int DV>
@@ -382,12 +382,10 @@ void EdgeEncNavState<DV>::computeError(){
   const NavState &nsi=vi->estimate(),&nsj=vj->estimate();
   Quaterniond qRiw=nsi.mRwb.inverse().unit_quaternion(),qRwj=nsj.mRwb.unit_quaternion();
   Vector3d pwi=nsi.mpwb,pwj=nsj.mpwb;
-  Vector3d rEij;
-  Sophus::SO3 so3Roioj=Sophus::SO3(qRbo.conjugate()*qRiw*qRwj*qRbo);
-  rEij[0]=so3Roioj.log()[2]-this->_measurement[0];//(Log(Rob*Rbiw*Rwbj*Rbo)-delta~phiij).z
-  Vector3d deltapij=qRbo.conjugate()*(-(qRiw*pwi)+qRiw*pwj-pbo+qRiw*qRwj*pbo);//Rob*[-Rbiw*pwbi+Rbiw*pwbj-pbo+Rbiw*Rbjw.t()*pbo]
-  rEij.segment<2>(1)=deltapij.segment<2>(0)-this->_measurement.template segment<2>(1);//deltapij-delta~pij
-  this->_error=rEij;
+  Sophus::SO3 so3Reiej=Sophus::SO3(qRbe.conjugate()*qRiw*qRwj*qRbe);
+  this->_error.template segment<3>(0)=Sophus::SO3::log(Sophus::SO3::exp(this->_measurement.template segment<3>(0)).inverse()*so3Reiej);//Log(delta~Rij.t()*Reiej)
+  Vector3d deltapij=qRbe.conjugate()*(qRiw*(pwj-pwi)-pbe+qRiw*qRwj*pbe);//Reb*[Rbiw*(pwbj-pwbi)-pbe+Rbiw*Rbjw.t()*pbe]
+  this->_error.template segment<3>(3)=deltapij-this->_measurement.template segment<3>(3);//deltapij-delta~pij
 }
 template <int DV>
 void EdgeEncNavState<DV>::linearizeOplus(){
@@ -397,37 +395,33 @@ void EdgeEncNavState<DV>::linearizeOplus(){
   Quaterniond qRiw=nsi.mRwb.inverse().unit_quaternion(),qRwj=nsj.mRwb.unit_quaternion();
   Vector3d pwi=nsi.mpwb,pwj=nsj.mpwb;
   
-  //calculate Je_drhoi/j
-  Matrix<double,1,3> O1x3=Matrix<double,1,3>::Zero();//JeR_drhoi/j=0
-  Matrix3d Jep_drhoi,Jep_drhoj;
-  Matrix3d Rob=qRbo.conjugate().toRotationMatrix();
-  Matrix3d RobRiw=(qRbo.conjugate()*qRiw).toRotationMatrix();
-  Jep_drhoi=-RobRiw*Sophus::SO3::JacobianL(nsi.mRwb.log());//Jep_drhoi=-Rob*Riw*Jl(phi_wi)
-  Jep_drhoj=RobRiw*Sophus::SO3::JacobianL(nsj.mRwb.log());//Jep_drhoj=Rob*Riw*Jl(phi_wj)
-  
-  //calculate Je_dphi_i/j
-  Matrix3d Jep_dphii,Jep_dphij;
-  Jep_dphii=Rob*Sophus::SO3::hat(qRiw*(pwj-pwi+qRwj*pbo));//Jep_dphii=Rob*[Riw*(pwj-pwi+Rwj*pbo)]^
-  Quaterniond qRobRij=qRbo.conjugate()*qRiw*qRwj;
-  Jep_dphij=-(qRobRij).toRotationMatrix()*Sophus::SO3::hat(pbo);//Jep_dphij=-Rob*Riw*Rwj*(pbo)^
-  Matrix3d JeR_dphii,JeR_dphij;
-  Vector3d eRpart=Sophus::SO3(qRobRij*qRbo).log();
-  JeR_dphii=-Sophus::SO3::JacobianLInv(eRpart)*Rob;
-  JeR_dphij=Sophus::SO3::JacobianRInv(eRpart)*Rob;
+  //calculate Je_dxi xi=ksi=(phii,rhoi)
+  Matrix3d O3x3=Matrix3d::Zero();//JeR_dpi/j=0
+  Matrix3d Reb=qRbe.conjugate().toRotationMatrix();
+  Quaterniond qRij=qRiw*qRwj;
+  Vector3d eR=this->_error.template segment<3>(0);
+  Matrix3d JeR_dphii=-Sophus::SO3::JacobianRInv(eR)*Reb*qRij.conjugate().toRotationMatrix();//JeR_dphii=-Jrinv(eR)*(Rbiw*Rwbj*Rbe).t()
+  Matrix3d RebRiw=(qRbe.conjugate()*qRiw).toRotationMatrix();
+  Matrix3d Jep_dpi=-RebRiw;//Jep_dpi=-Reb*Rbiw
+  Matrix3d Jep_dphii=Reb*Sophus::SO3::hat(qRij*pbe+qRiw*(pwj-pwi));//Jep_dphii=Reb*[Rbiw*(Rwbj*pbe+pwbj-pwbi)]^
+  //calculate Je_dxj xj=ksj=(phij,rhoj)
+  Matrix3d JeR_dphij=Sophus::SO3::JacobianRInv(eR)*Reb;//JeR_dphij=Jrinv(eR)*Reb
+  Matrix3d Jep_dpj=RebRiw;//Jep_dpj=Reb*Rbiw
+  Matrix3d Jep_dphij=-(qRbe.conjugate()*qRij).toRotationMatrix()*Sophus::SO3::hat(pbe);//Jep_dphij=-Reb*Rbiw*Rwbj*pbe^
   
   if (DV==9){
     this->_jacobianOplusXi.setZero();//Je_dVi/j=0
     this->_jacobianOplusXj.setZero();
   }
   int idR=DV==6?3:6;
-  this->_jacobianOplusXi.template block<1,3>(0,0)=O1x3;
-  this->_jacobianOplusXi.template block<2,3>(1,0)=Jep_drhoi.block<2,3>(0,0);
-  this->_jacobianOplusXi.template block<1,3>(0,idR)=JeR_dphii.block<1,3>(2,0);
-  this->_jacobianOplusXi.template block<2,3>(1,idR)=Jep_dphii.block<2,3>(0,0);
-  this->_jacobianOplusXj.template block<1,3>(0,0)=O1x3;
-  this->_jacobianOplusXj.template block<2,3>(1,0)=Jep_drhoj.block<2,3>(0,0);
-  this->_jacobianOplusXj.template block<1,3>(0,idR)=JeR_dphij.block<1,3>(2,0);
-  this->_jacobianOplusXj.template block<2,3>(1,idR)=Jep_dphij.block<2,3>(0,0);
+  this->_jacobianOplusXi.template block<3,3>(0,0)=O3x3;
+  this->_jacobianOplusXi.template block<3,3>(3,0)=Jep_dpi;
+  this->_jacobianOplusXi.template block<3,3>(0,idR)=JeR_dphii;
+  this->_jacobianOplusXi.template block<3,3>(3,idR)=Jep_dphii;
+  this->_jacobianOplusXj.template block<3,3>(0,0)=O3x3;
+  this->_jacobianOplusXj.template block<3,3>(3,0)=Jep_dpj;
+  this->_jacobianOplusXj.template block<3,3>(0,idR)=JeR_dphij;
+  this->_jacobianOplusXj.template block<3,3>(3,idR)=Jep_dphij;
 }
 
 typedef EdgeEncNavState<6> EdgeEncNavStatePR;

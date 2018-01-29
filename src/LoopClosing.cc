@@ -757,7 +757,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
                     if(pChild->mnBAGlobalForKF!=nLoopKF)//if child is not GBA optimized by mpCurrentKF/it must be the new KFs created by LocalMapping thread during GBA
                     {
                         cv::Mat Tchildc = pChild->GetPose()*Twc;//Tchildw*Tw0=Tchild0
-                        pChild->mTcwGBA = Tchildc*pKF->mTcwGBA;//*Tcorc*pKF->mTcwGBA; Tchild0*T0w(corrected)=Tchildw(corrected)
+                        pChild->mTcwGBA = Tchildc*pKF->mTcwGBA;//Tchild0*T0w(corrected)=Tchildw(corrected)
                         pChild->mnBAGlobalForKF=nLoopKF;//so now its child KF' Pose can seem to be corrected by GBA
 
                         if (bUseGBAPRV){

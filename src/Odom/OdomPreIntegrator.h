@@ -36,15 +36,17 @@ public:
 
 using namespace Eigen;
 
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+
 //next derived classes don't use operator=!
 class EncPreIntegrator:public OdomPreIntegratorBase<EncData>{
   //mlOdom: mlOdomEnc list for vl,vr& its own timestamp
 public:
   static double msigma2Model;
-  Vector3d mdelxEij;// delta~Phiijz,delta~pij(2*1) from Encoder PreIntegration, 3*1*float
-  Matrix3d mSigmaEij;// by Enc, 3*3*float
+  Vector6d mdelxEij;// delta~Phiij(3*1),delta~pij(3*1) from Encoder PreIntegration, 6*1*float
+  Matrix6d mSigmaEij;// by Enc, 6*6*float
   
-  EncPreIntegrator():mdelxEij(0,0,0),mSigmaEij(Matrix3d::Zero()){}
+  EncPreIntegrator():mdelxEij(Vector6d::Zero()),mSigmaEij(Matrix6d::Zero()){}
   EncPreIntegrator(const EncPreIntegrator &pre):mdelxEij(pre.mdelxEij),mSigmaEij(pre.mSigmaEij){mdeltatij=pre.mdeltatij;}//don't copy list!
   EncPreIntegrator& operator=(const EncPreIntegrator &pre){
     mdeltatij=pre.mdeltatij;//don't copy list!

@@ -198,7 +198,8 @@ int main(int argc, char **argv)
     }
     if (SLAM.MapChanged()){
       cout<<"Map is changing!Please enter s to stop!"<<endl;
-      while (cin.get()!='s') {sleep(1);}
+//       while (cin.get()!='s') {sleep(1);}
+      sleep(5);
     }
     //zzh over
 
