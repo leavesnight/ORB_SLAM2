@@ -43,6 +43,7 @@ class KeyFrameDatabase;
 class KeyFrame
 {
   char mState;
+//   std::mutex mMutexState;
   
   // state xi={Ri,pi,vi,bi}, this xi doesn't include landmarks' state li/mi but include the camera's state xci(for Tbc is a constant)
   NavState mNavState;
@@ -129,8 +130,13 @@ public:
   std::set<KeyFrame *> GetConnectedKeyFramesByWeight(int w);//set made from mConnectedKeyFrameWeights[i].first restricted by weight
   
   inline char getState(){
+//     unique_lock<mutex> lock(mMutexState);
     return mState;
   }
+//   inline char setState(char state){
+//     unique_lock<mutex> lock(mMutexState);
+//     mState=state;
+//   }
   
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState
 //created by zzh over.

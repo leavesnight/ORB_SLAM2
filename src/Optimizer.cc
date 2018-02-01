@@ -621,9 +621,9 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
     eEnc->setMeasurement(encpreint.mdelxEij);
     eEnc->setInformation(encpreint.mSigmaEij.inverse());
     eEnc->qRbe=qRbe;eEnc->pbe=tbe;//SetParams
-//     if (bRobust){
+    if (bRobust){
       g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
-//     }
+    }
     optimizer.addEdge(eEnc);
   }
 
@@ -889,9 +889,9 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 	eEnc->setMeasurement(encpreint.mdelxEij);
 	eEnc->setInformation(encpreint.mSigmaEij.inverse());
 	eEnc->qRce=qRce;eEnc->pce=tce;//SetParams
-// 	if (bRobust){
+	if (bRobust){
 	  g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
-// 	}//we found our dataset tends to use robust kernel for Enc edges
+	}
 	optimizer.addEdge(eEnc);
       }
     }
@@ -1037,7 +1037,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             continue;
         g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pMP->mnId+maxKFid+1));
 
-        if(nLoopKF==0)//I think it's impossible
+        if(nLoopKF==0)//I think it's impossible for normal flow but used for final Full BA
         {
             pMP->SetWorldPos(Converter::toCvMat(vPoint->estimate()));
             pMP->UpdateNormalAndDepth();

@@ -88,7 +88,7 @@ void LocalMapping::Run()
             if((!CheckNewKeyFrames()) && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4){//at least 3 KFs in mpMap, should add Odom condition here! &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4
+                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4){//at least 3 KFs in mpMap, should add Odom condition here! && 1+4=5 is the threshold of Reset() soon after initilization in Tracking
 		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
 		  
 		  if(!mpIMUInitiator->GetVINSInited()){
@@ -142,6 +142,16 @@ void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
     mbAbortBA=true;//stop localBA
     
     if (pKF->getState()==(char)Tracking::ODOMOK){
+      /*if (mnLastOdomKFId>0&&pKF->mnId<=mnLastOdomKFId+4){//1+4=5 is the threshold of Reset() soon after initilization in Tracking, here we will clean these middle state==OK KFs for a better map
+	//one kind of Reset()
+	KeyFrame* pLastKF=pKF->GetPrevKeyFrame();
+	while (pLastKF!=NULL&&pLastKF->getState()!=Tracking::ODOMOK){
+	  if (pLastKF==mpCurrentKeyFrame) mpCurrentKeyFrame->setState(Tracking::ODOMOK);
+	  else pLastKF->SetBadFlag();
+	  pLastKF=pLastKF->GetPrevKeyFrame();
+	  cout<<"KF->SetBadFlag() in InsertNewKeyFrame()!"<<endl;
+	}
+      }*/
       mnLastOdomKFId=pKF->mnId;
     }
 }
@@ -158,6 +168,10 @@ void LocalMapping::ProcessNewKeyFrame()
     {
         unique_lock<mutex> lock(mMutexNewKFs);
         mpCurrentKeyFrame = mlNewKeyFrames.front();
+	/*while (mpCurrentKeyFrame->isBad()){
+	  assert(!mlNewKeyFrames.empty());
+	  mpCurrentKeyFrame=mlNewKeyFrames.front();
+	}*/
         mlNewKeyFrames.pop_front();
     }
 
@@ -186,15 +200,14 @@ void LocalMapping::ProcessNewKeyFrame()
                 }
             }
         }
-    }    
-
+    }
     // Update links in the Covisibility Graph
     KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
-    if (pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK
-      &&mpCurrentKeyFrame->getState()==Tracking::ODOMOK){
-      pLastKF->SetBadFlag();
-      cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
-//       cin.get();
+    if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
+      &&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
+	pLastKF->SetBadFlag();
+	cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+//         cin.get();
     }
     mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
 //     mpCurrentKeyFrame->UpdateConnections();

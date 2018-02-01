@@ -596,6 +596,8 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
 
         // Update Spanning Tree
         set<KeyFrame*> sParentCandidates;
+	assert(mpParent!=NULL);
+// 	if (mpParent!=NULL) 
         sParentCandidates.insert(mpParent);
 
         // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
@@ -651,12 +653,14 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
             {
                 (*sit)->ChangeParent(mpParent);
             }
-
+	
+// 	if (mpParent!=NULL){
         mpParent->EraseChild(this);//notice here mspChildrens may not be empty, but it's ok for it isn't the interface
         mTcp = Tcw*mpParent->GetPoseInverse();//the inter spot/link of Frames with its refKF in spanning tree
+// 	}
         mbBad = true;
     }
-    
+
     // Update Prev/Next KeyFrame in prev/next
     {
       unique_lock<mutex> lock(mMutexPNConnections);

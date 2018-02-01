@@ -1639,6 +1639,7 @@ bool Tracking::NeedNewKeyFrame()
       bNeedToInsertClose=false;//for VIO+Stereo/RGB-D, we don't open this inerstion strategy for speed and cTimeGap can do similar jobs
 //       minClose=100;
     }
+//     bNeedToInsertClose=false;//when use this one, problem exists in old ORB_SLAM2(PoseOptimization)+pure encoder edges under difficult dataset
 
     // Thresholds
     float thRefRatio = 0.75f;
@@ -1658,7 +1659,7 @@ bool Tracking::NeedNewKeyFrame()
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);//not too close && not too far
     
     //Condition 3: odom && time conditon && min new close points' demand
-    const bool c3=(mState==ODOMOK)&&(c1a||c1b||c1c)&&(nNonTrackedClose>70);
+    const bool c3=(mState==ODOMOK)&&(c1a||c1b||c1c)&&nNonTrackedClose>70;//&&mCurrentFrame.N>500;
 
     if((c1a||c1b||c1c)&&c2||cTimeGap||c3)//cTimeGap added by JingWang
     {
