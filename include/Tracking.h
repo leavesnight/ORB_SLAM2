@@ -327,6 +327,7 @@ bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTim
 	}
       }
     }else{//==mlOdomEnc.end(), but we can test --iter
+      //Notice mlOdomEnc.empty()==false!
       --iter;
       minErr=curTime-iter->mtm;
     }

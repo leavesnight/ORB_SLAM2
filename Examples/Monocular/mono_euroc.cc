@@ -92,13 +92,6 @@ int main(int argc, char **argv)
     ifstream finOdomdata;
     int totalNum=0;
     cout<<fixed<<setprecision(6)<<endl;
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
-    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
-    if (fnDelay.empty()){
-      gDelayCache=0;
-    }else{
-      gDelayCache=(double)fnDelay;
-    }
   
     switch (argc){
       case 5:
@@ -124,6 +117,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
+    if (fnDelay.empty()){
+      gDelayCache=0;
+    }else{
+      gDelayCache=(double)fnDelay;
+    }
+    
     // Retrieve paths to images
     vector<string> vstrImageFilenames;
     vector<double> vTimestamps;

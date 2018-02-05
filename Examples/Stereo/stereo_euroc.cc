@@ -93,13 +93,6 @@ int main(int argc, char **argv)
     ifstream finOdomdata;
     int totalNum=0;
     cout<<fixed<<setprecision(6)<<endl;
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
-    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
-    if (fnDelay.empty()){
-      gDelayCache=0;
-    }else{
-      gDelayCache=(double)fnDelay;
-    }
   
     switch (argc){
       case 6:
@@ -123,6 +116,14 @@ int main(int argc, char **argv)
         cerr << endl << "Usage: ./stereo_euroc path_to_vocabulary path_to_settings path_to_left_folder path_to_right_folder path_to_times_file" << endl;
 	cerr << redSTR"Or: ./stereo_euroc path_to_vocabulary path_to_settings path_to_left_folder path_to_right_folder path_to_times_file path_to_odometryData (number of odometryData)"<<endl;
         return 1;
+    }
+    
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
+    if (fnDelay.empty()){
+      gDelayCache=0;
+    }else{
+      gDelayCache=(double)fnDelay;
     }
 
     // Retrieve paths to images

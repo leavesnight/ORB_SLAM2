@@ -93,10 +93,6 @@ size_t gnCheck=0;
 void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
-//   if (type==3){
-//     PreIntegration<EncData>(1,mlOdomEnc,miterLastEnc);
-//     
-//   }else
   PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
 //   cout<<"!"<<mlOdomIMU.size()<<endl;
 //   cout<<"encdata over"<<endl;

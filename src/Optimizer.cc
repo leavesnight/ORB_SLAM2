@@ -1912,7 +1912,6 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             }
         }
     }
-    cout<<"Add Over"<<endl;
 
     // Optimize!
     optimizer.initializeOptimization();//optimize all KFs' Pose Siw by new loop edges and normal edges

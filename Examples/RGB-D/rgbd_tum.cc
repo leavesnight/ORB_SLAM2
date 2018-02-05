@@ -133,13 +133,6 @@ int main(int argc, char **argv)
     ifstream finOdomdata,finEncdata;
     int totalNum=2;
     cout<<fixed<<setprecision(6)<<endl;
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
-    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
-    if (fnDelay.empty()){
-      gDelayCache=0;
-    }else{
-      gDelayCache=(double)fnDelay;
-    }
   
     switch (argc){
       case 5:
@@ -175,6 +168,14 @@ int main(int argc, char **argv)
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
 	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData) (Mode) (path_to_EncData)"<<endl;
         return 1;
+    }
+    
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
+    if (fnDelay.empty()){
+      gDelayCache=0;
+    }else{
+      gDelayCache=(double)fnDelay;
     }
 
     // Retrieve paths to images

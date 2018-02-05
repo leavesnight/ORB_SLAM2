@@ -201,15 +201,14 @@ void LocalMapping::ProcessNewKeyFrame()
     }
     // Update links in the Covisibility Graph
     if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
-    mpIMUInitiator->SetCopyInitKFs(true);
-    KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
-    if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
-      &&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
-	pLastKF->SetBadFlag();
-	cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
-//         cin.get();
-    }
-    mpIMUInitiator->SetCopyInitKFs(false);
+      mpIMUInitiator->SetCopyInitKFs(true);
+      KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();//delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect
+      if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
+	&&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
+	  pLastKF->SetBadFlag();
+	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+      }
+      mpIMUInitiator->SetCopyInitKFs(false);
     }
 //     mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
     mpCurrentKeyFrame->UpdateConnections(mpLastCamKF);
@@ -747,21 +746,18 @@ void LocalMapping::KeyFrameCulling()
 	}
 	
         //cannot erase last ODOMOK & first ODOMOK's parent!
-        KeyFrame* pNextKF=pKF->GetNextKeyFrame();
-        if (pNextKF){
-	  if (pNextKF->getState()==Tracking::ODOMOK){
-	    if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
-	      if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
-		pLastNthKF=pLastNthKF->GetPrevKeyFrame();
-		tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
-	      }//must done before pKF->SetBadFlag()!
-	      pKF->SetBadFlag();
-	      cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
-	    }//else next is OK then continue
-	    continue;
-	  }else{//next KF is OK
-	    if (pKF->getState()==Tracking::ODOMOK) continue;
-	  }
+	if (pKF->GetNextKeyFrame()->getState()==Tracking::ODOMOK){
+	  if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
+	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
+	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
+	    }//must done before pKF->SetBadFlag()!
+	    pKF->SetBadFlag();
+	    cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
+	  }//else next is OK then continue
+	  continue;
+	}else{//next KF is OK
+	  if (pKF->getState()==Tracking::ODOMOK) continue;
 	}
 	
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
