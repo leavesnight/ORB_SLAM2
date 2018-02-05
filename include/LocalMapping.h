@@ -44,6 +44,7 @@ class Map;
 class LocalMapping
 {
   unsigned long mnLastOdomKFId;
+  KeyFrame* mpLastCamKF;
   
   //Local Window size
   int mnLocalWindowSize;//default 10, JW uses 20

@@ -35,7 +35,7 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
 
 //zzh
 ORB_SLAM2::System* g_pSLAM;
-double g_simulateTimestamp=-1;
+double g_simulateTimestamp=-1,gDelayCache;
 bool g_brgbdFinished=false;
 mutex g_mutex;
 
@@ -57,7 +57,7 @@ void odomIMURun(ifstream &finOdomdata,int totalNum){//must use &
     while (1){//until the image reading time is reached
       {
       unique_lock<mutex> lock(g_mutex);
-      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+      if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
 	break;
       }
       usleep(1.5e4);//allow 15ms delay
@@ -101,7 +101,7 @@ void odomEncRun(ifstream &finOdomdata){//must use &
     while (1){//until the image reading time is reached
       {
       unique_lock<mutex> lock(g_mutex);
-      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+      if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
 	break;
       }
       usleep(1.5e4);//allow 15ms delay
@@ -133,6 +133,13 @@ int main(int argc, char **argv)
     ifstream finOdomdata,finEncdata;
     int totalNum=2;
     cout<<fixed<<setprecision(6)<<endl;
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
+    if (fnDelay.empty()){
+      gDelayCache=0;
+    }else{
+      gDelayCache=(double)fnDelay;
+    }
   
     switch (argc){
       case 5:
@@ -275,8 +282,7 @@ int main(int argc, char **argv)
     SLAM.Shutdown();
     
     //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
-    //load if Full BA just after IMU Initialized
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    //load if Full BA just after IMU Initialize
     cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
 //     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
     SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");

@@ -93,10 +93,11 @@ size_t gnCheck=0;
 void Tracking::PreIntegration(const char type){
   unique_lock<mutex> lock(mMutexOdom);
   cout<<"type="<<(int)type<<"...";
-  if (type==3)
-    PreIntegration<EncData>(1,mlOdomEnc,miterLastEnc);
-  else
-    PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
+//   if (type==3){
+//     PreIntegration<EncData>(1,mlOdomEnc,miterLastEnc);
+//     
+//   }else
+  PreIntegration<EncData>(type,mlOdomEnc,miterLastEnc);
 //   cout<<"!"<<mlOdomIMU.size()<<endl;
 //   cout<<"encdata over"<<endl;
   PreIntegration<IMUData>(type,mlOdomIMU,miterLastIMU);
@@ -162,7 +163,6 @@ bool Tracking::GetVelocityByEnc(bool bMapUpdated){
   using namespace Eigen;
   //motion update/prediction by Enc motion model
   const EncPreIntegrator &encpreint=mCurrentFrame.mOdomPreIntEnc;//problem exits
-  double deltat=encpreint.mdeltatij;
   //get To1o2:p12 R12
   Vector3d pij(encpreint.mdelxEij.segment<3>(3));
   Matrix3d Rij=IMUPreintegrator::Expmap(encpreint.mdelxEij.segment<3>(0));
@@ -771,11 +771,14 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
     
     //delay control
     {
+    char sensorType=0;//0 for nothing, 1 for encoder, 2 for IMU, 3 for encoder+IMU
+    if (mpIMUInitiator->GetSensorEnc()) ++sensorType;
+    if (mpIMUInitiator->GetSensorIMU()) sensorType+=2;
     unique_lock<mutex> lock2(mMutexOdom);
-    if (!mlOdomEnc.empty()&&mlOdomEnc.back().mtm>=mCurrentFrame.mTimeStamp&&
-      !mlOdomIMU.empty()&&mlOdomIMU.back().mtm>=mCurrentFrame.mTimeStamp){//2 lists data is enough for deltax~ij
-    }else{//then delay some ms to ensure some Odom data to come if it runs well
-      lock2.unlock();
+    if (sensorType==1&&(mlOdomEnc.empty()||mlOdomEnc.back().mtm<mCurrentFrame.mTimeStamp)||
+	sensorType==2&&(mlOdomIMU.empty()||mlOdomIMU.back().mtm<mCurrentFrame.mTimeStamp)||
+	sensorType==3&&(mlOdomEnc.empty()||mlOdomEnc.back().mtm<mCurrentFrame.mTimeStamp||mlOdomIMU.empty()||mlOdomIMU.back().mtm<mCurrentFrame.mTimeStamp)){
+      lock2.unlock();//then delay some ms to ensure some Odom data to come if it runs well
       mtmGrabDelay+=chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double>(mDelayCache));//delay default=20ms
       while (chrono::steady_clock::now()<mtmGrabDelay) usleep(1000);//allow 1ms delay error
     }//if still no Odom data comes, deltax~ij will be set unknown
@@ -976,15 +979,30 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             //mState=LOST;
 	    //use Odom data to get mCurrentFrame.mTcw
 	    if (mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//though it may introduce error, it ensure the completeness of the Map
-	      assert(!mVelocity.empty());
-	      mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
-	      //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
-	      mState=ODOMOK;
-	      cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
-	      cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
-// 	      cin.get();
-	      if (mpIMUInitiator->GetVINSInited())
+	      if (!mpIMUInitiator->GetVINSInited()){//VEO, we use mVelocity as EncPreIntegrator from LastFrame if EncPreIntegrator exists
+		assert(!mVelocity.empty());
+		mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
+		//it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
+		mState=ODOMOK;
+		cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
+		cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
+// 	        cin.get();
+	      }else{//VIEO, for convenience, we don't use mVelocity as EncPreIntegrator from LastFrame
+		using namespace Eigen;
+		//motion update/prediction by Enc motion model
+		const EncPreIntegrator &encpreint=mCurrentFrame.mOdomPreIntEnc;
+		//get To1o2:p12 R12
+		Vector3d pij(encpreint.mdelxEij.segment<3>(3));
+		Matrix3d Rij=IMUPreintegrator::Expmap(encpreint.mdelxEij.segment<3>(0));
+		cv::Mat Tij=Converter::toCvSE3(Rij,pij);
+		//get Tc2c1
+		cv::Mat Tec=Converter::toCvMatInverse(Frame::mTce);
+		cv::Mat TcwIE=bMapUpdated?mpLastKeyFrame->GetPose():mLastFrame.mTcw;
+		mCurrentFrame.SetPose(Frame::mTce*Converter::toCvMatInverse(Tij)*Tec*TcwIE);
 		mCurrentFrame.UpdateNavStatePVRFromTcw();
+		mState=ODOMOK;
+		cout<<"IEODOM KF: "<<mCurrentFrame.mnId<<endl;
+	      }
 	    }else{
 	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	      // Clear Frame vectors for reloc bias computation
@@ -1634,9 +1652,12 @@ bool Tracking::NeedNewKeyFrame()
     double timegap = 0.5;
 //     if (!mpIMUInitiator->GetVINSInited()) timegap=0.1;//JW uses different timegap during IMU Initialization(0.1s)
     bool cTimeGap =false;int minClose=70;
-    if (mpIMUInitiator->GetSensorIMU()){
-      cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+    if (mpIMUInitiator->GetSensorIMU()) cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+    if (mpIMUInitiator->GetVINSInited()){//instead of GetSensorIMU() to relieve the following problem in VIE
       bNeedToInsertClose=false;//for VIO+Stereo/RGB-D, we don't open this inerstion strategy for speed and cTimeGap can do similar jobs
+//       if (mState==ODOMOK){//for VIEO+RGB-D, cTimeGap won't affect ODOMOK, so we may need it, but notice in local mapping actually we don't do it...
+// 	cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle;
+//       }
 //       minClose=100;
     }
 //     bNeedToInsertClose=false;//when use this one, problem exists in old ORB_SLAM2(PoseOptimization)+pure encoder edges under difficult dataset

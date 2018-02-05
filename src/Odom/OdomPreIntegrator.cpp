@@ -26,16 +26,26 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       
       double deltat,tj,tj_1;//deltatj-1j
       if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
-      if (iterj==iterEnd) tj=timeStampj; else tj=iterj->mtm;
+      if (iterj==iterEnd){
+// 	if (timeStampj-tj_1>0) tj=timeStampj;else break;
+	tj=timeStampj;
+      }else{
+	tj=iterj->mtm;
+// 	if (tj>timeStampj) tj=timeStampj;
+      }
       deltat=tj-tj_1;
       if (deltat==0) continue;
-      assert(deltat>=0);
+//       assert(deltat>=0);
       if (deltat>1.5){ mdeltatij=0;cout<<redSTR"Check Odometry!"<<whiteSTR<<endl;return;}//this filter is for my dataset's problem
       
       //selete/design measurement_j-1
       double vl,vr;//vlj-1,vrj-1
       if (iterj!=iterEnd){
 	vl=(iterjm1->mv[0]+iterj->mv[0])/2,vr=(iterjm1->mv[1]+iterj->mv[1])/2;
+// 	if (iterj->mtm>timeStampj){
+// 	  vl=(iterjm1->mv[0]+(iterjm1->mv[0]*(iterj->mtm-timeStampj)+iterj->mv[0]*deltat)/(iterj->mtm-iterjm1->mtm))/2;
+// 	  vr=(iterjm1->mv[1]+(iterjm1->mv[1]*(iterj->mtm-timeStampj)+iterj->mv[1]*deltat)/(iterj->mtm-iterjm1->mtm))/2;
+// 	}
       }else{
 	vl=iterjm1->mv[0];vr=iterjm1->mv[1];
       }
@@ -56,7 +66,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       Matrix<double,3,6> Cj_11;
       double sinthdivw,one_costh_divw;
       double Bx,By,C0,C1;
-      if (thetaj_1j<EPS){
+      if (abs(thetaj_1j)<EPS){
 // 	A.block<3,3>(0,3)=Rij_1*g2o::skew(Vector3d(-vf*deltat,0,0));
 // 	Bj_11.block<2,2>(0,0)<<deltat/2,deltat/2,0,0;
 // 	Cj_11.block<3,3>(3,0)=deltat*Matrix3d::Identity();Cj_11.block<3,3>(3,3).setZero();
@@ -80,7 +90,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       
       //update deltaPijM before update deltaThetaijM to use deltaThetaijMz as deltaTheta~ij-1z
       double thetaij=deltaThetaijMz+thetaj_1j;//Theta~eiej
-      if (thetaj_1j<EPS){
+      if (abs(thetaj_1j)<EPS){//or thetaj_1j==0
 	double arrdTmp[4]={cos(deltaThetaijMz),sin(deltaThetaijMz),-sin(deltaThetaijMz),cos(deltaThetaijMz)};//row-major:{cos(deltaTheij-1Mz),-sin(deltaTheij-1Mz),0,sin(deltaTheij-1Mz),cos(deltaThetaij-1Mz),0,0,0,1}; but Eigen defaultly uses col-major!
 	eigdeltaPijM+=Matrix2d(arrdTmp)*Vector2d(vf*deltat,0);//deltaPijM+Reiej-1*vej-1ej-1*deltat
       }else{

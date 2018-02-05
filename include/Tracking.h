@@ -294,22 +294,28 @@ template<class EncData>
 bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTime,
 			  typename listeig(EncData)::const_iterator &iter,const double&errOdomImg,bool bSearchBack){
   typename listeig(EncData)::const_iterator iter1;//iter-1 or iter+1
-  double minErr=errOdomImg+1;
+  double minErr;//=errOdomImg+1;
   if (bSearchBack){//should==mlOdomEnc.end()
     while (iter!=mlOdomEnc.begin()){//begin is min >= lastKFTime-err
       if ((--iter)->mtm<=curTime) break;//get max <= curTime+0
     }
-    if (iter!=mlOdomEnc.end()){//find a nearest iter to curTime
-      minErr=curTime-iter->mtm;
-      iter1=iter;++iter1;//iter+1
-      if (iter1!=mlOdomEnc.end()&&(iter1->mtm-curTime<minErr)){
-	iter=iter1;
-	minErr=iter1->mtm-curTime;
+    //Notice mlOdomEnc.empty()==false!
+//     if (iter!=mlOdomEnc.end()){//find a nearest iter to curTime
+      if (curTime>iter->mtm){//iter==begin may still have iter->mtm>curTime
+	minErr=curTime-iter->mtm;
+	iter1=iter;++iter1;//iter+1
+	if (iter1!=mlOdomEnc.end()&&(iter1->mtm-curTime<minErr)){
+	  iter=iter1;
+	  minErr=iter1->mtm-curTime;
+	}
+      }else{//we don't need to compare anything when iter->mtm>=curTime
+	minErr=iter->mtm-curTime;
       }
-    }//==mlOdomEnc.end(), we cannot test ++iter
+//     }//==mlOdomEnc.end(), we cannot test ++iter
   }else{//should==mlOdomEnc.begin()
     while (iter!=mlOdomEnc.end()){//begin is min >= lastKFTime-err
-      if ((++iter)->mtm>=curTime) break;//get min >= lastKFTime+0
+      if (iter->mtm>=curTime) break;//get min >= lastKFTime+0
+      ++iter;
     }
     if (iter!=mlOdomEnc.end()){
       minErr=iter->mtm-curTime;
@@ -322,9 +328,7 @@ bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTim
       }
     }else{//==mlOdomEnc.end(), but we can test --iter
       --iter;
-      if (curTime-iter->mtm<minErr){
-	minErr=curTime-iter->mtm;
-      }
+      minErr=curTime-iter->mtm;
     }
   }
   if (minErr<=errOdomImg){//we found nearest allowed iterj/iteri to curTime/lastKFTime

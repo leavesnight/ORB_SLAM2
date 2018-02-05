@@ -168,6 +168,20 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eNSPrior->setRobustKernel(rk);rk->setDelta(sqrt(25));//thHuberNavState:chi2(0.05,15)=25 or chi2(0.01,15)=30.5779
     optimizer.addEdge(eNSPrior);
   }
+  //Set Enc edge(binary) between LastKF-Frame
+  if (pFrame->mOdomPreIntEnc.mdeltatij>0){
+    // Set Enc edge(binary edge) between LastF-Frame
+    const EncPreIntegrator &encpreint=pFrame->mOdomPreIntEnc;
+    g2o::EdgeEncNavStatePVR* eEnc = new g2o::EdgeEncNavStatePVR();
+    eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(LastKFPVRId)));//lastF,i
+    eEnc->setVertex(1,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(FramePVRId)));//curF,j
+    eEnc->setMeasurement(encpreint.mdelxEij);
+    eEnc->setInformation(encpreint.mSigmaEij.inverse());
+    cv::Mat Tbe=Frame::mTbc*Frame::mTce;//for Enc
+    eEnc->qRbe=Quaterniond(Converter::toMatrix3d(Tbe.rowRange(0,3).colRange(0,3)));eEnc->pbe=Converter::toVector3d(Tbe.rowRange(0,3).col(3));//for Enc SetParams
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;eEnc->setRobustKernel(rk);rk->setDelta(sqrt(12.592));//chi2(0.05,6)=12.592//chi2(0.05,3)=7.815
+    optimizer.addEdge(eEnc);
+  }
 
   int nInitialCorrespondences=0;
 

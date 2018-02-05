@@ -54,7 +54,7 @@ LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, 
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), //mbFinishedGBA(true),
     mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0),
-    mpIMUInitiator(NULL)//zzh
+    mpIMUInitiator(NULL),mnLastOdomKFId(0)//zzh
 {
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
     cv::FileNode fnLoopMore=fSettings["Loop.More"];
@@ -146,6 +146,11 @@ bool LoopClosing::DetectLoop()
         mlpLoopKeyFrameQueue.pop_front();
         // Avoid that a keyframe can be erased while it is being process by this thread in this function
         mpCurrentKF->SetNotErase();
+    }
+    
+    if (mpCurrentKF->getState()==Tracking::ODOMOK){
+      mnLastOdomKFId=mpCurrentKF->mnId;
+      mnCovisibilityConsistencyTh=1;//like Relocalization()
     }
 
     //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection(CorrectLoop()), close in time from last loop
@@ -307,7 +312,8 @@ bool LoopClosing::ComputeSim3()
 	corresponding to pKF1/mpCurrentKF in LoopClosing
 
 	cout<<redSTR<<i<<": "<<nmatches<<endl;
-        if(nmatches<10)//20)//same threshold in TrackWithMotionModel(), new 10
+	int thresholdMatches=mnLastOdomKFId==0?20:15;
+        if(nmatches<thresholdMatches)//20)//same threshold in TrackWithMotionModel(), new 10
         {
             vbDiscarded[i] = true;
             continue;
@@ -315,7 +321,8 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);//how?
-            pSolver->SetRansacParameters(0.99,10,300);//20 is stricter than Relocalization()s, old 20
+	    int minInliers=mnLastOdomKFId==0?20:10;
+            pSolver->SetRansacParameters(0.99,minInliers,300);//20 is stricter than Relocalization()s, old 20 new 10
             vpSim3Solvers[i] = pSolver;
         }
 
@@ -453,6 +460,11 @@ bool LoopClosing::ComputeSim3()
 
 void LoopClosing::CorrectLoop()
 {
+    if (mnLastOdomKFId>0){
+      mnLastOdomKFId=0;//added by zzh
+      mnCovisibilityConsistencyTh=3;//return back
+    }
+  
     cout << "Loop detected!" << endl;
 
     // Send a stop signal to Local Mapping

@@ -35,7 +35,7 @@ void LoadImages(const string &strImagePath, const string &strPathTimes,
 
 //zzh
 ORB_SLAM2::System* g_pSLAM;
-double g_simulateTimestamp=-1;
+double g_simulateTimestamp=-1,gDelayCache;
 bool g_brgbdFinished=false;
 mutex g_mutex;
 
@@ -59,7 +59,7 @@ void odomRun(ifstream &finOdomdata,int totalNum){//must use &
     while (1){//until the image reading time is reached
       {
       unique_lock<mutex> lock(g_mutex);
-      if (timestamp<=g_simulateTimestamp||g_brgbdFinished)
+      if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
 	break;
       }
       usleep(1000);//allow 1ms delay
@@ -92,6 +92,13 @@ int main(int argc, char **argv)
     ifstream finOdomdata;
     int totalNum=0;
     cout<<fixed<<setprecision(6)<<endl;
+    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
+    cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
+    if (fnDelay.empty()){
+      gDelayCache=0;
+    }else{
+      gDelayCache=(double)fnDelay;
+    }
   
     switch (argc){
       case 5:
@@ -208,7 +215,6 @@ int main(int argc, char **argv)
     
     //zzh: FinalGBA, this is just the FullBA column in the paper! see "full BA at the end of the execution" in V-B of the VIORBSLAM paper!
     //load if Full BA just after IMU Initialized
-    cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
     cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
 //     SLAM.SaveMap("KeyFrameTrajectoryMap.bin",false);

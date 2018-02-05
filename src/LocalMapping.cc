@@ -31,7 +31,7 @@ namespace ORB_SLAM2
 LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-    mnLastOdomKFId(0)
+    mnLastOdomKFId(0),mpLastCamKF(NULL)
 {//zzh
   cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
@@ -140,20 +140,6 @@ void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
     unique_lock<mutex> lock(mMutexNewKFs);
     mlNewKeyFrames.push_back(pKF);
     mbAbortBA=true;//stop localBA
-    
-    if (pKF->getState()==(char)Tracking::ODOMOK){
-      /*if (mnLastOdomKFId>0&&pKF->mnId<=mnLastOdomKFId+4){//1+4=5 is the threshold of Reset() soon after initilization in Tracking, here we will clean these middle state==OK KFs for a better map
-	//one kind of Reset()
-	KeyFrame* pLastKF=pKF->GetPrevKeyFrame();
-	while (pLastKF!=NULL&&pLastKF->getState()!=Tracking::ODOMOK){
-	  if (pLastKF==mpCurrentKeyFrame) mpCurrentKeyFrame->setState(Tracking::ODOMOK);
-	  else pLastKF->SetBadFlag();
-	  pLastKF=pLastKF->GetPrevKeyFrame();
-	  cout<<"KF->SetBadFlag() in InsertNewKeyFrame()!"<<endl;
-	}
-      }*/
-      mnLastOdomKFId=pKF->mnId;
-    }
 }
 
 
@@ -168,11 +154,23 @@ void LocalMapping::ProcessNewKeyFrame()
     {
         unique_lock<mutex> lock(mMutexNewKFs);
         mpCurrentKeyFrame = mlNewKeyFrames.front();
-	/*while (mpCurrentKeyFrame->isBad()){
-	  assert(!mlNewKeyFrames.empty());
-	  mpCurrentKeyFrame=mlNewKeyFrames.front();
-	}*/
         mlNewKeyFrames.pop_front();
+    }
+    
+    if (mpCurrentKeyFrame->getState()==(char)Tracking::ODOMOK){//added by zzh, it can also be put in InsertKeyFrame()
+      /*if (mnLastOdomKFId>0&&mpCurrentKeyFrame->mnId<=mnLastOdomKFId+4){//1+4=5 is the threshold of Reset() soon after initilization in Tracking, here we will clean these middle state==OK KFs for a better map
+	//one kind of Reset()
+	KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
+	while (pLastKF!=NULL&&pLastKF->getState()!=Tracking::ODOMOK){
+	  if (pLastKF==mpCurrentKeyFrame) mpCurrentKeyFrame->setState(Tracking::ODOMOK);
+	  else pLastKF->SetBadFlag();
+	  pLastKF=pLastKF->GetPrevKeyFrame();
+	  cout<<"KF->SetBadFlag() in InsertNewKeyFrame()!"<<endl;
+	}
+      }*/
+      mnLastOdomKFId=mpCurrentKeyFrame->mnId;
+    }else{//OK
+      mpLastCamKF=mpCurrentKeyFrame;
     }
 
     // Compute Bags of Words structures, maybe already computed by TrackReferenceKeyFrame()
@@ -202,6 +200,8 @@ void LocalMapping::ProcessNewKeyFrame()
         }
     }
     // Update links in the Covisibility Graph
+    if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
+    mpIMUInitiator->SetCopyInitKFs(true);
     KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
     if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
       &&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
@@ -209,7 +209,10 @@ void LocalMapping::ProcessNewKeyFrame()
 	cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
 //         cin.get();
     }
-    mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
+    mpIMUInitiator->SetCopyInitKFs(false);
+    }
+//     mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
+    mpCurrentKeyFrame->UpdateConnections(mpLastCamKF);
 //     mpCurrentKeyFrame->UpdateConnections();
 
     // Insert Keyframe in Map
@@ -723,9 +726,6 @@ void LocalMapping::KeyFrameCulling()
     {
         KeyFrame* pKF = *vit;
         if(pKF->mnId==0) continue;//cannot erase the initial KF
-        //cannot erase ODOMOK & its parent!
-        KeyFrame* pNextKF=pKF->GetNextKeyFrame();
-        if (pKF->getState()==Tracking::ODOMOK||pNextKF&&pNextKF->getState()==Tracking::ODOMOK) continue;
         
         //timespan restriction is implemented as the VIORBSLAM paper III-B
         double tmNext=-1;
@@ -744,6 +744,24 @@ void LocalMapping::KeyFrameCulling()
 	  tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
 	  if (tmNext>tmNthKF||//this KF is in next time's local window or N+1th
 	    tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>3) continue;//normal restriction to perform full BA
+	}
+	
+        //cannot erase last ODOMOK & first ODOMOK's parent!
+        KeyFrame* pNextKF=pKF->GetNextKeyFrame();
+        if (pNextKF){
+	  if (pNextKF->getState()==Tracking::ODOMOK){
+	    if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
+	      if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
+		pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+		tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
+	      }//must done before pKF->SetBadFlag()!
+	      pKF->SetBadFlag();
+	      cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
+	    }//else next is OK then continue
+	    continue;
+	  }else{//next KF is OK
+	    if (pKF->getState()==Tracking::ODOMOK) continue;
+	  }
 	}
 	
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();

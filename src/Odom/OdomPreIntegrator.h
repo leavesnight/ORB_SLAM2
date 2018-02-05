@@ -143,7 +143,7 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
       // delta time
       double dt,tj,tj_1;
       if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
-      if (iterj==iterEnd) tj=timeStampj; else tj=iterj->mtm;
+      if (iterj==iterEnd) tj=timeStampj; else{ tj=iterj->mtm;assert(tj-tj_1>=0);}
       dt=tj-tj_1;
       if (dt==0) continue;//for we use [nearest imu data at timeStampi, nearest but <=timeStampj] or [/(timeStampi,timeStampj], when we concate them in KeyFrameCulling(), dt may be 0
       
@@ -157,7 +157,6 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
 }
 template<class IMUDataBase>
 void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vector3d& acc, const double& dt){
-  assert(dt>=0);
   using namespace Sophus;
   using namespace Eigen;
   double dt2div2=dt*dt/2;
