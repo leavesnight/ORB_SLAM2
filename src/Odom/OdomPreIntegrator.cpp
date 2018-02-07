@@ -27,11 +27,11 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       double deltat,tj,tj_1;//deltatj-1j
       if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
       if (iterj==iterEnd){
-// 	if (timeStampj-tj_1>0) tj=timeStampj;else break;
-	tj=timeStampj;
+	if (timeStampj-tj_1>0) tj=timeStampj;else break;
+// 	tj=timeStampj;
       }else{
 	tj=iterj->mtm;
-// 	if (tj>timeStampj) tj=timeStampj;
+	if (tj>timeStampj) tj=timeStampj;
       }
       deltat=tj-tj_1;
       if (deltat==0) continue;

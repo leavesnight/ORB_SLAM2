@@ -57,6 +57,8 @@ class KeyFrame
   // Odom connections for localBA
   KeyFrame *mpPrevKeyFrame,*mpNextKeyFrame;
   std::mutex mMutexPNConnections;//the mutex of Prev/Next KF(connections/sparse states related to this KF), similar to mMutexConnections
+//   bool mbPNChanging;std::mutex mMutexPNChanging;
+  static std::mutex mstMutexPNChanging;//avoid conescutive 2/3 KFs' SetBadFlag() and SetErase() at the same time! //or check if the former & latter KFs' mbPNChanging are both false
   
   void UpdatePoseFromNS();
   
@@ -112,6 +114,10 @@ public:
     unique_lock<mutex> lock(mMutexPNConnections);
     mpNextKeyFrame = pKF;
   }
+//   bool GetPNChanging(void){
+//     unique_lock<mutex> lock(mMutexPNChanging);
+//     return mbPNChanging;
+//   }
   void UpdateNavStatePVRFromTcw();//mainly for Posegraph optimization, but I think when Tcw is finally optimized, please call this func. to update NavState
   
   // Odom PreIntegration

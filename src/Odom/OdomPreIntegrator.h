@@ -7,6 +7,8 @@
 #include "so3.h"//for IMUPreIntegratorBase::PreIntegration
 
 namespace ORB_SLAM2{
+
+using namespace Eigen;
   
 template<class _OdomData>
 class OdomPreIntegratorBase{//base class
@@ -31,10 +33,24 @@ public:
   // Odom PreIntegration
   virtual void PreIntegration(const double timeStampi,const double timeStampj){assert(0&&"You called an empty virtual function!!!");}//cannot use =0 for we allow transformed in derived class
   
+  // normalize to avoid numerical error accumulation
+  inline Quaterniond normalizeRotationQ(const Quaterniond& r) const
+  {
+    Quaterniond _r(r);
+    if (_r.w()<0)//is this necessary?
+    {
+	_r.coeffs() *= -1;
+    }
+    return _r.normalized();
+  }
+  inline Matrix3d normalizeRotationM(const Matrix3d& R) const
+  {
+    Quaterniond qr(R);
+    return normalizeRotationQ(qr).toRotationMatrix();
+  }
+  
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-using namespace Eigen;
 
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 
@@ -100,20 +116,6 @@ public:
   }//rewrite
   // incrementally update 1)delta measurements, 2)jacobians, 3)covariance matrix
   void update(const Vector3d& omega, const Vector3d& acc, const double& dt);//don't allow dt<0!
-  inline Quaterniond normalizeRotationQ(const Quaterniond& r)
-  {
-    Quaterniond _r(r);
-    if (_r.w()<0)//is this necessary?
-    {
-	_r.coeffs() *= -1;
-    }
-    return _r.normalized();
-  }
-  inline Matrix3d normalizeRotationM(const Matrix3d& R)
-  {
-    Quaterniond qr(R);
-    return normalizeRotationQ(qr).toRotationMatrix();
-  }
   
   // reset to initial state
   void reset(){
@@ -204,7 +206,7 @@ void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vect
   mpij+=mvij*dt+mRij*(acc*dt2div2);//delta~pij=delta~pij-1 + delta~vij-1*dtj-1j + 1/2*delta~Rij-1*(~aj-1 - bai_bar)*dtj-1j^2
   mvij+=mRij*(acc*dt);//here mRij=mRij-1, delta~vij=delta~vij-1 + delta~Rij-1 * (~aj-1 - bai_bar)*dtj-1j
   // normalize rotation, in case of numerical error accumulation
-  mRij=normalizeRotationM(mRij*dR);//here omega=(w~k-bgi_bar)(k=j-1), deltaR~ij(bgi_bar)=deltaRij-1(bgi_bar) * Exp((w~j-1 - bgi_bar)*dtj-1j)
+  mRij=this->normalizeRotationM(mRij*dR);//here omega=(w~k-bgi_bar)(k=j-1), deltaR~ij(bgi_bar)=deltaRij-1(bgi_bar) * Exp((w~j-1 - bgi_bar)*dtj-1j)
   
   this->mdeltatij+=dt;
 }

@@ -88,14 +88,16 @@ void LocalMapping::Run()
             if((!CheckNewKeyFrames()) && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2&&mpCurrentKeyFrame->mnId>mnLastOdomKFId+4){//at least 3 KFs in mpMap, should add Odom condition here! && 1+4=5 is the threshold of Reset() soon after initilization in Tracking
+                if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here!
 		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
 		  
 		  if(!mpIMUInitiator->GetVINSInited()){
-		    if (!mpIMUInitiator->GetSensorEnc())
-		      Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
-		    else
-		      Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap,mnLocalWindowSize);//local BA
+		    if (mpCurrentKeyFrame->mnId>mnLastOdomKFId+1){//1+1=2 is the threshold of the left &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+1
+		      if (!mpIMUInitiator->GetSensorEnc())
+			Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
+		      else
+			Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap,mnLocalWindowSize);//local BA
+		    }
 		  }else{//maybe it needs transition when initialized with a few imu edges<N
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);
@@ -158,16 +160,48 @@ void LocalMapping::ProcessNewKeyFrame()
     }
     
     if (mpCurrentKeyFrame->getState()==(char)Tracking::ODOMOK){//added by zzh, it can also be put in InsertKeyFrame()
-      /*if (mnLastOdomKFId>0&&mpCurrentKeyFrame->mnId<=mnLastOdomKFId+4){//1+4=5 is the threshold of Reset() soon after initilization in Tracking, here we will clean these middle state==OK KFs for a better map
+      if (mnLastOdomKFId>0&&mpCurrentKeyFrame->mnId<=mnLastOdomKFId+5){//5 is the threshold of Reset() soon after initilization in Tracking, here we will clean these middle state==OK KFs for a better map
 	//one kind of Reset()
-	KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();
-	while (pLastKF!=NULL&&pLastKF->getState()!=Tracking::ODOMOK){
-	  if (pLastKF==mpCurrentKeyFrame) mpCurrentKeyFrame->setState(Tracking::ODOMOK);
-	  else pLastKF->SetBadFlag();
-	  pLastKF=pLastKF->GetPrevKeyFrame();
-	  cout<<"KF->SetBadFlag() in InsertNewKeyFrame()!"<<endl;
+	if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
+	  mpIMUInitiator->SetCopyInitKFs(true);
+	  KeyFrame* pLastKF=mpCurrentKeyFrame;
+	  vector<KeyFrame*> vecEraseKF;
+	  if (mpIMUInitiator->GetVINSInited()){
+	    double tmNewest=pLastKF->mTimeStamp;
+	    bool bLastCamKF=false;char state;
+	    do{
+	      pLastKF=pLastKF->GetPrevKeyFrame();
+	      state=pLastKF->getState();
+	      if (tmNewest-pLastKF->GetPrevKeyFrame()->mTimeStamp>0.5){
+		tmNewest=pLastKF->mTimeStamp;
+		if (!bLastCamKF&&state==(char)Tracking::OK){
+		  mpLastCamKF=pLastKF;bLastCamKF=true;//pLastKF->getState() is OK
+		}
+	      }
+	      else vecEraseKF.push_back(pLastKF);//keep tmNewest unchanged
+	    }while (state!=(char)Tracking::ODOMOK);
+	    if (!bLastCamKF){
+	      do{
+		pLastKF=pLastKF->GetPrevKeyFrame();
+	      }while (pLastKF->getState()!=(char)Tracking::OK);
+	      mpLastCamKF=pLastKF;
+	    }
+	  }else{
+	    do{
+	      pLastKF=pLastKF->GetPrevKeyFrame();
+	      vecEraseKF.push_back(pLastKF);
+	    }while (pLastKF->getState()!=(char)Tracking::ODOMOK);
+	    mpLastCamKF=pLastKF->GetPrevKeyFrame();
+	  }
+	  for (int i=0;i<vecEraseKF.size();++i){//the last one is the before ODOMOK(delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect)
+	    vecEraseKF[i]->SetBadFlag();//it may be SetNotErase() by LoopClosing thread
+	  }
+// 	  if (pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
+	  assert(mpLastCamKF!=NULL&&mpLastCamKF->getState()==(char)Tracking::OK);
+	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+	  mpIMUInitiator->SetCopyInitKFs(false);
 	}
-      }*/
+      }
       mnLastOdomKFId=mpCurrentKeyFrame->mnId;
     }else{//OK
       mpLastCamKF=mpCurrentKeyFrame;
@@ -200,16 +234,16 @@ void LocalMapping::ProcessNewKeyFrame()
         }
     }
     // Update links in the Covisibility Graph
-    if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
-      mpIMUInitiator->SetCopyInitKFs(true);
-      KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();//delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect
-      if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
-	&&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
-	  pLastKF->SetBadFlag();
-	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
-      }
-      mpIMUInitiator->SetCopyInitKFs(false);
-    }
+//     if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
+//       mpIMUInitiator->SetCopyInitKFs(true);
+//       KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();//delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect
+//       if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
+// 	&&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
+// 	  pLastKF->SetBadFlag();
+// 	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
+//       }
+//       mpIMUInitiator->SetCopyInitKFs(false);
+//     }
 //     mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
     mpCurrentKeyFrame->UpdateConnections(mpLastCamKF);
 //     mpCurrentKeyFrame->UpdateConnections();

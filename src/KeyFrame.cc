@@ -26,6 +26,8 @@
 namespace ORB_SLAM2
 {
   
+std::mutex KeyFrame::mstMutexPNChanging;
+  
 void KeyFrame::UpdatePoseFromNS()//same as Frame::UpdatePoseFromNS()
 {
   cv::Mat Rbc = Frame::mTbc.rowRange(0,3).colRange(0,3);//don't need clone();
@@ -108,7 +110,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
     mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap),
-    mState(state),mbPrior(false)//zzh
+    mState(state),mbPrior(false)//,mbPNChanging(false)//zzh
 {
     if(pPrevKF)
       pPrevKF->SetNextKeyFrame(this);
@@ -396,7 +398,7 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
     }
 
     // This should not happen
-    if(KFcounter.empty()){
+    if(KFcounter.empty()){//ODOMOK;||mState!=2&&pLastKF!=NULL
         cout<<"Failed to update spanning tree! "<<mnId<<" "<<mnFrameId<<endl;
 	if (pLastKF==NULL){
 	  if (mpParent==NULL)
@@ -404,7 +406,7 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 	  else
 	    cout<<"but has 1 parent and "<<mConnectedKeyFrameWeights.size()<<" covisibility KFs"<<endl;
 	}else{
-	  pLastKF->AddConnection(this,0);//add the link from pLastKF to this
+// 	  pLastKF->AddConnection(this,0);//add the link from pLastKF to this
 	  //add the link from this to pLastKF
 	  KFcounter[pLastKF]=0;
 	  unique_lock<mutex> lockCon(mMutexConnections);
@@ -661,32 +663,49 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
         mbBad = true;
     }
 
-    // Update Prev/Next KeyFrame in prev/next
+    // Update Prev/Next KeyFrame in prev/next, mbBad is not absolutely related to its existence
     {
-      unique_lock<mutex> lock(mMutexPNConnections);
-      assert(mpPrevKeyFrame);
-      assert(mpNextKeyFrame);//check!!!
-      assert(!mpPrevKeyFrame->isBad()&&!mpNextKeyFrame->isBad());//check completeness!!!
-      mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
-      mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
-      //AppendIMUDataToFront, qIMU can speed up!
-      listeig(IMUData) limunew=mpNextKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't copy list!
-      {
-	unique_lock<mutex> lock(mMutexOdomData);
-	limunew.insert(limunew.begin(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
-	mpNextKeyFrame->SetPreIntegrationList<IMUData>(limunew.begin(),--limunew.end());
-      }
-      //AppendEncDataToFront
-      listeig(EncData) lencnew=mpNextKeyFrame->GetListEncData();//notice GetEncPreInt() doesn't copy list!
-      {
-	unique_lock<mutex> lock(mMutexOdomData);
-	lencnew.insert(lencnew.begin(),mOdomPreIntEnc.getlOdom().begin(),mOdomPreIntEnc.getlOdom().end());
-	mpNextKeyFrame->SetPreIntegrationList<EncData>(lencnew.begin(),--lencnew.end());
-      }
-      //ComputePreInt
-      mpNextKeyFrame->PreIntegration<IMUData>(mpPrevKeyFrame);
-      mpNextKeyFrame->PreIntegration<EncData>(mpPrevKeyFrame);
-      mpPrevKeyFrame=mpNextKeyFrame=NULL;//clear this KF's pointer, I think it's not necessary
+//       while (!mbPNChanging){//no need to use GetPNChanging() for it won't come here twice
+// 	{
+      cout<<"LockST..";
+	  unique_lock<mutex> lock(mstMutexPNChanging);
+	  cout<<"LockPN..";
+	  unique_lock<mutex> lock2(mMutexPNConnections);
+// 	  if (!mpPrevKeyFrame->GetPNChanging()&&!mpNextKeyFrame->GetPNChanging()){
+// 	    unique_lock<mutex> lock(mMutexPNChanging);
+// 	    mbPNChanging=true;
+// 	  }
+// 	}
+// 	if (mbPNChanging){
+// 	  unique_lock<mutex> lock(mMutexPNConnections);
+	  assert(mpPrevKeyFrame);
+	  assert(mpNextKeyFrame);//check!!!
+	  assert(mpPrevKeyFrame->GetNextKeyFrame()==this&&mpNextKeyFrame->GetPrevKeyFrame()==this);//check 2!!!
+	  mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
+	  mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
+	  //AppendIMUDataToFront, qIMU can speed up!
+	  listeig(IMUData) limunew=mpNextKeyFrame->GetListIMUData();//notice GetIMUPreInt() doesn't copy list!
+	  {
+	    unique_lock<mutex> lock(mMutexOdomData);
+	    limunew.insert(limunew.begin(),mOdomPreIntIMU.getlOdom().begin(),mOdomPreIntIMU.getlOdom().end());
+	    mpNextKeyFrame->SetPreIntegrationList<IMUData>(limunew.begin(),--limunew.end());
+	  }
+	  //AppendEncDataToFront
+	  listeig(EncData) lencnew=mpNextKeyFrame->GetListEncData();//notice GetEncPreInt() doesn't copy list!
+	  {
+	    unique_lock<mutex> lock(mMutexOdomData);
+	    lencnew.insert(lencnew.begin(),mOdomPreIntEnc.getlOdom().begin(),mOdomPreIntEnc.getlOdom().end());
+	    mpNextKeyFrame->SetPreIntegrationList<EncData>(lencnew.begin(),--lencnew.end());
+	  }
+	  //ComputePreInt
+	  mpNextKeyFrame->PreIntegration<IMUData>(mpPrevKeyFrame);
+	  mpNextKeyFrame->PreIntegration<EncData>(mpPrevKeyFrame);
+	  mpPrevKeyFrame=mpNextKeyFrame=NULL;//clear this KF's pointer, to check if its prev/next is deleted
+// 	}
+//       }
+//       unique_lock<mutex> lock(mMutexPNChanging);
+//       mbPNChanging=false;
+cout<<"End "<<mnId<<" "<<mTimeStamp<<endl;
     }
 
     //erase this(&KF) in mpMap && mpKeyFrameDB

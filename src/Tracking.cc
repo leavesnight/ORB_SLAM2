@@ -166,9 +166,12 @@ bool Tracking::GetVelocityByEnc(bool bMapUpdated){
   //get Tc2c1
   cv::Mat Tec=Converter::toCvMatInverse(Frame::mTce);
   mVelocity=Frame::mTce*Converter::toCvMatInverse(Tij)*Tec;
+//   Matrix3d eigRcl=Converter::toMatrix3d(mVelocity.rowRange(0,3).colRange(0,3));//we don't need this correction for this numerical error caused from double to float won't be accumulated!
+//   cv::Mat Rcl=Converter::toCvMat(mLastFrame.mOdomPreIntEnc.normalizeRotationM(eigRcl));
+//   Rcl.copyTo(mVelocity.rowRange(0,3).colRange(0,3));
+  
 //   cout<<encpreint.mdelxEij[0]<<endl;
 //   cout<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<endl;
-  
   return true;
 }
 bool Tracking::TrackWithIMU(bool bMapUpdated){
@@ -459,7 +462,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(false), mbVO(false), mpORBVocabulary(pVoc),
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0),
-    mtimestampOdom(-1),mbRelocBiasPrepare(false)//zzh
+    mbRelocBiasPrepare(false),mnLastOdomKFId(0)//zzh
 {   
     // Load camera parameters from settings file
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
@@ -977,12 +980,15 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	    if (mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//though it may introduce error, it ensure the completeness of the Map
 	      if (!mpIMUInitiator->GetVINSInited()){//VEO, we use mVelocity as EncPreIntegrator from LastFrame if EncPreIntegrator exists
 		assert(!mVelocity.empty());
-		mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
+		cv::Mat Tcw=mVelocity*mLastFrame.mTcw;//To avoid accumulated numerical error of pure encoder predictions causing Rcw is not Unit Lie Group (|Rcw|=1)!!!
+		Matrix3d eigRcw=Converter::toMatrix3d(Tcw.rowRange(0,3).colRange(0,3));
+		cv::Mat Rcw=Converter::toCvMat(mLastFrame.mOdomPreIntEnc.normalizeRotationM(eigRcw));
+		Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
+		mCurrentFrame.SetPose(Tcw);//if directly use mVelocity*mLastFrame.mTcw), will cause big bug when insertion strategy tends to less insertion!
 		//it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
 		mState=ODOMOK;
 		cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
 		cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
-// 	        cin.get();
 	      }else{//VIEO, for convenience, we don't use mVelocity as EncPreIntegrator from LastFrame
 		using namespace Eigen;
 		//motion update/prediction by Enc motion model
@@ -993,11 +999,15 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		cv::Mat Tij=Converter::toCvSE3(Rij,pij);
 		//get Tc2c1
 		cv::Mat Tec=Converter::toCvMatInverse(Frame::mTce);
-		cv::Mat TcwIE=bMapUpdated?mpLastKeyFrame->GetPose():mLastFrame.mTcw;
-		mCurrentFrame.SetPose(Frame::mTce*Converter::toCvMatInverse(Tij)*Tec*TcwIE);
+		cv::Mat TlwIE=bMapUpdated?mpLastKeyFrame->GetPose():mLastFrame.mTcw;
+		cv::Mat Tcw=Frame::mTce*Converter::toCvMatInverse(Tij)*Tec*TlwIE;//To avoid accumulated numerical error of pure encoder predictions
+		Matrix3d eigRcw=Converter::toMatrix3d(Tcw.rowRange(0,3).colRange(0,3));
+		cv::Mat Rcw=Converter::toCvMat(encpreint.normalizeRotationM(eigRcw));
+		Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
+		mCurrentFrame.SetPose(Tcw);
 		mCurrentFrame.UpdateNavStatePVRFromTcw();
 		mState=ODOMOK;
-		cout<<"IEODOM KF: "<<mCurrentFrame.mnId<<endl;
+		cout<<greenSTR<<"IEODOM KF: "<<mCurrentFrame.mnId<<whiteSTR<<endl;
 	      }
 	    }else{
 	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
@@ -1069,10 +1079,21 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             If the transition frame's tracking is unstable, we can improve it through our no Hessian matrix strategy~
         }else if (mState==ODOMOK){//if it's lost in Camera mode we use Odom mode
 	    // not necessary to update motion model for mVelocity is already got through odom data
-	    
+	    /*// Clean VO matches, related to Localization mode
+            for(int i=0; i<mCurrentFrame.N; i++)
+            {
+                MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+                if(pMP)//if the mappoint of th i feature is added in to the pMap
+                    if(pMP->Observations()<1)//if now no KF observes it, delete it from the vmap in Frame
+                    {
+                        mCurrentFrame.mvbOutlier[i] = false;//though motion-only BA will initialize this, here is for new MapPoints created by CreateNewKeyFrame(), they must be inliers
+                        mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
+                    }
+            }*/  
+	  
 	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
 	    if(NeedNewKeyFrame()){
-              CreateNewKeyFrame(img,mState);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
+              CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
 	    }
 	    for(int i=0; i<mCurrentFrame.N;i++){//new created MPs' mvbOutlier[j] is default false
               if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])//delete the final still outliers mappoints in Frame
@@ -1101,7 +1122,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
     // Store frame pose information to retrieve the complete camera trajectory afterwards.
     if(!mCurrentFrame.mTcw.empty())
     {
-        cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse();//when it's lost ,these may be useless?
+        cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse();//when it's lost but get an initial pose through motion-only BA , it can still recover one low-quality estimation, used in UpdateLastFrame()
         mlRelativeFramePoses.push_back(Tcr);
         mlpReferences.push_back(mpReferenceKF);
         mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
@@ -1110,7 +1131,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
     else
     {
         // This can happen if tracking is lost
-        mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
+        mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());//I think actually it's unused
         mlpReferences.push_back(mlpReferences.back());
         mlFrameTimes.push_back(mlFrameTimes.back());
         mlbLost.push_back(mState==LOST);//it's key value to judge
@@ -1163,8 +1184,8 @@ void Tracking::StereoInitialization(cv::Mat img[2])
         mnLastKeyFrameId=mCurrentFrame.mnId;
         mpLastKeyFrame = pKFini;
 
-        mvpLocalKeyFrames.push_back(pKFini);
-        mvpLocalMapPoints=mpMap->GetAllMapPoints();
+//         mvpLocalKeyFrames.push_back(pKFini);//unused here
+//         mvpLocalMapPoints=mpMap->GetAllMapPoints();
         mpReferenceKF = pKFini;
 
         mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
@@ -1619,7 +1640,7 @@ bool Tracking::NeedNewKeyFrame()
 
     // Tracked MapPoints in the reference keyframe
     int nMinObs = 3;
-    if(nKFs<=2)//just check for one(with ur>=0) KF demand for RGBD
+    if(nKFs<=2||mState==OK&&mpLastKeyFrame->mnId<mnLastOdomKFId+2)//just check for one(with ur>=0) KF demand for RGBD, if one of former 2 KFs is ODOMOK must also use this like nKFs<=2!!! 
         nMinObs=2;
     int nRefMatches = mpReferenceKF->TrackedMapPoints(nMinObs);//the number of good MinObs(for Monocular) KFs tracked MapPoints in the RefKF
 
@@ -1648,15 +1669,14 @@ bool Tracking::NeedNewKeyFrame()
     double timegap = 0.5;
 //     if (!mpIMUInitiator->GetVINSInited()) timegap=0.1;//JW uses different timegap during IMU Initialization(0.1s)
     bool cTimeGap =false;int minClose=70;
-    if (mpIMUInitiator->GetSensorIMU()) cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
-    if (mpIMUInitiator->GetVINSInited()){//instead of GetSensorIMU() to relieve the following problem in VIE
+    if (mpIMUInitiator->GetSensorIMU()){ cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle && mnMatchesInliers>15;
+//     if (mpIMUInitiator->GetVINSInited()){//also we can use GetSensorIMU()
       bNeedToInsertClose=false;//for VIO+Stereo/RGB-D, we don't open this inerstion strategy for speed and cTimeGap can do similar jobs
-//       if (mState==ODOMOK){//for VIEO+RGB-D, cTimeGap won't affect ODOMOK, so we may need it, but notice in local mapping actually we don't do it...
-// 	cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle;
-//       }
+      if (mState==ODOMOK){//for VIEO+RGB-D, cTimeGap won't affect ODOMOK, so we may need it
+	cTimeGap=((mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=timegap) && bLocalMappingIdle;
+      }
 //       minClose=100;
     }
-//     bNeedToInsertClose=false;//when use this one, problem exists in old ORB_SLAM2(PoseOptimization)+pure encoder edges under difficult dataset
 
     // Thresholds
     float thRefRatio = 0.75f;
@@ -1676,7 +1696,7 @@ bool Tracking::NeedNewKeyFrame()
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);//not too close && not too far
     
     //Condition 3: odom && time conditon && min new close points' demand
-    const bool c3=(mState==ODOMOK)&&(c1a||c1b||c1c)&&nNonTrackedClose>70;//&&mCurrentFrame.N>500;
+    const bool c3=(mState==ODOMOK)&&(c1a||c1b||c1c)&&nNonTrackedClose>70;//may we can also use &&mCurrentFrame.N>500 like StereoInitialization()
 
     if((c1a||c1b||c1c)&&c2||cTimeGap||c3)//cTimeGap added by JingWang
     {
@@ -1704,15 +1724,16 @@ bool Tracking::NeedNewKeyFrame()
         return false;
 }
 
-void Tracking::CreateNewKeyFrame(cv::Mat img[2],eTrackingState state)
+void Tracking::CreateNewKeyFrame(cv::Mat img[2])
 {
     if(!mpLocalMapper->SetNotStop(true))//if localMapper is stopped by loop closing thread/GUI, cannot add KFs; during adding process, it cannot be stopped by others
         return;
 
     //ensure Tcw is always right for mCurrentFrame even there's no odom data, NavState/Tbw can be wrong when there's no odom data
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mpLastKeyFrame,state);//copy initial Tcw&Tbw(even wrong), update bi=bi+dbi
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mpLastKeyFrame,mState);//copy initial Tcw&Tbw(even wrong), update bi=bi+dbi
     //here notice a fact: JingWang haven't considered no imu data's condition when imu is initialized(including reloc.), so his NavState after imu intialized is always right, but before is also wrong, but he should set the right NavState for the first initialized KeyFrame
     //so I need to UpdateNavStatePVRFromTcw for the Frame when imu data is empty after imu is initialized
+    if (mState==ODOMOK) mnLastOdomKFId=pKF->mnId;
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
@@ -1724,7 +1745,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2],eTrackingState state)
 	if (img){ pKF->Img[0]=img[0];pKF->Img[1]=img[1];}//zzh for PCL map creation
 	
 	
-        mCurrentFrame.UpdatePoseMatrices();//UnprojectStereo() use mRwc,mOw
+        mCurrentFrame.UpdatePoseMatrices();//UnprojectStereo() use mRwc,mOw, maybe useless
 
         // We sort points by the measured depth by the stereo/RGBD sensor.
         // We create all those MapPoints whose depth < mThDepth.
@@ -1763,7 +1784,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2],eTrackingState state)
                 if(bCreateNew)
                 {
                     cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
-                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap,state);
+                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap,mState);
                     pNewMP->AddObservation(pKF,i);
                     pKF->AddMapPoint(pNewMP,i);
                     pNewMP->ComputeDistinctiveDescriptors();
@@ -1778,7 +1799,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2],eTrackingState state)
                     nPoints++;
                 }
 
-                if(vDepthIdx[j].first>mThDepth && nPoints>100)
+                if(vDepthIdx[j].first>mThDepth && nPoints>100)//&&mState==OK)//maybe we can also use this for ODOMOK like StereoInitialization()
                     break;
             }
         }
@@ -2184,7 +2205,7 @@ void Tracking::Reset()
     
     //zzh: Reset IMU Initialization, must after mpLocalMapper&mpLoopClosing->RequestReset()! for no updation of mpCurrentKeyFrame& no use of mbVINSInited in IMUInitialization thread
     cout<<"Resetting IMU Initiator...";mpIMUInitiator->RequestReset();cout<<" done"<<endl;
-    mtimestampOdom=-1,mbRelocBiasPrepare=false;
+    mbRelocBiasPrepare=false;
     mnLastRelocFrameId=0;
 
     // Clear BoW Database

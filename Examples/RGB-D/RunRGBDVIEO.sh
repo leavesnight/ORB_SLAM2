@@ -1,8 +1,9 @@
 #!/bin/bash
 #OURFILE=~/dataset/Lab001easy
-#OURFILE=~/dataset/Lab002medium
+OURFILE=~/dataset/Lab002medium
 #OURFILE=~/dataset/Lab003difficult
-OURFILE=~/dataset/Corridor001easy
+#OURFILE=~/dataset/Lab004difficult
+#OURFILE=~/dataset/Corridor001easy
 #OURFILE=~/dataset/Corridor002medium
 #OURFILE=~/dataset/Corridor003difficult
 #OURFILE=~/dataset/Corridor004difficult

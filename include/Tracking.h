@@ -104,14 +104,7 @@ class Tracking
   listeig(EncData)::const_iterator miterLastEnc;//Last EncData pointer in LastFrame, need to check its tm and some data latter to find the min|mtmSyncOdom-tm| s.t. tm<=mtmSyncOdom
   listeig(IMUData)::const_iterator miterLastIMU;//Last IMUData pointer in LastFrame, we don't change the OdomData's content
   
-  //the odom data's timestamp (now only for Encoder)
-  double mtimestampOdom;
-  cv::Mat mTwcOdom,mTcwOdom;//record the 3d pose by Odom data
-  //last pose by Odom data
-  cv::Mat mLastTwcOdom;
-  double mLastTimestamp,mVtmspan;
-  //Rwwi
-  cv::Mat mRwbwi;//Rotation Matrix from  the 0th keyframe/frame's IMU frame(wb/b0) to IMU internal Inertial frame(wi/I)
+  unsigned long mnLastOdomKFId;
 
 public:
   //Add Odom(Enc/IMU) data to cache queue
@@ -214,7 +207,7 @@ protected:
     call mCurrentFrame.isInFrustum(pMP,0.5), then try to match mvpLocalMapPoints to mCurrentFrame by SBP()(add some mvpMapPoints)
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame(cv::Mat img[2]=NULL,eTrackingState state=OK);
+    void CreateNewKeyFrame(cv::Mat img[2]=NULL);
 
     // In case of performing only localization, this flag is true when there are no matches to
     // points in the map. Still tracking will continue if there are enough matches with temporal points.
