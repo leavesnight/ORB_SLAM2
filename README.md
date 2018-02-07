@@ -1,5 +1,5 @@
-# VIORB-SLAM2
-Now this project is revised by zzh
+# VIEORB-SLAM2
+Now this project is improved by zzh
 
 1.Some annotations and elimination are done
 
@@ -7,9 +7,9 @@ Now this project is revised by zzh
 
 3.It's a real-time code with full ba at last, PoseOptimization uses PVR vertex while localBA/GlobalBA use PR-V, No inverse depth parameterization, Loading uses .bin vocabulary, Some other related changes
 
-4.Stereo+IMU version is completed, thought it's slow, it doesn't have unstable initialization problem on V103 & may succeed totally on V203 if PC is nice & it usually has better non-GT scaled accuracy
+4.Stereo/RGBD+IMU version is completed, thought it's slow, it doesn't have unstable initialization problem on V103 & may succeed totally on V203 if PC is nice & it usually has better non-GT scaled accuracy. We call it VIORBSLAM2 for it supports three kinds of cameras.
 
-5.An RGBD version with Encoder+IMU will soon come
+5.An RGBD/Stereo version with Encoder+IMU,Encoder has already come, we call it VIEORBSLAM2,VEORBSLAM2 respectively for it's based on ORBSLAM2 & VIORBSLAM. Though the code now cannot be applied for Monocular+Encoder due to the lack of pure encoder edges insertion strategy and scale initialization, it's not too difficult to implement and we have considered that the Initialization of Monocular SLAM is not suitable for a Differential Wheeled Robot based on our experience.
 
 
 Dec. 26
@@ -42,6 +42,12 @@ Normally use it like:
   
     ./mono_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml ~/dataset/EuRoC/V202medium/mav0/cam0/data ./EuRoC_TimeStamps/V202.txt 
     ./stereo_euroc ../../Vocabulary/ORBvoc.bin ./EuRoC_VIO.yaml  ~/dataset/EuRoC/V203difficult/mav0/cam0/data ~/dataset/EuRoC/V203difficult/mav0/cam1/data ./EuRoC_TimeStamps/V203.txt
+
+  VEORBSLAM2 or VIEORBSLAM2: (you may refer to the kinect2_qhd.yaml, later we may publish our dataset containing encoders & IMU data)
+  
+    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/EncSensor.txt
+    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/IMUSensor.txt(path to IMU data file) 9(number of IMU data: (Accelerator,Magnetic,Gyroscope) for our dataset) 0(RGBD SLAM) $OURFILE/EncSensor.txt(path to encoder data file)
+
 
 Please contact zhuzhanghao9331@yahoo.co.jp for more details.
 
