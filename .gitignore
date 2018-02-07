@@ -29,5 +29,5 @@ CameraTrajectory*.txt
 debug.txt
 *.pcd
 *.kdev4
-kinect*.yaml
+kinect2_s*.yaml
 *.save*
