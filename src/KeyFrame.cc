@@ -91,6 +91,118 @@ std::set<KeyFrame *> KeyFrame::GetConnectedKeyFramesByWeight(int w){
     s.insert(*vit);
   return s;
 }
+
+//for LoadMap()
+KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevKF,istream &is):
+  mnFrameId(F.mnId), mTimeStamp(F.mTimeStamp), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
+  mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
+  mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
+  mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
+  fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy),
+  mbf(F.mbf), mb(F.mb), mThDepth(F.mThDepth), N(F.N), mvKeys(F.mvKeys), mvKeysUn(F.mvKeysUn),
+  mvuRight(F.mvuRight), mvDepth(F.mvDepth), mDescriptors(F.mDescriptors.clone()),
+  mBowVec(F.mBowVec), mFeatVec(F.mFeatVec), mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
+  mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvScaleFactors), mvLevelSigma2(F.mvLevelSigma2),
+  mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
+  mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),//for mK won't be changed, it cannot be used as clone()
+  mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(false), mpParent(NULL), mbNotErase(false),//important false when LoadMap()!
+  mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap),
+  mbPrior(false)//,mbPNChanging(false)//zzh
+{
+  if(pPrevKF)
+    pPrevKF->SetNextKeyFrame(this);
+  mpPrevKeyFrame=pPrevKF;mpNextKeyFrame=NULL;//zzh, constructor doesn't need to lock mutex
+  mNavState=F.mNavState;//we don't update bias for convenience in LoadMap(), though we can do it as mOdomPreIntOdom is updated in read()
+  
+  mnId=nNextId++;
+  mGrid.resize(mnGridCols);
+  for(int i=0; i<mnGridCols;i++){
+    mGrid[i].resize(mnGridRows);
+    for(int j=0; j<mnGridRows; j++)
+      mGrid[i][j] = F.mGrid[i][j];
+  }
+  SetPose(F.mTcw);//we have already used UpdatePoseFromNS() in Frame
+  
+  read(is);//set odom list 
+}
+bool KeyFrame::read(istream &is){
+  //we've done ComputeBoW() in Frame!
+  {//load odom lists
+    EncData::readParam(is);
+    IMUData::readParam(is);
+    listeig(EncData) lenc;
+    size_t NOdom;
+    is.read((char*)&NOdom,sizeof(NOdom));
+    lenc.resize(NOdom);
+    readListOdom<EncData>(is,lenc);
+    SetPreIntegrationList<EncData>(lenc.begin(),--lenc.end());
+    listeig(IMUData) limu;
+    is.read((char*)&NOdom,sizeof(NOdom));
+    limu.resize(NOdom);
+    readListOdom<IMUData>(is,limu);
+    SetPreIntegrationList<IMUData>(limu.begin(),--limu.end());
+  }
+  if (mpPrevKeyFrame!=NULL){//Compute/Recover mOdomPreIntOdom, mpPrevKeyFrame already exists for KFs of mpMap is sorted through mnId
+    PreIntegration<EncData>(mpPrevKeyFrame);
+    PreIntegration<IMUData>(mpPrevKeyFrame);
+  }
+  is.read(&mState,sizeof(mState));
+  mHalfBaseline=mb/2;
+  //we've loaded mNavState in Frame
+  //we have calculated mGrid in Frame and load it in constructor
+  return is.good();
+}
+bool KeyFrame::write(ostream &os){
+//   os.write((char*)&mnFrameId,sizeof(mnFrameId));//we don't save Frame ID for it's useless in LoadMap(), we save old KF ID/mnId in SaveMap()
+  os.write((char*)&mTimeStamp,sizeof(mTimeStamp));
+//   os.write((char*)&mfGridElementWidthInv,sizeof(mfGridElementWidthInv));os.write((char*)&mfGridElementHeightInv,sizeof(mfGridElementHeightInv));//we can get these from mnMaxX...
+  os.write((char*)&fx,sizeof(fx));os.write((char*)&fy,sizeof(fy));os.write((char*)&cx,sizeof(cx));os.write((char*)&cy,sizeof(cy));
+//   os.write((char*)&invfx,sizeof(invfx));os.write((char*)&invfy,sizeof(invfy));//also from the former ones
+  os.write((char*)&mbf,sizeof(mbf));os.write((char*)&mThDepth,sizeof(mThDepth));
+//   os.write((char*)&mb,sizeof(mb));//=mbf/fx
+  os.write((char*)&N,sizeof(N));
+  writeVec(os,mvKeys);writeVec(os,mvKeysUn);writeVec(os,mvuRight);writeVec(os,mvDepth);
+  writeMat(os,mDescriptors);
+//   mBowVec.write(os);mFeatVec.write(os);//we can directly ComputeBoW() from mDescriptors
+  os.write((char*)&mnScaleLevels,sizeof(mnScaleLevels));os.write((char*)&mfScaleFactor,sizeof(mfScaleFactor));
+//   os.write((char*)&mfLogScaleFactor,sizeof(mfLogScaleFactor));os.write((char*)&mvScaleFactors,sizeof(mvScaleFactors));//we can get these from former 2 parameters
+//   writeVec(os,mvLevelSigma2);writeVec(os,mvInvLevelSigma2);
+  float fTmp[4]={mnMinX,mnMinY,mnMaxX,mnMaxY};//compatible with Frame
+  os.write((char*)fTmp,sizeof(fTmp));
+//   writeMat(os,mK);from fx~cy
+  //save mvpMapPoints,mpParent,mbNotErase(mspLoopEdges) in LoadMap for convenience
+//   os.write((char*)&mHalfBaseline,sizeof(mHalfBaseline));//=mb/2;
+  {//save mNavState
+    const double* pdData;
+    unique_lock<mutex> lock(mMutexNavState);
+    Eigen::Quaterniond q=mNavState.mRwb.unit_quaternion();//qwb from Rwb
+    pdData=mNavState.mpwb.data();os.write((const char*)pdData,sizeof(*pdData)*3);//txyz
+    pdData=q.coeffs().data();os.write((const char*)pdData,sizeof(*pdData)*4);//qxyzw
+    pdData=mNavState.mvwb.data();os.write((const char*)pdData,sizeof(*pdData)*3);//vxyz
+    pdData=mNavState.mbg.data();os.write((const char*)pdData,sizeof(*pdData)*3);//bgxyz_bar
+    pdData=mNavState.mba.data();os.write((const char*)pdData,sizeof(*pdData)*3);//baxyz_bar
+    pdData=mNavState.mdbg.data();os.write((const char*)pdData,sizeof(*pdData)*3);//dbgxyz
+    pdData=mNavState.mdba.data();os.write((const char*)pdData,sizeof(*pdData)*3);//dbaxyz
+  }
+//   for(unsigned int i=0; i<FRAME_GRID_COLS;i++) for (unsigned int j=0; j<FRAME_GRID_ROWS;j++){ size_t nSize;os.write((char*)&nSize,sizeof(nSize));writeVec(os,mGrid[i][j]);}//we can still get it from mvKeysUn
+  //we add extra info for KF at the end for KeyFrame::write & Frame::read+KeyFrame::read
+  {//save odom lists
+    EncData::writeParam(os);
+    IMUData::writeParam(os);
+    unique_lock<mutex> lock(mMutexOdomData);
+    const listeig(EncData) &lenc=mOdomPreIntEnc.getlOdom();
+    size_t NOdom=lenc.size();
+    os.write((char*)&NOdom,sizeof(NOdom));
+    writeListOdom<EncData>(os,lenc);
+    const listeig(IMUData) &limu=mOdomPreIntIMU.getlOdom();
+    NOdom=limu.size();
+    os.write((char*)&NOdom,sizeof(NOdom));
+    writeListOdom<IMUData>(os,limu);
+    //we don't save mOdomPreIntOdom for it can be computed from the former odom list
+  }
+  os.write(&mState,sizeof(mState));
+  return os.good();
+}
   
 //created by zzh over.
 
@@ -107,7 +219,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
     mBowVec(F.mBowVec), mFeatVec(F.mFeatVec), mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
     mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvScaleFactors), mvLevelSigma2(F.mvLevelSigma2),
     mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
-    mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
+    mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),//for mK won't be changed, it cannot be used as clone()
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap),
     mState(state),mbPrior(false)//,mbPNChanging(false)//zzh
@@ -408,7 +520,7 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 	}else{
 // 	  pLastKF->AddConnection(this,0);//add the link from pLastKF to this
 	  //add the link from this to pLastKF
-	  KFcounter[pLastKF]=0;
+// 	  KFcounter[pLastKF]=0;
 	  unique_lock<mutex> lockCon(mMutexConnections);
 // 	  mConnectedKeyFrameWeights=KFcounter;//?
 // 	  mvpOrderedConnectedKeyFrames.clear();
@@ -553,23 +665,10 @@ void KeyFrame::SetErase()
     }
 }
 
-void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in Tracking, no memory leak(not be deleted) for bad KFs may be used by some Frames' trajectory retrieve
+void KeyFrame::SetBadFlag(bool bKeepTree)//this will be released in UpdateLocalKeyFrames() in Tracking, no memory leak(not be deleted) for bad KFs may be used by some Frames' trajectory retrieve
 {   
     // Test log
-    if(mbBad)
-    {
-        vector<KeyFrame*> vKFinMap =mpMap->GetAllKeyFrames();
-        std::set<KeyFrame*> KFinMap(vKFinMap.begin(),vKFinMap.end());
-        if(KFinMap.count(this))
-        {
-            cerr<<"this bad KF is still in map?"<<endl;
-            mpMap->EraseKeyFrame(this);
-        }
-        mpKeyFrameDB->erase(this);
-        cerr<<"KeyFrame "<<mnId<<" is already bad. Set bad return"<<endl;
-	assert(!mbBad);
-        return;
-    }//please delete it when checked!!!
+    assert(!mbBad);//check
     
     {
         unique_lock<mutex> lock(mMutexConnections);
@@ -596,6 +695,7 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
         mConnectedKeyFrameWeights.clear();//erase the directed edge from this to others in covisibility graph, this is also used as the interface
         mvpOrderedConnectedKeyFrames.clear();//erase the directed edge for the interface GetVectorCovisibleKeyFrames() will use mvpOrderedConnectedKeyFrames, but no mvOrderedWeights will be used as public functions
 
+	if (!bKeepTree){//for LoadMap(), we don't change bad KFs' parent or Tcp for recovering in SaveTrajectoryTUM()
         // Update Spanning Tree
         set<KeyFrame*> sParentCandidates;
 	assert(mpParent!=NULL);
@@ -649,16 +749,16 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
                 break;
         }
 
-        // If a children has no covisibility links/edges with any parent candidate, assign to the original parent of this KF
+        // If a child has no covisibility links/edges with any parent candidate, assign it to the original parent of this KF
         if(!mspChildrens.empty())
             for(set<KeyFrame*>::iterator sit=mspChildrens.begin(); sit!=mspChildrens.end(); sit++)
             {
                 (*sit)->ChangeParent(mpParent);
             }
-	
+	}
 // 	if (mpParent!=NULL){
-        mpParent->EraseChild(this);//notice here mspChildrens may not be empty, but it's ok for it isn't the interface
-        mTcp = Tcw*mpParent->GetPoseInverse();//the inter spot/link of Frames with its refKF in spanning tree
+        mpParent->EraseChild(this);//notice here mspChildrens may not be empty, and it doesn't take part in the propagation in LoopClosing thread
+        if (!bKeepTree) mTcp = Tcw*mpParent->GetPoseInverse();//the inter spot/link of Frames with its refKF in spanning tree
 // 	}
         mbBad = true;
     }
@@ -667,7 +767,7 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
     {
 //       while (!mbPNChanging){//no need to use GetPNChanging() for it won't come here twice
 // 	{
-      cout<<"LockST..";
+	  cout<<"LockST..";
 	  unique_lock<mutex> lock(mstMutexPNChanging);
 	  cout<<"LockPN..";
 	  unique_lock<mutex> lock2(mMutexPNConnections);
@@ -678,8 +778,10 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
 // 	}
 // 	if (mbPNChanging){
 // 	  unique_lock<mutex> lock(mMutexPNConnections);
-	  assert(mpPrevKeyFrame);
-	  assert(mpNextKeyFrame);//check!!!
+	  if (!mpPrevKeyFrame||!mpNextKeyFrame){
+	    cerr<<"Prev/Next KF is NULL!!!Please be aware of the reason!!!"<<endl;
+	    mpMap->EraseKeyFrame(this);mpKeyFrameDB->erase(this);return;
+	  }
 	  assert(mpPrevKeyFrame->GetNextKeyFrame()==this&&mpNextKeyFrame->GetPrevKeyFrame()==this);//check 2!!!
 	  mpPrevKeyFrame->SetNextKeyFrame(mpNextKeyFrame);//mpNextKeyFrame here cannot be NULL for mpCurrentKF cannot be erased in KFCulling()
 	  mpNextKeyFrame->SetPrevKeyFrame(mpPrevKeyFrame);//0th KF cannot be erased so mpPrevKeyFrame cannot be NULL
@@ -705,7 +807,7 @@ void KeyFrame::SetBadFlag()//this will be released in UpdateLocalKeyFrames() in 
 //       }
 //       unique_lock<mutex> lock(mMutexPNChanging);
 //       mbPNChanging=false;
-cout<<"End "<<mnId<<" "<<mTimeStamp<<endl;
+	 cout<<"End "<<mnId<<" "<<mTimeStamp<<endl;
     }
 
     //erase this(&KF) in mpMap && mpKeyFrameDB

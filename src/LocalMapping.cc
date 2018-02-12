@@ -234,17 +234,6 @@ void LocalMapping::ProcessNewKeyFrame()
         }
     }
     // Update links in the Covisibility Graph
-//     if(!mpIMUInitiator->GetCopyInitKFs()){//during the copying KFs' stage in IMU Initialization, don't cull any KF!
-//       mpIMUInitiator->SetCopyInitKFs(true);
-//       KeyFrame* pLastKF=mpCurrentKeyFrame->GetPrevKeyFrame();//delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect
-//       if (mpCurrentKeyFrame->getState()==Tracking::ODOMOK
-// 	&&pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
-// 	  pLastKF->SetBadFlag();
-// 	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
-//       }
-//       mpIMUInitiator->SetCopyInitKFs(false);
-//     }
-//     mpCurrentKeyFrame->UpdateConnections(mpCurrentKeyFrame->GetPrevKeyFrame());
     mpCurrentKeyFrame->UpdateConnections(mpLastCamKF);
 //     mpCurrentKeyFrame->UpdateConnections();
 

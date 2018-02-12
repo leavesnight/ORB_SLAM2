@@ -58,7 +58,6 @@ typedef Eigen::Matrix<double, 6, 1> Vector6d;
 class EncPreIntegrator:public OdomPreIntegratorBase<EncData>{
   //mlOdom: mlOdomEnc list for vl,vr& its own timestamp
 public:
-  static double msigma2Model;
   Vector6d mdelxEij;// delta~Phiij(3*1),delta~pij(3*1) from Encoder PreIntegration, 6*1*float
   Matrix6d mSigmaEij;// by Enc, 6*6*float
   
@@ -79,18 +78,18 @@ public:
 typedef Eigen::Matrix<double, 9, 9> Matrix9d;
 
 template<class IMUDataBase>
-class IMUPreIntegratorBase:public OdomPreIntegratorBase<IMUDataBase>{//refer the IMUPreintergrator.cpp by JingWang, so use PVR Cov.
+class IMUPreIntegratorBase:public OdomPreIntegratorBase<IMUDataBase>{//refer the IMUPreintergrator.cpp by JingWang, so use PVR/PRV Cov.
 public:
   Matrix3d mRij;//deltaR~ij(bgi_bar) by awIMU, 3*3*float/delta~Rbibj
   Vector3d mvij,mpij;//deltav~ij,deltap~ij(bi_bar)
   Matrix9d mSigmaijPRV;//Cov_p_Phi_v_ij, a bit different with paper for convenience
   Matrix9d mSigmaij;//Cov_p_v_Phi_ij, opposite order with the paper
   // jacobian of delta measurements w.r.t bias of gyro/acc
-  Eigen::Matrix3d mJgpij;	// position / gyro, Jgdeltapij(bi_bar) in VIORBSLAM paper, par(deltapij)/par(bgi).t()(bi_bar) in Preintegration Paper, we may drop .t() later
-  Eigen::Matrix3d mJapij;	// position / acc
-  Eigen::Matrix3d mJgvij;	// velocity / gyro
-  Eigen::Matrix3d mJavij;	// velocity / acc
-  Eigen::Matrix3d mJgRij;	// rotation / gyro
+  Matrix3d mJgpij;	// position / gyro, Jgdeltapij(bi_bar) in VIORBSLAM paper, par(deltapij)/par(bgi).t()(bi_bar) in Preintegration Paper, we may drop .t() later
+  Matrix3d mJapij;	// position / acc
+  Matrix3d mJgvij;	// velocity / gyro
+  Matrix3d mJavij;	// velocity / acc
+  Matrix3d mJgRij;	// rotation / gyro
   //Vector3d mbgij,mbaij;//bg(ti)=b_bar_gi+db_gi, bg~ij not exists, neither do ba~ij
   //Matrix3d mSigmabgd,mSigmabad;//should be deltatij*Cov(eta_bg),deltatij*Cov(eta_ba)
   

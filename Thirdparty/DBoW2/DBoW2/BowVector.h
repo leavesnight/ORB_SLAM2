@@ -102,6 +102,26 @@ public:
 	 * @param W number of words in the vocabulary
 	 */
 	void saveM(const std::string &filename, size_t W) const;
+	
+//added by zzh:
+	inline void read(std::istream &is){
+	  WordId wId;WordValue wVal;
+	  size_type nsize;
+	  is.read((char*)&nsize,sizeof(nsize));
+	  for (int i=0;i<nsize;++i){
+	    is.read((char*)&(wId),sizeof(wId));
+	    is.read((char*)&(wVal),sizeof(wVal));
+	    addWeight(wId,wVal);
+	  }
+	}
+	inline void write(std::ostream &os) const{
+	  size_type nsize=size();
+	  os.write((char*)&nsize,sizeof(nsize));
+	  for (const_iterator iter=begin();iter!=end();++iter){
+	    os.write((char*)&(iter->first),sizeof(iter->first));
+	    os.write((char*)&(iter->second),sizeof(iter->second));
+	  }
+	}
 };
 
 } // namespace DBoW2

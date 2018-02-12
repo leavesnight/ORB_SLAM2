@@ -41,10 +41,15 @@ class MapPoint
 public:
   void UpdateScale(const float &scale);
   
+  //for Load/SaveMap()
+  MapPoint(KeyFrame *pRefKF,Map *pMap,istream &is);
+  bool read(istream &is);
+  bool write(ostream &os);
+  
 //added by zzh
   
 public:
-    MapPoint(const cv::Mat &Pos, KeyFrame* pRefKF, Map* pMap,const char state=2);
+    MapPoint(const cv::Mat &Pos, KeyFrame* pRefKF, Map* pMap);
     MapPoint(const cv::Mat &Pos,  Map* pMap, Frame* pFrame, const int &idxF);//used in localization mode tracking
 
     void SetWorldPos(const cv::Mat &Pos);//Pos.copyTo(mWorldPos)
@@ -85,15 +90,6 @@ public:
     float GetMaxDistanceInvariance();//1.2*mfMaxDistance
     int PredictScale(const float &currentDist, KeyFrame*pKF);
     int PredictScale(const float &currentDist, Frame* pF);
-    
-    inline char getState(){
-      unique_lock<mutex> lock(mMutexState);
-      return mState;
-    }
-    inline void changeState(){
-      unique_lock<mutex> lock(mMutexState);
-      mState=2;
-    }
 
 public:
     long unsigned int mnId;
@@ -159,9 +155,6 @@ protected:
 
      std::mutex mMutexPos;
      std::mutex mMutexFeatures;
-     
-     char mState;
-     std::mutex mMutexState;
 };
 
 } //namespace ORB_SLAM

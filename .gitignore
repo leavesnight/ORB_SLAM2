@@ -24,7 +24,8 @@ lib/
 
 #added by zzh
 build2/
-Vocabulary/ORBvoc.bin
+#Vocabulary/ORBvoc.bin
+*.bin
 CameraTrajectory*.txt
 debug.txt
 *.pcd

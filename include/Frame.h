@@ -80,6 +80,11 @@ public:
   void PreIntegration(KeyFrame* pLastKF,const typename listeig(_OdomData)::const_iterator &iteri,
 		      const typename listeig(_OdomData)::const_iterator &iterj);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
   
+  //for LoadMap() in System.cc
+  Frame(istream &is,ORBVocabulary* voc);
+  bool read(istream &is,bool bOdomList=false);//we use Frame::read(is,false) before KeyFrame's constructor
+  bool write(ostream &os) const;//though we don't save Frame
+  
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW//for quaterniond in NavState && Matrix4d
 //created by zzh over.
   

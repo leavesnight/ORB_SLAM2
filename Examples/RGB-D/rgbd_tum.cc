@@ -128,20 +128,24 @@ void odomEncRun(ifstream &finOdomdata){//must use &
 
 int main(int argc, char **argv)
 {
-    char bMode=0;//0 for RGBD, 1 for MonocularVIO, 2 for Monocular
+    char bMode=0;//0 for RGBD(pure/VIO/VEO/VIEO), 1 for MonocularVIO, 2 for Monocular, 3 for Map Reuse RGBD
     thread* pOdomThread=NULL,*pEncThread=NULL;
     ifstream finOdomdata,finEncdata;
     int totalNum=2;
     cout<<fixed<<setprecision(6)<<endl;
+    string strMapname="";
   
     switch (argc){
       case 5:
 	break;
+      case 10:
+	//Map Reuse RGBD
+	strMapname=argv[9];
       case 9:
 	{
-	finEncdata.open(argv[8]);
-	string strTmp;
-	getline(finEncdata,strTmp);getline(finEncdata,strTmp);getline(finEncdata,strTmp);
+	  finEncdata.open(argv[8]);
+	  string strTmp;
+	  getline(finEncdata,strTmp);getline(finEncdata,strTmp);getline(finEncdata,strTmp);
 	}
       case 8:
 	bMode=atoi(argv[7]);if (bMode==2) break;
@@ -166,7 +170,8 @@ int main(int argc, char **argv)
 	break;
       default:
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
-	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData (number of odometryData) (Mode) (path_to_EncData)"<<endl;
+	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData"
+	" (number of odometryData) (Mode) (path_to_EncData)"" (path_to_Map)"<<endl;
         return 1;
     }
     
@@ -202,7 +207,9 @@ int main(int argc, char **argv)
     ORB_SLAM2::System::eSensor sensor=ORB_SLAM2::System::RGBD;
     if (bMode!=0) sensor=ORB_SLAM2::System::MONOCULAR;
     ORB_SLAM2::System SLAM(argv[1],argv[2],sensor,true);
+    if (strMapname!="") SLAM.LoadMap(strMapname,false);//for Map Reuse
     g_pSLAM=&SLAM;
+    cin.get();
 
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
@@ -286,8 +293,9 @@ int main(int argc, char **argv)
     //load if Full BA just after IMU Initialize
     cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
 //     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
-    SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");
-//     SLAM.SaveMap("KeyFrameTrajectoryMap.bin",false);
+    SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");/*
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory2.txt"); 
+    SLAM.SaveMap("MapTmp.bin",false,true,true);
     if (!fnFBA.empty()){
       if((int)fnFBA){
 	SLAM.FinalGBA(fnFBA);
@@ -296,6 +304,17 @@ int main(int argc, char **argv)
     }else{
       cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
     }
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory1.txt"); 
+    SLAM.SaveTrajectoryTUM("CameraTrajectory1.txt");
+    SLAM.LoadMap("MapTmp.bin",false,true);
+    if (!fnFBA.empty()){
+      if((int)fnFBA){
+	SLAM.FinalGBA(fnFBA);
+	cout<<azureSTR"Execute FullBA2 at the end!"<<whiteSTR<<endl;
+      }
+    }else{
+      cout<<redSTR"No FullBA2 at the end!"<<whiteSTR<<endl;
+    }*/
 
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());
@@ -312,7 +331,10 @@ int main(int argc, char **argv)
     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU.txt");
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt"); 
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
-    SLAM.SaveMap("Map.pcd");
+    if (strMapname=="")
+      SLAM.SaveMap("Map.pcd");//for PCL Map
+    else
+      SLAM.SaveMap(strMapname,false);//for Reused Sparse Map
     
     //wait for pOdomThread finished
     if (pOdomThread!=NULL)

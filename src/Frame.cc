@@ -90,6 +90,125 @@ void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const listeig(IMUData)::co
 #endif
 }
 
+Frame::Frame(istream &is,ORBVocabulary* voc):mpORBvocabulary(voc){//please don't forget voc!! Or ComputeBoW() will have a segement fault problem
+  mnId=nNextId++;//new Frame ID
+  read(is);
+  mvpMapPoints.resize(N,static_cast<MapPoint*>(NULL));//N is got in read(), very important allocation! for LoadMap()
+}
+bool Frame::read(istream &is,bool bOdomList){
+  //we don't save old ID for it's useless in LoadMap()
+  is.read((char*)&this->mTimeStamp,sizeof(this->mTimeStamp));
+  is.read((char*)&fx,sizeof(fx));is.read((char*)&fy,sizeof(fy));is.read((char*)&cx,sizeof(cx));is.read((char*)&cy,sizeof(cy));
+  invfx=1.0f/fx;invfy=1.0f/fy;
+  is.read((char*)&mbf,sizeof(mbf));is.read((char*)&mThDepth,sizeof(mThDepth));
+  mb=mbf/fx;
+  is.read((char*)&N,sizeof(N));
+  mvKeys.resize(N);mvKeysUn.resize(N);mvuRight.resize(N);mvDepth.resize(N);
+  KeyFrame::readVec(is,mvKeys);KeyFrame::readVec(is,mvKeysUn);KeyFrame::readVec(is,mvuRight);KeyFrame::readVec(is,mvDepth);
+  mDescriptors=cv::Mat::zeros(N,32,CV_8UC1);//256bit binary descriptors
+  KeyFrame::readMat(is,mDescriptors);
+  ComputeBoW();//calculate mBowVec & mFeatVec, or we can do it by pKF
+  is.read((char*)&mnScaleLevels,sizeof(mnScaleLevels));is.read((char*)&mfScaleFactor,sizeof(mfScaleFactor));
+  mfLogScaleFactor=log(mfScaleFactor);
+  mvScaleFactors.resize(mnScaleLevels);mvLevelSigma2.resize(mnScaleLevels);mvInvLevelSigma2.resize(mnScaleLevels);
+  mvScaleFactors[0]=mvLevelSigma2[0]=1.0f;
+  for(int i=1; i<mnScaleLevels; i++){
+    mvScaleFactors[i]=mvScaleFactors[i-1]*mfScaleFactor;
+    mvLevelSigma2[i]=mvScaleFactors[i]*mvScaleFactors[i];//at 0 level sigma=1 pixel
+  }
+  for(int i=0; i<mnScaleLevels; i++) mvInvLevelSigma2[i]=1.0f/mvLevelSigma2[i];
+  is.read((char*)&mnMinX,sizeof(mnMinX));is.read((char*)&mnMinY,sizeof(mnMinY));is.read((char*)&mnMaxX,sizeof(mnMaxX));is.read((char*)&mnMaxY,sizeof(mnMaxY));
+  mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/(mnMaxX-mnMinX);
+  mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/(mnMaxY-mnMinY);
+  cv::Mat K=cv::Mat::eye(3,3,CV_32F);
+  K.at<float>(0,0)=fx;
+  K.at<float>(1,1)=fy;
+  K.at<float>(0,2)=cx;
+  K.at<float>(1,2)=cy;
+  K.copyTo(mK);//here mK will be allocated for it does not have a proper size or type before the operation
+  //load mNavState
+  //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
+  double pdData[3];
+  double pdData4[4];
+  NavState ns;
+  is.read((char*)pdData,sizeof(pdData));ns.mpwb<<pdData[0],pdData[1],pdData[2];//txyz
+  is.read((char*)pdData4,sizeof(pdData4));ns.mRwb.setQuaternion(Eigen::Quaterniond(pdData4));//qxyzw
+  is.read((char*)pdData,sizeof(pdData));ns.mvwb<<pdData[0],pdData[1],pdData[2];//vxyz
+  is.read((char*)pdData,sizeof(pdData));ns.mbg<<pdData[0],pdData[1],pdData[2];//bgxyz
+  is.read((char*)pdData,sizeof(pdData));ns.mba<<pdData[0],pdData[1],pdData[2];//baxyz
+  is.read((char*)pdData,sizeof(pdData));ns.mdbg<<pdData[0],pdData[1],pdData[2];//dbgxyz
+  is.read((char*)pdData,sizeof(pdData));ns.mdba<<pdData[0],pdData[1],pdData[2];//dbaxyz
+  mNavState=ns;UpdatePoseFromNS();
+  //load mGrid[i][j]
+  AssignFeaturesToGrid();
+  if (bOdomList){
+    double &tmEnc=mOdomPreIntEnc.mdeltatij;
+    is.read((char*)&tmEnc,sizeof(tmEnc));
+    if (tmEnc>0){
+      KeyFrame::readEigMat(is,mOdomPreIntEnc.mdelxEij);
+      KeyFrame::readEigMat(is,mOdomPreIntEnc.mSigmaEij);
+    }
+    double &tmIMU=mOdomPreIntIMU.mdeltatij;
+    is.read((char*)&tmIMU,sizeof(tmIMU));
+    if (tmIMU>0){//for IMUPreIntegratorBase<IMUDataBase>
+      KeyFrame::readEigMat(is,mOdomPreIntIMU.mpij);KeyFrame::readEigMat(is,mOdomPreIntIMU.mRij);KeyFrame::readEigMat(is,mOdomPreIntIMU.mvij);//PRV
+      KeyFrame::readEigMat(is,mOdomPreIntIMU.mSigmaijPRV);KeyFrame::readEigMat(is,mOdomPreIntIMU.mSigmaij);
+      KeyFrame::readEigMat(is,mOdomPreIntIMU.mJgpij);KeyFrame::readEigMat(is,mOdomPreIntIMU.mJapij);
+      KeyFrame::readEigMat(is,mOdomPreIntIMU.mJgvij);KeyFrame::readEigMat(is,mOdomPreIntIMU.mJavij);
+      KeyFrame::readEigMat(is,mOdomPreIntIMU.mJgRij);
+    }
+  }
+  return is.good();
+}
+bool Frame::write(ostream &os) const{
+  //we don't save old ID for it's useless in LoadMap()
+  os.write((char*)&mTimeStamp,sizeof(mTimeStamp));
+//   os.write((char*)&mfGridElementWidthInv,sizeof(mfGridElementWidthInv));os.write((char*)&mfGridElementHeightInv,sizeof(mfGridElementHeightInv));//we can get these from mnMaxX...
+  os.write((char*)&fx,sizeof(fx));os.write((char*)&fy,sizeof(fy));os.write((char*)&cx,sizeof(cx));os.write((char*)&cy,sizeof(cy));
+//   os.write((char*)&invfx,sizeof(invfx));os.write((char*)&invfy,sizeof(invfy));//also from the former ones
+  os.write((char*)&mbf,sizeof(mbf));os.write((char*)&mThDepth,sizeof(mThDepth));
+//   os.write((char*)&mb,sizeof(mb));//=mbf/fx
+  os.write((char*)&N,sizeof(N));
+  KeyFrame::writeVec(os,mvKeys);KeyFrame::writeVec(os,mvKeysUn);KeyFrame::writeVec(os,mvuRight);KeyFrame::writeVec(os,mvDepth);
+  KeyFrame::writeMat(os,mDescriptors);
+//   mBowVec.write(os);mFeatVec.write(os);//we can directly ComputeBoW() from mDescriptors
+  os.write((char*)&mnScaleLevels,sizeof(mnScaleLevels));os.write((char*)&mfScaleFactor,sizeof(mfScaleFactor));
+//   os.write((char*)&mfLogScaleFactor,sizeof(mfLogScaleFactor));os.write((char*)&mvScaleFactors,sizeof(mvScaleFactors));//we can get these from former 2 parameters
+//   writeVec(os,mvLevelSigma2);writeVec(os,mvInvLevelSigma2);
+  os.write((char*)&mnMinX,sizeof(mnMinX));os.write((char*)&mnMinY,sizeof(mnMinY));os.write((char*)&mnMaxX,sizeof(mnMaxX));os.write((char*)&mnMaxY,sizeof(mnMaxY));
+//   writeMat(os,mK);from fx~cy
+  //save mvpMapPoints in LoadMap for convenience
+//   os.write((char*)&mHalfBaseline,sizeof(mHalfBaseline));//=mb/2;
+  //save mNavState
+  const double* pdData;
+  Eigen::Quaterniond q=mNavState.mRwb.unit_quaternion();//qwb from Rwb
+  pdData=mNavState.mpwb.data();os.write((const char*)pdData,sizeof(*pdData)*3);//txyz
+  pdData=q.coeffs().data();os.write((const char*)pdData,sizeof(*pdData)*4);//qxyzw
+  pdData=mNavState.mvwb.data();os.write((const char*)pdData,sizeof(*pdData)*3);//vxyz
+  pdData=mNavState.mbg.data();os.write((const char*)pdData,sizeof(*pdData)*3);//bgxyz_bar
+  pdData=mNavState.mba.data();os.write((const char*)pdData,sizeof(*pdData)*3);//baxyz_bar
+  pdData=mNavState.mdbg.data();os.write((const char*)pdData,sizeof(*pdData)*3);//dbgxyz
+  pdData=mNavState.mdba.data();os.write((const char*)pdData,sizeof(*pdData)*3);//dbaxyz
+//   for(unsigned int i=0; i<FRAME_GRID_COLS;i++) for (unsigned int j=0; j<FRAME_GRID_ROWS;j++){ size_t nSize;os.write((char*)&nSize,sizeof(nSize));writeVec(os,mGrid[i][j]);}//we can still get it from mvKeysUn
+  //save mOdomPreIntOdom, code starting from here is diffrent from KeyFrame::write()
+  double tm=mOdomPreIntEnc.mdeltatij;
+  os.write((char*)&tm,sizeof(tm));
+  if (tm>0){
+    KeyFrame::writeEigMat(os,mOdomPreIntEnc.mdelxEij);
+    KeyFrame::writeEigMat(os,mOdomPreIntEnc.mSigmaEij);
+  }
+  tm=mOdomPreIntIMU.mdeltatij;
+  os.write((char*)&tm,sizeof(tm));
+  if (tm>0){//for IMUPreIntegratorBase<IMUDataBase>
+    KeyFrame::writeEigMat(os,mOdomPreIntIMU.mpij);KeyFrame::writeEigMat(os,mOdomPreIntIMU.mRij);KeyFrame::writeEigMat(os,mOdomPreIntIMU.mvij);//PRV
+    KeyFrame::writeEigMat(os,mOdomPreIntIMU.mSigmaijPRV);KeyFrame::writeEigMat(os,mOdomPreIntIMU.mSigmaij);
+    KeyFrame::writeEigMat(os,mOdomPreIntIMU.mJgpij);KeyFrame::writeEigMat(os,mOdomPreIntIMU.mJapij);
+    KeyFrame::writeEigMat(os,mOdomPreIntIMU.mJgvij);KeyFrame::writeEigMat(os,mOdomPreIntIMU.mJavij);
+    KeyFrame::writeEigMat(os,mOdomPreIntIMU.mJgRij);
+  }
+  return os.good();
+}
+
 //created by zzh over.
   
 long unsigned int Frame::nNextId=0;

@@ -42,9 +42,42 @@ public:
     mSigmabg=Matrix3d::Identity()*sigma2[2],mSigmaba=Matrix3d::Identity()*sigma2[3];mInvSigmabg2=1./sigma2[2];mInvSigmaba2=1./sigma2[3];
     mdMultiplyG=dmultiplyG;
   }//for dynamic binding
+//   static void SetParam(const Matrix3d sigma[4],double dmultiplyG=1.0){//gd,ad,bg,ba; for LoadMap()
+//     mSigmagd=sigma[0],mSigmaad=sigma[1];mSigmabg=sigma[2],mSigmaba=sigma[3];
+//     mInvSigmabg2=1./sigma[2](0,0);mInvSigmaba2=1./sigma[3](0,0);
+//     mdMultiplyG=dmultiplyG;
+//   }
   //= will use Vector3d's deep =, copy constructor is also deep
   virtual ~IMUDataBase(){}//for Derived class
   
+  //for Load/SaveMap()
+  virtual bool read(std::istream &is){
+    is.read((char*)&mtm,sizeof(mtm));
+    is.read((char*)ma.data(),ma.size()*sizeof(Vector3d::Scalar));
+    is.read((char*)mw.data(),mw.size()*sizeof(Vector3d::Scalar));
+    return is.good();
+  }
+  virtual bool write(std::ostream &os) const{
+    os.write((char*)&mtm,sizeof(mtm));
+    os.write((char*)ma.data(),ma.size()*sizeof(Vector3d::Scalar));
+    os.write((char*)mw.data(),mw.size()*sizeof(Vector3d::Scalar));
+    return os.good();
+  }
+  static bool readParam(std::istream &is){
+    is.read((char*)&mdMultiplyG,sizeof(mdMultiplyG));is.read((char*)&mdRefG,sizeof(mdRefG));
+    is.read((char*)mSigmagd.data(),mSigmagd.size()*sizeof(Vector3d::Scalar));
+    is.read((char*)mSigmaad.data(),mSigmaad.size()*sizeof(Vector3d::Scalar));
+    is.read((char*)mSigmabg.data(),mSigmabg.size()*sizeof(Vector3d::Scalar));
+    is.read((char*)mSigmaba.data(),mSigmaba.size()*sizeof(Vector3d::Scalar));
+    mInvSigmabg2=1./mSigmabg(0,0);mInvSigmaba2=1./mSigmaba(0,0);
+  }
+  static bool writeParam(std::ostream &os){
+    os.write((char*)&mdMultiplyG,sizeof(mdMultiplyG));os.write((char*)&mdRefG,sizeof(mdRefG));
+    os.write((char*)mSigmagd.data(),mSigmagd.size()*sizeof(Vector3d::Scalar));
+    os.write((char*)mSigmaad.data(),mSigmaad.size()*sizeof(Vector3d::Scalar));
+    os.write((char*)mSigmabg.data(),mSigmabg.size()*sizeof(Vector3d::Scalar));
+    os.write((char*)mSigmaba.data(),mSigmaba.size()*sizeof(Vector3d::Scalar));
+  }
 };
 class IMUDataDerived:public IMUDataBase
 { 
@@ -78,6 +111,7 @@ public:
   double mv[2],mtm;//v[0]=vl,v[1]=vr(m/s),timestamp of EncoderData
   
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  EncData():mtm(-1){}//do nothing, tm==-1 means it's an invalid EncData
   EncData(const double v[2],const double &tm);
   static void SetParam(const double &vscale,const double &rc,const Matrix2d &sigmad,const Matrix6d &sigmamd){
     mvscale=vscale;mrc=rc;mSigmad=sigmad;mSigmamd=sigmamd;
@@ -86,6 +120,29 @@ public:
   EncData(const EncData& encdata):mv{encdata.mv[0],encdata.mv[1]},mtm(encdata.mtm){}
   EncData& operator=(const EncData& encdata){mv[0]=encdata.mv[0];mv[1]=encdata.mv[1];mtm=encdata.mtm;return *this;}
   
+  //for Load/SaveMap()
+  bool read(std::istream &is){
+    is.read((char*)mv,sizeof(mv));//for mv[N] not double*!
+    is.read((char*)&mtm,sizeof(mtm));
+    return is.good();
+  }
+  bool write(std::ostream &os) const{
+    os.write((char*)mv,sizeof(mv));//for mv[N] not double*!
+    os.write((char*)&mtm,sizeof(mtm));
+    return os.good();
+  }
+  static bool readParam(std::istream &is){
+    is.read((char*)&mvscale,sizeof(mvscale));
+    is.read((char*)&mrc,sizeof(mrc));
+    is.read((char*)mSigmad.data(),mSigmad.size()*sizeof(Vector3d::Scalar));
+    is.read((char*)mSigmamd.data(),mSigmamd.size()*sizeof(Vector3d::Scalar));
+  }
+  static bool writeParam(std::ostream &os){
+    os.write((char*)&mvscale,sizeof(mvscale));
+    os.write((char*)&mrc,sizeof(mrc));
+    os.write((char*)mSigmad.data(),mSigmad.size()*sizeof(Vector3d::Scalar));
+    os.write((char*)mSigmamd.data(),mSigmamd.size()*sizeof(Vector3d::Scalar));
+  }
 };
 
 #define listeig(EncData) std::list<EncData,Eigen::aligned_allocator<EncData> >

@@ -1784,7 +1784,7 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
                 if(bCreateNew)
                 {
                     cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
-                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap,mState);
+                    MapPoint* pNewMP = new MapPoint(x3D,pKF,mpMap);
                     pNewMP->AddObservation(pKF,i);
                     pKF->AddMapPoint(pNewMP,i);
                     pNewMP->ComputeDistinctiveDescriptors();
@@ -2216,6 +2216,7 @@ void Tracking::Reset()
     // Clear Map (this erase MapPoints and KeyFrames)
     mpMap->clear();
 
+    MapPoint::nNextId=0;//added by zzh
     KeyFrame::nNextId = 0;
     Frame::nNextId = 0;
     mState = NO_IMAGES_YET;

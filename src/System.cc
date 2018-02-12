@@ -84,65 +84,93 @@ void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc)
     f.close();
     cout << endl << "NavState trajectory saved!" << endl;
 }
-void System::LoadMap(const string &filename,bool bPCL){
+void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
   if (!bPCL){
-    cout << endl << "Loading Map: 1st step...Keyframe NavState from " << filename << " ..." << endl;
-    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+    cout << endl << "Loading Map: 1st step...Keyframe (F,PrevKF,BoW),NavState(Pose) from " << filename << " ..." << endl;
     ifstream f;f.open(filename.c_str(),ios_base::in|ios_base::binary);
+    if (!f.is_open()){
+      cout<<redSTR<<"Opening Map Failed!"<<whiteSTR<<endl;
+      return;
+    }    
+    size_t NKFs;
+    f.read((char*)&NKFs,sizeof(NKFs));
+    if (f.bad()){
+      f.close();
+      cout<<redSTR<<"Reading Map Failed!"<<whiteSTR<<endl;
+      return;
+    }
     
-    map<size_t,KeyFrame*> mapIdpKF;//make a map from mnId to KeyFrame*
-    double pdData[3];
-    double pdData4[4];
-    vector<vector<long unsigned int>> vpKFMPIdMatches(vpKFs.size());//cache matched MPs' id
-    for(size_t i=0; i<vpKFs.size(); ++i){
-      KeyFrame* pKF = vpKFs[i];
-      // pKF->SetPose(pKF->GetPose()*Two);
-      if(pKF->isBad()) continue;
-
-      //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
-      NavState ns;
-      f.read((char*)pdData,sizeof(pdData));ns.mpwb<<pdData[0],pdData[1],pdData[2];//txyz
-      f.read((char*)pdData4,sizeof(pdData4));ns.mRwb.setQuaternion(Eigen::Quaterniond(pdData4));//qxyzw
-      f.read((char*)pdData,sizeof(pdData));ns.mvwb<<pdData[0],pdData[1],pdData[2];//vxyz
-      f.read((char*)pdData,sizeof(pdData));ns.mbg<<pdData[0],pdData[1],pdData[2];//bgxyz
-      f.read((char*)pdData,sizeof(pdData));ns.mba<<pdData[0],pdData[1],pdData[2];//baxyz
-      f.read((char*)pdData,sizeof(pdData));ns.mdbg<<pdData[0],pdData[1],pdData[2];//dbgxyz
-      f.read((char*)pdData,sizeof(pdData));ns.mdba<<pdData[0],pdData[1],pdData[2];//dbaxyz
-      pKF->SetNavState(ns);
+    list<unsigned long> lRefKFParentId;//old parent id of mpTracker->mlpReferences
+    if (!mpViewer->isFinished()&&!mpLocalMapper->isFinished()&&!mpLoopCloser->isFinished()&&!mpIMUInitiator->GetFinish()){
+      mpTracker->Reset();
+    }else{
+      if (bReadBadKF){//before clear KFs, we save the old id of mpTracker->mlpReferences
+	list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
+	for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter){
+	  lRefKFParentId.push_back((*iter)->mnId);
+	}
+      }
       
-      mapIdpKF[pKF->mnId]=pKF;
+      mpKeyFrameDatabase->clear();
+      mpMap->clear();//clear MPs,KFs & KFOrigins
+      MapPoint::nNextId=0;KeyFrame::nNextId=0;Frame::nNextId=0;//new id of good MPs,KFs & Fs starts from 0
+    }
+    
+    map<size_t,KeyFrame*> mapIdpKF;//make a map from mnId (old) to KeyFrame*
+    vector<vector<long unsigned int>> vpKFMPIdMatches(NKFs);//<vpKFs.size()<cache matched MPs' id (old)>>
+    vector<char> vecBad(NKFs);
+    for(size_t i=0; i<NKFs; ++i){
+      cv::Mat Tcp(4,4,CV_32F);
+      if (bReadBadKF){
+	f.read(&vecBad[i],sizeof(char));
+	if (vecBad[i]){ KeyFrame::readMat(f,Tcp);}
+      }
+      
+      long unsigned int oldId;
+      f.read((char*)&oldId,sizeof(oldId));//old Id of KF
+      long unsigned int prevId;
+      f.read((char*)&prevId,sizeof(prevId));//old prevKF's Id
+      if (prevId!=ULONG_MAX) assert(mapIdpKF.count(prevId)==1);//0<i<NKFsInit
+      KeyFrame* pPrevKF=NULL;//NULL correponds to prevId==ULONG_MAX
+      if (prevId!=ULONG_MAX) pPrevKF=mapIdpKF[prevId];
+      Frame tmpF(f,mpVocabulary);
+      KeyFrame* pKF=new KeyFrame(tmpF,mpMap,mpKeyFrameDatabase,pPrevKF,f);//we use Frame::read()+KeyFrame::read() corresponding to KeyFrame::write()
+      if (bReadBadKF&&vecBad[i]) pKF->mTcp=Tcp;
+      
+      mapIdpKF[oldId]=pKF;
       size_t NMPMatches;
       f.read((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
       vpKFMPIdMatches[i].resize(NMPMatches);
       for (int j=0;j<NMPMatches;++j){
-	f.read((char*)&vpKFMPIdMatches[i][j],sizeof(vpKFMPIdMatches[i][j]));//MP's id(if ULONG_MAX meaning unmatched)
+	f.read((char*)&vpKFMPIdMatches[i][j],sizeof(vpKFMPIdMatches[i][j]));//MP's (old) id(if ULONG_MAX meaning unmatched)
+      }
+      
+      mpMap->AddKeyFrame(pKF);// Insert KeyFrame in the map
+      if (i==0){//ORB_SLAM2 just uses 0th KF/F as the KFOrigins
+	assert(pKF->mnId==0&&oldId==0);
+	mpMap->mvpKeyFrameOrigins.push_back(pKF);
       }
     }
     
     cout << "2nd step...MapPoint old Id & Position & refKFId & observations from " << filename << " ..." << endl;
-    map<size_t,MapPoint*> mapIdpMP;//make a map from mnId to MapPoint*
+    map<size_t,MapPoint*> mapIdpMP;//make a map from mnId (old) to MapPoint*
     long unsigned int nlData;//for id
-    float pdfData[3];//for Xw
-    mpMap->clearMPs();
     size_t NMPs;
     f.read((char*)&NMPs,sizeof(NMPs));//size of observations
-    cout<<NMPs<<endl;
     for (size_t i=0;i<NMPs;++i){
       long unsigned int oldId;
       f.read((char*)&oldId,sizeof(oldId));//old Id
-      f.read((char*)pdfData,sizeof(pdfData));//float xyz
-      cv::Mat X3D=(cv::Mat_<float>(3,1) << pdfData[0], pdfData[1], pdfData[2]);
-      f.read((char*)&nlData,sizeof(nlData));//refKF's id
+      f.read((char*)&nlData,sizeof(nlData));//refKF's id (old), notice the KeyFrame*/address is different in LoadMap from SaveMap
       assert(mapIdpKF.count(nlData)==1);
-      MapPoint* pMP=new MapPoint(X3D,mapIdpKF[nlData],mpMap);
+      MapPoint* pMP=new MapPoint(mapIdpKF[nlData],mpMap,f);
       
       size_t Nobs;
-      f.read((char*)&Nobs,sizeof(Nobs));//size of observations
+      f.read((char*)&Nobs,sizeof(Nobs));//size of observations/MPs
       for(int j=0;j<Nobs;++j){
-        f.read((char*)&nlData,sizeof(nlData));//obs: KFj's id
+        f.read((char*)&nlData,sizeof(nlData));//obs: KFj's id (old)
 	assert(mapIdpKF.count(nlData)==1);
 	size_t idKeyPoint;
-	f.read((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
+	f.read((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id/order of this MP
 	pMP->AddObservation(mapIdpKF[nlData],idKeyPoint);
       }
       pMP->ComputeDistinctiveDescriptors();
@@ -151,10 +179,10 @@ void System::LoadMap(const string &filename,bool bPCL){
       
       mapIdpMP[oldId]=pMP;
     }
-//     pKFini->AddMapPoint(pNewMP,i);
 
-    cout<<"3rd step...Add matched MapPoints to KeyFrames..."<<endl;
-    for (int i=0;i<vpKFMPIdMatches.size();++i){
+    cout<<"3rd step...Add matched MapPoints to KeyFrames, Update Spanning Tree, AddLoopEdges, Add KeyFrameDatabase..."<<endl;
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();//it's using the mnId of KF as the order, so we must keep the new id has the same order as the old one
+    for (int i=0;i<NKFs;++i){//or vpKFMPIdMatches.size()
       KeyFrame* pKF = vpKFs[i];
       for (int j=0;j<vpKFMPIdMatches[i].size();++j){
 	if (vpKFMPIdMatches[i][j]==ULONG_MAX){//unmatched
@@ -164,73 +192,145 @@ void System::LoadMap(const string &filename,bool bPCL){
 	  pKF->AddMapPoint(mapIdpMP[vpKFMPIdMatches[i][j]],j);
 	}
       }
+      //Update Spanning Tree, must be after when mapIdpKF is made
+      long unsigned int parentId,loopId;
+      f.read((char*)&parentId,sizeof(parentId));//old parent KF's Id 
+      if (i>0) assert(parentId!=ULONG_MAX);
+      if (parentId!=ULONG_MAX){
+	assert(mapIdpKF.count(parentId)==1);
+	pKF->ChangeParent(mapIdpKF[parentId]);
+      }
+      //Add LoopEdges
+      size_t nLoops;
+      f.read((char*)&nLoops,sizeof(nLoops));//pKF->mspLoopEdges.size()
+      for (int j=0;j<nLoops;++j){
+	f.read((char*)&loopId,sizeof(loopId));//old loop KF's Id
+	assert(mapIdpKF.count(loopId)==1);
+	pKF->AddLoopEdge(mapIdpKF[loopId]);
+      }
+      mpKeyFrameDatabase->add(pKF);
     }
     
+    cout<<"4th step...Update Covisible Graph(Only/Without Spanning Tree)...";
+    for (int i=0;i<NKFs;++i){
+      KeyFrame* pKF = vpKFs[i];
+      pKF->UpdateConnections();//Update Covisible Graph(mbFirstConnection==false!), it needs pKF->mvpMapPoints & pMP->mObservations
+    }
+    
+    if (bReadBadKF){//we delete bad KFs and correct mpTracker->mlpReferences
+      for (int i=0;i<NKFs;++i){
+	if (vecBad[i]){
+	  vpKFs[i]->SetBadFlag(true);//i>= NKFsInit; we need keep bad KFs' parent & Tcp unchanged for SaveTrajectoryTUM()!!!
+	}
+      }
+      list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
+      list<unsigned long>::iterator iterID=lRefKFParentId.begin();
+      for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter,++iterID){
+	assert(mapIdpKF.count(*iterID)==1);
+	*iter=mapIdpKF[*iterID];//old KF's id to its new corresponding KF*
+      }
+    }
+    
+    cout<<"Over"<<endl;
+    f.close();
     return;
   }
 }
-void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc){//maybe can be rewritten in Tracking.cc
+void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBadKF){//maybe can be rewritten in Tracking.cc
   if (!bPCL){
     cout << endl << "Saving Map: 1st step...Keyframe NavState & matched MapPoints' old Id to " << filename << " ..." << endl;
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
     ofstream f;f.open(filename.c_str(),ios_base::out|ios_base::binary);
-    
-    double* pdData;
-    long unsigned int nlData;
-    long unsigned int* pnlData;//for id
-    for(size_t i=0; i<vpKFs.size(); ++i){
-      KeyFrame* pKF = vpKFs[i];
-      // pKF->SetPose(pKF->GetPose()*Two);
-      if(pKF->isBad()) continue;
 
+    long unsigned int nlData;
+    const long unsigned int* pnlData;//for id
+    size_t NKFs=vpKFs.size();size_t NKFsInit=NKFs;
+    if (bSaveBadKF){
+      set<KeyFrame*> spKFs;
+      list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
+      for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter){
+	KeyFrame* pKF=*iter;
+	while (pKF->isBad()){//here we save all bad but useful KFs
+	  if (spKFs.count(pKF)==0) spKFs.insert(pKF);
+	  pKF=pKF->GetParent();
+	}
+      }
+      for (set<KeyFrame*>::iterator iter=spKFs.begin(),iterEnd=spKFs.end();iter!=iterEnd;++iter){
+	vpKFs.push_back(*iter);
+      }
+      NKFs=vpKFs.size();
+    }
+    f.write((char*)&NKFs,sizeof(NKFs));//write NKFs first
+    for(size_t i=0; i<NKFs; ++i){
+      KeyFrame* pKF = vpKFs[i];
+      if (bSaveBadKF){
+	char bBad=0;
+	if (pKF->isBad()){ 
+	  bBad=1;
+	  f.write(&bBad,sizeof(bBad));
+	  KeyFrame::writeMat(f,pKF->mTcp);
+	  assert(i>=NKFsInit);
+// 	  cout<<i<<" "<<pKF->mnId<<" "<<pKF->GetParent()->mnId<<endl;
+	}else f.write(&bBad,sizeof(bBad));
+      }else if(pKF->isBad()) continue;
+
+      pnlData=&pKF->mnId;f.write((char*)pnlData,sizeof(*pnlData));//save old Id of KF
+      KeyFrame *pPrevKF=pKF->GetPrevKeyFrame();
+      if (pPrevKF==NULL) nlData=ULONG_MAX;else nlData=pPrevKF->mnId;
+      f.write((char*)&nlData,sizeof(nlData));//save old prevKF's Id, NULL is ULONG_MAX
       //For VIO, we should compare the Pose of B/IMU Frame!!! not the Twc but the Twb! with EuRoC's Twb_truth(using Tb_prism/Tbs from vicon0/data.csv) (notice vicon0 means the prism's Pose), and I found state_groundtruth_estimate0 is near Twb_truth but I don't think it's truth!
       if (bUseTbc) pKF->UpdateNavStatePVRFromTcw();//for Monocular
-      NavState ns=pKF->GetNavState();
-      Eigen::Quaterniond q=ns.mRwb.unit_quaternion();//qwb from Rwb
-      pdData=ns.mpwb.data();f.write((char*)pdData,sizeof(*pdData)*3);//txyz
-      pdData=q.coeffs().data();f.write((char*)pdData,sizeof(*pdData)*4);//qxyzw
-      pdData=ns.mvwb.data();f.write((char*)pdData,sizeof(*pdData)*3);//vxyz
-      pdData=ns.mbg.data();f.write((char*)pdData,sizeof(*pdData)*3);//bgxyz
-      pdData=ns.mba.data();f.write((char*)pdData,sizeof(*pdData)*3);//baxyz
-      pdData=ns.mdbg.data();f.write((char*)pdData,sizeof(*pdData)*3);//dbgxyz
-      pdData=ns.mdba.data();f.write((char*)pdData,sizeof(*pdData)*3);//dbaxyz
+      pKF->write(f);
       
       vector<MapPoint*> vpMPMatches=pKF->GetMapPointMatches();
       size_t NMPMatches=vpMPMatches.size();
       f.write((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
       for (int j=0;j<NMPMatches;++j){
-	if (vpMPMatches[j]==NULL||vpMPMatches[j]->isBad()){
-	  nlData=ULONG_MAX;
-	  f.write((char*)&nlData,sizeof(nlData));//unmatched MPs' id
-	}else{
-	  pnlData=&vpMPMatches[j]->mnId;f.write((char*)pnlData,sizeof(*pnlData));//matched MPs' id
-	}
+	if (vpMPMatches[j]==NULL||vpMPMatches[j]->isBad()) nlData=ULONG_MAX;//unmatched MPs' id
+	else nlData=vpMPMatches[j]->mnId;//matched MPs' id (old)
+	f.write((char*)&nlData,sizeof(nlData));
       }
     }
-    
     cout << "2nd step...MapPoint's old Id & Position & refKFId & observations to " << filename << " ..." << endl;
-    mpMap->ClearBadMPs();
+    //all MPs/KFs in mpMap are not bad!
     vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();
-    size_t NMPs=vpMPs.size();cout<<NMPs<<endl;
-    f.write((char*)&NMPs,sizeof(NMPs));//size of observations
+    size_t NMPs=vpMPs.size();
+    f.write((char*)&NMPs,sizeof(NMPs));//size of observations/MPs
     for (size_t i=0;i<NMPs;++i){
       MapPoint* pMP=vpMPs[i];
       assert(pMP&&!(pMP->isBad()));
       
       pnlData=&pMP->mnId;f.write((char*)pnlData,sizeof(*pnlData));//old Id
-      f.write((char*)(pMP->GetWorldPos().data),sizeof(float)*3);//float xyz
+      pnlData=&pMP->GetReferenceKeyFrame()->mnId;f.write((char*)pnlData,sizeof(*pnlData));//refKF's id, must be before MapPoint::write()
+      pMP->write(f);
       assert(!(pMP->GetReferenceKeyFrame()->isBad()));
-      pnlData=&pMP->GetReferenceKeyFrame()->mnId;f.write((char*)pnlData,sizeof(*pnlData));//refKF's id
       map<KeyFrame*,size_t> observations=pMP->GetObservations();//observations
       size_t Nobs=observations.size();
       f.write((char*)&Nobs,sizeof(Nobs));//size of observations
       for(map<KeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; ++mit){
 	assert(!(mit->first->isBad()));
-        pnlData=&mit->first->mnId;f.write((char*)pnlData,sizeof(*pnlData));//obs: KFj's id
+        pnlData=&mit->first->mnId;f.write((char*)pnlData,sizeof(*pnlData));//obs: KFj's id (old)
 	size_t idKeyPoint=mit->second;f.write((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
       }
     }
     
+    cout<<"3rd step...Save Parent KFs, LoopEdges...";
+    for (int i=0;i<NKFs;++i){//or vpKFMPIdMatches.size()
+      KeyFrame* pKF = vpKFs[i];
+      //Update Spanning Tree, must be after when mapIdpKF is made
+      KeyFrame *pParentKF=pKF->GetParent();
+      if (pParentKF==NULL) nlData=ULONG_MAX;else nlData=pParentKF->mnId;
+      f.write((char*)&nlData,sizeof(nlData));//old parent KF's Id, NULL is ULONG_MAX
+      //Add LoopEdges
+      set<KeyFrame*> spLoopEdges=pKF->GetLoopEdges();
+      size_t nLoops=spLoopEdges.size();f.write((char*)&nLoops,sizeof(nLoops));//pKF->mspLoopEdges.size()
+      for (set<KeyFrame*>::const_iterator iter=spLoopEdges.begin();iter!=spLoopEdges.end();++iter){
+	pnlData=&(*iter)->mnId;f.write((const char*)pnlData,sizeof(*pnlData));//old loop KF's Id
+      }
+    }
+    
+    cout<<"Over"<<endl;
+    f.close();
     return;
   }
   
@@ -727,6 +827,7 @@ void System::SaveTrajectoryTUM(const string &filename)
             continue;
 
         KeyFrame* pKF = *lRit;
+// 	if (pKF->isBad()) continue;
 
         cv::Mat Trw = cv::Mat::eye(4,4,CV_32F);
 
@@ -772,8 +873,15 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 
        // pKF->SetPose(pKF->GetPose()*Two);
 
-        if(pKF->isBad())
-            continue;
+        if(pKF->isBad()) continue;
+// 	cv::Mat Trw = cv::Mat::eye(4,4,CV_32F);
+//         while(pKF->isBad())
+//         {
+//             Trw = Trw*pKF->mTcp;
+//             pKF = pKF->GetParent();
+//         }
+//         Trw = Trw*pKF->GetPose();
+// 	pKF->SetPose(Trw);
 
         cv::Mat R = pKF->GetRotation().t();
         vector<float> q = Converter::toQuaternion(R);
