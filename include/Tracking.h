@@ -110,6 +110,10 @@ public:
   //Add Odom(Enc/IMU) data to cache queue
    cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
    
+   void SetLastKeyFrame(KeyFrame* pKF){
+     mpLastKeyFrame=pKF;
+   }
+   
    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 //created by zzh over.
   
@@ -143,7 +147,8 @@ public:
         NOT_INITIALIZED=1,
         OK=2,
         LOST=3,
-        ODOMOK=4//added by zzh
+        ODOMOK=4,//added by zzh
+	MAP_REUSE=5//added by zzh
     };
 
     eTrackingState mState;

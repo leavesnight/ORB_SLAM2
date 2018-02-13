@@ -530,10 +530,7 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 	  
 	  //if first connected then update spanning tree
 	  if (mbFirstConnection&&mnId!=0){//mnId!=0/this!=pLastKF is important for 0th F/KF to ensure its parent is NULL!
-	    for (int i=0;i<mpMap->mvpKeyFrameOrigins.size();++i){
-	      if (mpMap->mvpKeyFrameOrigins[i]==this){mbFirstConnection=false;
-		return;}
-	    }
+	    assert(this!=pLastKF);
 	    mbFirstConnection=false;
 	    mpParent=pLastKF;//the closer, the first connection is better
 	    mpParent->AddChild(this);
@@ -671,12 +668,7 @@ void KeyFrame::SetErase()
 
 void KeyFrame::SetBadFlag(bool bKeepTree)//this will be released in UpdateLocalKeyFrames() in Tracking, no memory leak(not be deleted) for bad KFs may be used by some Frames' trajectory retrieve
 {   
-    // Test log
-    for (int i=0;i<mpMap->mvpKeyFrameOrigins.size();++i){
-      if (mpMap->mvpKeyFrameOrigins[i]==this) return;
-    }
-    assert(!mbBad);//check
-    
+    assert(!mbBad);//check    
     {
         unique_lock<mutex> lock(mMutexConnections);
         if(mnId==0)//cannot erase the initial/fixed KF
@@ -687,6 +679,7 @@ void KeyFrame::SetBadFlag(bool bKeepTree)//this will be released in UpdateLocalK
             return;
         }
     }
+    assert(mnId!=0);
 
     //erase the relation with this(&KF)
     for(map<KeyFrame*,int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend=mConnectedKeyFrameWeights.end(); mit!=mend; mit++)

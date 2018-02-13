@@ -251,7 +251,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
     vpEdgesNavStateBias.push_back(ebias);
     
     // Set Enc edge(binary edge) between LastF-Frame
-    const EncPreIntegrator &encpreint=pKF1->GetEncPreInt();
+    const EncPreIntegrator encpreint=pKF1->GetEncPreInt();
     if (encpreint.mdeltatij==0) continue;
     g2o::EdgeEncNavStatePR* eEnc = new g2o::EdgeEncNavStatePR();
     eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
@@ -613,7 +613,7 @@ void Optimizer::GlobalBundleAdjustmentNavStatePRV(Map* pMap, const cv::Mat &gw, 
     optimizer.addEdge(ebias);
     
     // Set Enc edge(binary edge) between LastF-Frame
-    const EncPreIntegrator &encpreint=pKF1->GetEncPreInt();
+    const EncPreIntegrator encpreint=pKF1->GetEncPreInt();
     if (encpreint.mdeltatij==0) continue;
     g2o::EdgeEncNavStatePR* eEnc = new g2o::EdgeEncNavStatePR();
     eEnc->setVertex(0,dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(idKF0)));//lastF,i
@@ -1735,7 +1735,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         if(it!=CorrectedSim3.end())//if pKF is found in CorrectedSim3
         {
-            vScw[nIDi] = it->second;
+            vScw[nIDi] = it->second;//actually we can also use the same method as the following, but this way is faster
             VSim3->setEstimate(it->second);//corrected g2oScw, here c means camera
         }
         else
@@ -1767,7 +1767,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
     instead of Mahalonobis in error_block=e'e instead of e'Omega(!=I)e, so we also don't use RobustKernel/chi2/outliers/scale concept here, \
     so maybe we can use erroneous edges' concept in RGBDSLAM2 here!
 
-    // Set Loop edges
+    // Set Loop edges, these cannot be pure odom edges
     for(map<KeyFrame *, set<KeyFrame *> >::const_iterator mit = LoopConnections.begin(), mend=LoopConnections.end(); mit!=mend; mit++)
     {
         KeyFrame* pKF = mit->first;
@@ -1799,6 +1799,33 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             sInsertedEdges.insert(make_pair(min(nIDi,nIDj),max(nIDi,nIDj)));//use min&&max to avoid duplications like (i,j)&&(j,i) for loop edges(in Essential/Pose Graph) are undirected edges
         }
     }
+    
+    Eigen::Matrix<double,7,7> matLambdaEnc=Eigen::Matrix<double,7,7>::Identity();//added by zzh
+    //0 for phi, 1 for p, which is mainly caused by encoder measurement model instead of plane assumption model(+kinematic model error+Tce calibration error)
+    double dEncBase[2]={1,1};//1e-3*EncData::mrc/1000/(EncData::mSigmad(0,0)+EncData::mSigmad(1,1)),1e-3/1000/(EncData::mSigmad(0,0)+EncData::mSigmad(1,1))};//Sigmad_0.1s_CameraPhi/[Nfeatures*(EncData::mSigmad_0.1s(0,0)+EncData::mSigmad_0.1s(1,1))/2/EncData::mrc];Sigmad_0.1s_CameraP/[Nfeatures*(EncData::mSigmad(0,0)+EncData::mSigmad(1,1))/2]
+    for (size_t i=0, iend=vpKFs.size(); i<iend; i++){
+      KeyFrame* pKF = vpKFs[i];
+      KeyFrame* pParentKF = pKF->GetParent();
+      if(pParentKF&&pKF->GetWeight(pParentKF)<minFeat){//pure odom edge
+	if (pKF->getState()!=2&&pKF->GetPrevKeyFrame()==pParentKF||pParentKF->getState()!=2&&pParentKF->GetPrevKeyFrame()==pKF){//pure Odom Edge, need to decrease information matrix!
+	  EncPreIntegrator encpreint;
+	  if (pKF->getState()!=2){
+	    encpreint=pKF->GetEncPreInt();
+	  }else{
+	    encpreint=pParentKF->GetEncPreInt();
+	  }
+	  //notice matLambda((2,2)&(3,3)) used in other edges means the camera(+encoder) accuracy of (phi,p) which should be close to encoder(here use 1), and different unit has different base!
+	  double dTmp=abs(encpreint.mSigmaEij(2,2));
+	  if (dEncBase[0]>dTmp){//phi
+	    dEncBase[0]=dTmp;
+	  }
+	  dTmp=sqrt(encpreint.mSigmaEij(3,3)*encpreint.mSigmaEij(3,3)+encpreint.mSigmaEij(4,4)*encpreint.mSigmaEij(4,4));
+	  if (dEncBase[1]>dTmp){//intuitively we choose sqrt(sigma2x^2+sigma2y^2) or p
+	    dEncBase[1]=dTmp;
+	  }
+	}
+      }
+    }
 
     // Set normal edges
     for(size_t i=0, iend=vpKFs.size(); i<iend; i++)//all KFs in pMap
@@ -1818,7 +1845,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         KeyFrame* pParentKF = pKF->GetParent();
 
-        // Spanning tree edge, like VO/visual odometry edges
+        // Spanning tree edge, like VO/visual odometry edges, these may be pure odom edges!
         if(pParentKF)
         {
             int nIDj = pParentKF->mnId;
@@ -1831,7 +1858,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             if(itj!=NonCorrectedSim3.end())
                 Sjw = itj->second;
             else
-                Sjw = vScw[nIDj];
+                Sjw = vScw[nIDj];//it may be pure odom edge!
 
             g2o::Sim3 Sji = Sjw * Swi;//get Sji before CorrectLoop() in LoopClosing; noncorrected: Sji=Sjw*Swi;
 
@@ -1841,8 +1868,25 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             e->setMeasurement(Sji);
 
             e->information() = matLambda;//I
-	    if (pKF->GetWeight(pParentKF)<minFeat){
-	      //if (pKF->GetWeight(pParentKF)==0)  e->information() = matLambda*50;
+	    if (pKF->GetWeight(pParentKF)<minFeat){//pure odom edge
+	      if (pKF->getState()!=2&&pKF->GetPrevKeyFrame()==pParentKF||pParentKF->getState()!=2&&pParentKF->GetPrevKeyFrame()==pKF){//pure Odom Edge, need to decrease information matrix!
+		EncPreIntegrator encpreint;
+		if (pKF->getState()!=2){
+		  encpreint=pKF->GetEncPreInt();
+		}else{
+		  encpreint=pParentKF->GetEncPreInt();
+		}
+		for (int i=0;i<3;++i){
+		  if (dEncBase[0]==0&&encpreint.mSigmaEij(i,i)==0) matLambdaEnc(i,i)=1;//though this should never happen
+		  else matLambdaEnc(i,i)=dEncBase[0]/encpreint.mSigmaEij(i,i);//this Information Matrix can help solve the dropping problem of our dataset
+		}
+		for (int i=3;i<6;++i){
+		  if (dEncBase[1]==0&&encpreint.mSigmaEij(i,i)==0) matLambdaEnc(i,i)=1;//though this should never happen
+		  else matLambdaEnc(i,i)=dEncBase[1]/encpreint.mSigmaEij(i,i);//this Information Matrix can help solve the dropping problem of our dataset
+		}
+		e->information()=matLambdaEnc;
+		cout<<matLambdaEnc<<endl;
+	      }
 	      cout<<"Weight0/Odom link: "<<pParentKF->mnId<<" "<<pKF->mnId<<" "<<pKF->GetWeight(pParentKF)<<endl;
 	    }
             optimizer.addEdge(e);
@@ -1877,7 +1921,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             }
         }
 
-        // Covisibility graph edges, a smaller(closer) part whose weight>=100
+        // Covisibility graph edges, a smaller(closer) part whose weight>=100, these cannot be pure odom edges
         const vector<KeyFrame*> vpConnectedKFs = pKF->GetCovisiblesByWeight(minFeat);
         for(vector<KeyFrame*>::const_iterator vit=vpConnectedKFs.begin(); vit!=vpConnectedKFs.end(); vit++)
         {

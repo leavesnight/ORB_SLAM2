@@ -68,7 +68,9 @@ void LocalMapping::Run()
         if(CheckNewKeyFrames())
         {
             // BoW conversion and insertion in Map
+	    cout<<"Processing New KF...";
             ProcessNewKeyFrame();
+	    cout<<"Over"<<endl;
 	    mpIMUInitiator->SetCurrentKeyFrame(mpCurrentKeyFrame);//zzh
 
             // Check recent added MapPoints
@@ -167,6 +169,7 @@ void LocalMapping::ProcessNewKeyFrame()
 	  KeyFrame* pLastKF=mpCurrentKeyFrame;
 	  vector<KeyFrame*> vecEraseKF;
 	  if (mpIMUInitiator->GetVINSInited()){
+	    cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
 	    double tmNewest=pLastKF->mTimeStamp;
 	    bool bLastCamKF=false;char state;
 	    do{
@@ -187,18 +190,25 @@ void LocalMapping::ProcessNewKeyFrame()
 	      mpLastCamKF=pLastKF;
 	    }
 	  }else{
+	    int count=mpCurrentKeyFrame->mnId-mnLastOdomKFId;
 	    do{
 	      pLastKF=pLastKF->GetPrevKeyFrame();
 	      vecEraseKF.push_back(pLastKF);
-	    }while (pLastKF->getState()!=(char)Tracking::ODOMOK);
-	    mpLastCamKF=pLastKF->GetPrevKeyFrame();
+	    }while (--count>0);
+	    assert(pLastKF!=NULL&&pLastKF->getState()==(char)Tracking::ODOMOK);
+	    do{
+	      pLastKF=pLastKF->GetPrevKeyFrame();//we cannot directly use this for consecutive ODOMOK KFs may happen when LoopClosing lock it by SetNotErase()
+	    }while (pLastKF->getState()!=(char)Tracking::OK);
+	    mpLastCamKF=pLastKF;
 	  }
+	  cout<<vecEraseKF.size()<<" ";
 	  for (int i=0;i<vecEraseKF.size();++i){//the last one is the before ODOMOK(delete the former consecutive OdomOK KF as soon as possible, it seems to have a better effect)
+	    cout<<i<<" ";
 	    vecEraseKF[i]->SetBadFlag();//it may be SetNotErase() by LoopClosing thread
 	  }
+	  cout<<"Over"<<endl;
 // 	  if (pLastKF!=NULL&&pLastKF->getState()==Tracking::ODOMOK){//&&pLastKF->GetParent()!=NULL
 	  assert(mpLastCamKF!=NULL&&mpLastCamKF->getState()==(char)Tracking::OK);
-	  cout<<"KF->SetBadFlag() in ProcessNewKeyFrame()!"<<endl;
 	  mpIMUInitiator->SetCopyInitKFs(false);
 	}
       }
@@ -771,21 +781,21 @@ void LocalMapping::KeyFrameCulling()
 	
         //cannot erase last ODOMOK & first ODOMOK's parent!
         KeyFrame *pNextKF=pKF->GetNextKeyFrame();
-	if (pNextKF!=NULL){//for Map Reuse, we avoid segmentation fault for the last KF of the loaded map
-	  if (pNextKF->getState()==Tracking::ODOMOK){
-	    if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
-	      if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
-		pLastNthKF=pLastNthKF->GetPrevKeyFrame();
-		tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
-	      }//must done before pKF->SetBadFlag()!
-	      pKF->SetBadFlag();
-	      cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
-	    }//else next is OK then continue
-	    continue;
-	  }else{//next KF is OK(we keep at least 1 ODOMOK between OK KFs, maybe u can use it for a better PoseGraph Optimization?)
-	    if (pKF->getState()==Tracking::ODOMOK) continue;
-	  }
+// 	if (pNextKF!=NULL){//for simple(but a bit wrong) Map Reuse, we avoid segmentation fault for the last KF of the loaded map
+	if (pNextKF->getState()==Tracking::ODOMOK){
+	  if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
+	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
+	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
+	    }//must done before pKF->SetBadFlag()!
+	    cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
+	    pKF->SetBadFlag();
+	  }//else next is OK then continue
+	  continue;
+	}else{//next KF is OK(we keep at least 1 ODOMOK between OK KFs, maybe u can use it for a better PoseGraph Optimization?)
+	  if (pKF->getState()==Tracking::ODOMOK) continue;
 	}
+// 	}
 	
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
         int nObs = 3;

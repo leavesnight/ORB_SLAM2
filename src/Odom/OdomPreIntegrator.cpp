@@ -17,7 +17,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
     mSigmaEij.setZero();//SigmaEii=0
     const double EPS = 1E-5;
     
-    Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);
+    Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);Matrix6d eigSigmaDrop(Matrix6d::Identity());
     double rc(EncData::mrc);
     
     for (listeig(EncData)::const_iterator iterj=iterBegin;iterj!=iterEnd;){//start iterative method from i/iteri->tm to j/iter->tm
@@ -35,7 +35,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       deltat=tj-tj_1;
       if (deltat==0) continue;
 //       assert(deltat>=0);
-      if (deltat>1.5){ mdeltatij=0;cout<<redSTR"Check Odometry!"<<whiteSTR<<endl;return;}//this filter is for my dataset's problem
+      if (deltat>1.5){ mdeltatij=0;cout<<redSTR"Check Odometry!"<<whiteSTR<<endl;return;}//this filter is for the problem of my dataset which only contains encoder data
       
       //selete/design measurement_j-1
       double vl,vr;//vlj-1,vrj-1

@@ -855,8 +855,9 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		  }
 		}
             }
-            else
+            else//mState==LOST or MAP_REUSE
             {
+		if (mState==MAP_REUSE) PreIntegration();//clear cached Odom List
                 bOK = Relocalization();
 		cout<<greenSTR"Relocalization()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
             }
@@ -1010,7 +1011,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		cout<<greenSTR<<"IEODOM KF: "<<mCurrentFrame.mnId<<whiteSTR<<endl;
 	      }
 	    }else{
-	      mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
+	      if (mState==MAP_REUSE) return;//if MAP_REUSE, we keep mState until it's relocalized
+	      else mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	      // Clear Frame vectors for reloc bias computation
 	      if(mv20pFramesReloc.size()>0){
 		for (int i=0;i<mv20pFramesReloc.size();++i) delete mv20pFramesReloc[i];

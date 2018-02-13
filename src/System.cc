@@ -118,12 +118,16 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     
     map<size_t,KeyFrame*> mapIdpKF;//make a map from mnId (old) to KeyFrame*
     vector<vector<long unsigned int>> vpKFMPIdMatches(NKFs);//<vpKFs.size()<cache matched MPs' id (old)>>
-    vector<char> vecBad(NKFs);
+    size_t iFirstBad=NKFs;
     for(size_t i=0; i<NKFs; ++i){
       cv::Mat Tcp(4,4,CV_32F);
+      char bBad;
       if (bReadBadKF){
-	f.read(&vecBad[i],sizeof(char));
-	if (vecBad[i]){ KeyFrame::readMat(f,Tcp);}
+	f.read(&bBad,sizeof(char));
+	if (bBad){
+	  KeyFrame::readMat(f,Tcp);
+	  if (iFirstBad==NKFs) iFirstBad=i;
+	}
       }
       
       long unsigned int oldId;
@@ -135,7 +139,7 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       if (prevId!=ULONG_MAX) pPrevKF=mapIdpKF[prevId];
       Frame tmpF(f,mpVocabulary);
       KeyFrame* pKF=new KeyFrame(tmpF,mpMap,mpKeyFrameDatabase,pPrevKF,f);//we use Frame::read()+KeyFrame::read() corresponding to KeyFrame::write()
-      if (bReadBadKF&&vecBad[i]) pKF->mTcp=Tcp;
+      if (bReadBadKF&&bBad) pKF->mTcp=Tcp;
       
       mapIdpKF[oldId]=pKF;
       size_t NMPMatches;
@@ -195,7 +199,7 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       //Update Spanning Tree, must be after when mapIdpKF is made
       long unsigned int parentId,loopId;
       f.read((char*)&parentId,sizeof(parentId));//old parent KF's Id 
-//       if (i>0) assert(parentId!=ULONG_MAX);
+      if (i>0) assert(parentId!=ULONG_MAX);
       if (parentId!=ULONG_MAX){
 	assert(mapIdpKF.count(parentId)==1);
 	pKF->ChangeParent(mapIdpKF[parentId]);
@@ -218,10 +222,8 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     }
     
     if (bReadBadKF){//we delete bad KFs and correct mpTracker->mlpReferences
-      for (int i=0;i<NKFs;++i){
-	if (vecBad[i]){
-	  vpKFs[i]->SetBadFlag(true);//i>= NKFsInit; we need keep bad KFs' parent & Tcp unchanged for SaveTrajectoryTUM()!!!
-	}
+      for (int i=iFirstBad;i<NKFs;++i){
+	vpKFs[i]->SetBadFlag(true);//i>= NKFsInit; we need keep bad KFs' parent & Tcp unchanged for SaveTrajectoryTUM()!!!
       }
       list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
       list<unsigned long>::iterator iterID=lRefKFParentId.begin();
@@ -229,6 +231,11 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
 	assert(mapIdpKF.count(*iterID)==1);
 	*iter=mapIdpKF[*iterID];//old KF's id to its new corresponding KF*
       }
+    }
+    
+    if (iFirstBad>0){
+      mpTracker->mState=Tracking::MAP_REUSE;
+      mpTracker->SetLastKeyFrame(vpKFs[iFirstBad-1]);
     }
     
     cout<<"Over"<<endl;
