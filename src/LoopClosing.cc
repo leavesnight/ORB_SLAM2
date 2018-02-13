@@ -763,9 +763,11 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
                 KeyFrame* pKF = lpKFtoCheck.front();//for RGBD, lpKFtoCheck should only have one KF initially
                 const set<KeyFrame*> sChilds = pKF->GetChilds();
                 cv::Mat Twc = pKF->GetPoseInverse();
+// 		cout<<"Check: "<<pKF->mnId<<endl;
                 for(set<KeyFrame*>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
                 {
                     KeyFrame* pChild = *sit;
+// 		    cout<<" "<<pChild->mnId;
                     if(pChild->mnBAGlobalForKF!=nLoopKF)//if child is not GBA optimized by mpCurrentKF/it must be the new KFs created by LocalMapping thread during GBA
                     {
                         cv::Mat Tchildc = pChild->GetPose()*Twc;//Tchildw*Tw0=Tchild0
@@ -785,6 +787,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
                     }//now the child is optimized by GBA
                     lpKFtoCheck.push_back(pChild);
                 }
+//                 cout<<endl;
 
                 pKF->mTcwBefGBA = pKF->GetPose();//record the old Tcw
 		if (bUseGBAPRV)
@@ -835,7 +838,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
 
             mpLocalMapper->Release();//recover LocalMapping thread, same as CorrectLoop()
             
-	    mpIMUInitiator->SetInitGBAOver(true);//should be put after 1st visual-inertial full BA!
+	    if (bUseGBAPRV) mpIMUInitiator->SetInitGBAOver(true);//should be put after 1st visual-inertial full BA!
 
             cout << redSTR<<"Map updated!" <<whiteSTR<< endl;//if GBA/loop correction successed, this word should appear!
             

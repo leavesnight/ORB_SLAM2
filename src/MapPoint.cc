@@ -161,12 +161,10 @@ void MapPoint::EraseObservation(KeyFrame* pKF)
 
             mObservations.erase(pKF);
 
-            if(mpRefKF==pKF)
-                mpRefKF=mObservations.begin()->first;
-
-            // If only 2 observations or less, discard point
+            // If < 2 observing KFs for a stereo MP, discard it for it may be created by triangulation method!
             if(nObs<=2)
                 bBad=true;
+	    else if(mpRefKF==pKF) mpRefKF=mObservations.begin()->first;//!empty()/nObs>0 avoids for Segmentation Fault? revised by zzh, notice we don't use the information of bad MPs
         }
     }
 

@@ -106,7 +106,7 @@ void Optimizer::LocalBundleAdjustmentNavStatePRV(KeyFrame* pKF, int Nlocal, bool
     pKFlocal=pKFlocal->GetPrevKeyFrame();
   }while (--Nlocal>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
   cout<<blueSTR"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<whiteSTR<<endl;
-  assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
+//   assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=NlocalIni);
   
   // Local MapPoints seen in Local KeyFrames
   list<MapPoint*> lLocalMapPoints;
@@ -1316,7 +1316,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 	pKFlocal=pKFlocal->GetPrevKeyFrame();
       }while (--NlocalCnt>0&&pKFlocal!=NULL);//maybe less than N KFs in pMap
       cout<<blueSTR"Enter local BA..."<<pKF->mnId<<", size of localKFs="<<lLocalKeyFrames.size()<<whiteSTR<<endl;
-      assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=Nlocal);
+//       assert(pKFlocal!=NULL||pKFlocal==NULL&&pMap->KeyFramesInMap()<=Nlocal);
       /*
       //insert all 1st layer Covisibility KFs into lLocalKeyFrames(not best n)
       const vector<KeyFrame*> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();

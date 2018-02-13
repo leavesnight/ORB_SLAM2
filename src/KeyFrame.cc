@@ -123,7 +123,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
   }
   SetPose(F.mTcw);//we have already used UpdatePoseFromNS() in Frame
   
-  read(is);//set odom list 
+  read(is);//set odom list & mState
 }
 bool KeyFrame::read(istream &is){
   //we've done ComputeBoW() in Frame!
@@ -529,7 +529,11 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
 // 	  mvOrderedWeights.push_back(0);//0 means it's an Odom link
 	  
 	  //if first connected then update spanning tree
-	  if (mbFirstConnection&&mnId!=0){
+	  if (mbFirstConnection&&mnId!=0){//mnId!=0/this!=pLastKF is important for 0th F/KF to ensure its parent is NULL!
+	    for (int i=0;i<mpMap->mvpKeyFrameOrigins.size();++i){
+	      if (mpMap->mvpKeyFrameOrigins[i]==this){mbFirstConnection=false;
+		return;}
+	    }
 	    mbFirstConnection=false;
 	    mpParent=pLastKF;//the closer, the first connection is better
 	    mpParent->AddChild(this);
@@ -668,6 +672,9 @@ void KeyFrame::SetErase()
 void KeyFrame::SetBadFlag(bool bKeepTree)//this will be released in UpdateLocalKeyFrames() in Tracking, no memory leak(not be deleted) for bad KFs may be used by some Frames' trajectory retrieve
 {   
     // Test log
+    for (int i=0;i<mpMap->mvpKeyFrameOrigins.size();++i){
+      if (mpMap->mvpKeyFrameOrigins[i]==this) return;
+    }
     assert(!mbBad);//check
     
     {
@@ -807,12 +814,12 @@ void KeyFrame::SetBadFlag(bool bKeepTree)//this will be released in UpdateLocalK
 //       }
 //       unique_lock<mutex> lock(mMutexPNChanging);
 //       mbPNChanging=false;
-	 cout<<"End "<<mnId<<" "<<mTimeStamp<<endl;
     }
 
     //erase this(&KF) in mpMap && mpKeyFrameDB
     mpMap->EraseKeyFrame(this);
     mpKeyFrameDB->erase(this);
+    cout<<"End "<<mnId<<" "<<mTimeStamp<<endl;
 }
 
 bool KeyFrame::isBad()

@@ -744,6 +744,7 @@ void LocalMapping::KeyFrameCulling()
     
     for (int k=0;k<nRestrict;++k){//k==0 for strict restriction then k==1 do loose restriction only for outer LocalWindow KFs
     int vi=0;
+    cout<<"LocalKFs:"<<vpLocalKeyFrames.size()<<endl;
     for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; ++vit,++vi)
     {
         KeyFrame* pKF = *vit;
@@ -769,18 +770,21 @@ void LocalMapping::KeyFrameCulling()
 	}
 	
         //cannot erase last ODOMOK & first ODOMOK's parent!
-	if (pKF->GetNextKeyFrame()->getState()==Tracking::ODOMOK){
-	  if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
-	    if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
-	      pLastNthKF=pLastNthKF->GetPrevKeyFrame();
-	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
-	    }//must done before pKF->SetBadFlag()!
-	    pKF->SetBadFlag();
-	    cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
-	  }//else next is OK then continue
-	  continue;
-	}else{//next KF is OK
-	  if (pKF->getState()==Tracking::ODOMOK) continue;
+        KeyFrame *pNextKF=pKF->GetNextKeyFrame();
+	if (pNextKF!=NULL){//for Map Reuse, we avoid segmentation fault for the last KF of the loaded map
+	  if (pNextKF->getState()==Tracking::ODOMOK){
+	    if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map
+	      if (tmNext>tmNthKF&&pLastNthKF!=NULL){//this KF in next time's local window or N+1th & its prev-next<=0.5 then we should move tmNthKF forward 1 KF
+		pLastNthKF=pLastNthKF->GetPrevKeyFrame();
+		tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
+	      }//must done before pKF->SetBadFlag()!
+	      pKF->SetBadFlag();
+	      cout<<greenSTR<<"OdomKF->SetBadFlag()!"<<whiteSTR<<endl;
+	    }//else next is OK then continue
+	    continue;
+	  }else{//next KF is OK(we keep at least 1 ODOMOK between OK KFs, maybe u can use it for a better PoseGraph Optimization?)
+	    if (pKF->getState()==Tracking::ODOMOK) continue;
+	  }
 	}
 	
         const vector<MapPoint*> vpMapPoints = pKF->GetMapPointMatches();
@@ -836,8 +840,8 @@ void LocalMapping::KeyFrameCulling()
 	      tmNthKF=pLastNthKF==NULL?-1:pLastNthKF->mTimeStamp;
 	    }//must done before pKF->SetBadFlag()!
 	    
-// 	    KeyFrame* pNexKF=pKF->GetNextKeyFrame();
-// 	    cout<<redSTR"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNexKF->GetListIMUData().size()<<endl;
+// 	    KeyFrame* pNextKF=pKF->GetNextKeyFrame();
+// 	    cout<<redSTR"pKF list size before: "<<pKF->GetListIMUData().size()<<" "<<pNextKF->GetListIMUData().size()<<endl;
             pKF->SetBadFlag();
 // 	    cout<<"pKFnext list size after: "<<pNexKF->GetListIMUData().size()<<whiteSTR<<" pKF->mnId:"<<pKF->mnId<<endl;
 	}

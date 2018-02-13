@@ -195,7 +195,7 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       //Update Spanning Tree, must be after when mapIdpKF is made
       long unsigned int parentId,loopId;
       f.read((char*)&parentId,sizeof(parentId));//old parent KF's Id 
-      if (i>0) assert(parentId!=ULONG_MAX);
+//       if (i>0) assert(parentId!=ULONG_MAX);
       if (parentId!=ULONG_MAX){
 	assert(mapIdpKF.count(parentId)==1);
 	pKF->ChangeParent(mapIdpKF[parentId]);
