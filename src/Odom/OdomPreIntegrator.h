@@ -147,6 +147,12 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
       double dt,tj,tj_1;
       if (iterjm1==iterBegin) tj_1=timeStampi; else tj_1=iterjm1->mtm;
       if (iterj==iterEnd) tj=timeStampj; else{ tj=iterj->mtm;assert(tj-tj_1>=0);}
+//       if (iterj==iterEnd){
+// 	if (timeStampj-tj_1>0) tj=timeStampj;else break;
+//       }else{
+// 	tj=iterj->mtm;
+// 	if (tj>timeStampj) tj=timeStampj;
+//       }
       dt=tj-tj_1;
       if (dt==0) continue;//for we use [nearest imu data at timeStampi, nearest but <=timeStampj] or [/(timeStampi,timeStampj], when we concate them in KeyFrameCulling(), dt may be 0
       if (dt>1.5){ this->mdeltatij=0;std::cout<<"CheckIMU!!!"<<std::endl;return;}//for Map Reuse, the edge between last KF of the map and 0th KF of 2nd SLAM should have no odom info (20frames,>=10Hz, 1.5s<=2s is enough for not using MAP_REUSE_RELOC)

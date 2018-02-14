@@ -17,6 +17,10 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
     mSigmaEij.setZero();//SigmaEii=0
     const double EPS = 1E-5;
     
+    listeig(EncData)::const_iterator it=iterEnd;
+    std::cout<<timeStampi<<" "<<timeStampj<<" "<<timeStampi-iterBegin->mtm<<" "<<timeStampj-(--it)->mtm<<std::endl;
+    assert(abs(timeStampi-iterBegin->mtm)<0.01&&abs(timeStampj-(it)->mtm)<0.01);
+    
     Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);Matrix6d eigSigmaDrop(Matrix6d::Identity());
     double rc(EncData::mrc);
     

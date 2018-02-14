@@ -293,9 +293,9 @@ int main(int argc, char **argv)
     //load if Full BA just after IMU Initialize
     cv::FileNode fnFBA=fSettings["GBA.finalIterations"];
 //     SLAM.SaveKeyFrameTrajectoryNavState("KeyFrameTrajectoryIMU_NO_FULLBA.txt");
-    SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");/*
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory2.txt"); 
-    SLAM.SaveMap("MapTmp.bin",false,true,true);
+    SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");
+//     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory2.txt"); 
+//     SLAM.SaveMap("MapTmp.bin",false,true,true);
     if (!fnFBA.empty()){
       if((int)fnFBA){
 	SLAM.FinalGBA(fnFBA);
@@ -303,7 +303,7 @@ int main(int argc, char **argv)
       }
     }else{
       cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
-    }
+    }/*
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory1.txt"); 
     SLAM.SaveTrajectoryTUM("CameraTrajectory1.txt");
     SLAM.LoadMap("MapTmp.bin",false,true);

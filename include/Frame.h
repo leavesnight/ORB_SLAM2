@@ -73,12 +73,12 @@ public:
 //   }
   template <class _OdomData>//here if u use _Frame*, it can be automatically checked while vector<_Frame>::iterator won't do so! but partial specialized template function doesn't exist!
   void PreIntegration(Frame* pLastF,const typename listeig(_OdomData)::const_iterator &iteri,
-		      const typename listeig(_OdomData)::const_iterator &iterj){//0th frame don't use this function
-    mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp,iteri,iterj);
+		      typename listeig(_OdomData)::const_iterator iterjBack){//0th frame don't use this function
+    mOdomPreIntEnc.PreIntegration(pLastF->mTimeStamp,mTimeStamp,iteri,++iterjBack);//here need ++!
   }
   template <class _OdomData>
   void PreIntegration(KeyFrame* pLastKF,const typename listeig(_OdomData)::const_iterator &iteri,
-		      const typename listeig(_OdomData)::const_iterator &iterj);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
+		      typename listeig(_OdomData)::const_iterator iterjBack);//0th frame don't use this function, just declare and we only use specialized 2 versions for KeyFrame cannot be directly used in this head file
   
   //for LoadMap() in System.cc
   Frame(istream &is,ORBVocabulary* voc);
@@ -258,11 +258,11 @@ private:
 // template <>//specialized
 // void Frame::SetPreIntegrationList<IMUData>(const typename std::list<IMUData>::const_iterator &begin,const typename std::list<IMUData>::const_iterator &pback);
 template <>
-void Frame::PreIntegration<IMUData>(Frame* pLastF,const listeig(IMUData)::const_iterator &iteri,const listeig(IMUData)::const_iterator &iterj);
+void Frame::PreIntegration<IMUData>(Frame* pLastF,const listeig(IMUData)::const_iterator &iteri,listeig(IMUData)::const_iterator iterjBack);
 template <>
-void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const listeig(EncData)::const_iterator &iteri,const listeig(EncData)::const_iterator &iterj);
+void Frame::PreIntegration<EncData>(KeyFrame* pLastKF,const listeig(EncData)::const_iterator &iteri,listeig(EncData)::const_iterator iterjBack);
 template <>
-void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const listeig(IMUData)::const_iterator &iteri,const listeig(IMUData)::const_iterator &iterj);
+void Frame::PreIntegration<IMUData>(KeyFrame* pLastKF,const listeig(IMUData)::const_iterator &iteri,listeig(IMUData)::const_iterator iterjBack);
 
 }// namespace ORB_SLAM
 
