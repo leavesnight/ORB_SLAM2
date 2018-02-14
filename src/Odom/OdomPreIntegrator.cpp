@@ -11,7 +11,7 @@ using namespace Eigen;
 
 void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &timeStampj,
 				      const listeig(EncData)::const_iterator &iterBegin,const listeig(EncData)::const_iterator &iterEnd){
-  if (iterBegin!=iterEnd){ 
+  if (iterBegin!=iterEnd&&timeStampi<timeStampj){//timeStampi may >=timeStampj for Map Reuse
     Vector2d eigdeltaPijM(0,0);//deltaPii=0
     double deltaThetaijMz=0;//deltaTheta~iiz=0
     mSigmaEij.setZero();//SigmaEii=0

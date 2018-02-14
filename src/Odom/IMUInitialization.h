@@ -146,6 +146,7 @@ public:
   void Run();
   
   cv::Mat GetGravityVec(void);
+  void SetGravityVec(const cv::Mat &mat);
   
   CREATOR_GET(Finish,bool,b)
   CREATOR_SET(FinishRequest,bool,b)

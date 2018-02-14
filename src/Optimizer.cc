@@ -1802,7 +1802,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
     
     Eigen::Matrix<double,7,7> matLambdaEnc=Eigen::Matrix<double,7,7>::Identity();//added by zzh
     //0 for phi, 1 for p, which is mainly caused by encoder measurement model instead of plane assumption model(+kinematic model error+Tce calibration error)
-    double dEncBase[2]={1,1};//1e-3*EncData::mrc/1000/(EncData::mSigmad(0,0)+EncData::mSigmad(1,1)),1e-3/1000/(EncData::mSigmad(0,0)+EncData::mSigmad(1,1))};//Sigmad_0.1s_CameraPhi/[Nfeatures*(EncData::mSigmad_0.1s(0,0)+EncData::mSigmad_0.1s(1,1))/2/EncData::mrc];Sigmad_0.1s_CameraP/[Nfeatures*(EncData::mSigmad(0,0)+EncData::mSigmad(1,1))/2]
+    double dEncBase[2]={1,1};
     for (size_t i=0, iend=vpKFs.size(); i<iend; i++){
       KeyFrame* pKF = vpKFs[i];
       KeyFrame* pParentKF = pKF->GetParent();

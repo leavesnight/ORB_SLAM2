@@ -764,7 +764,7 @@ void LocalMapping::KeyFrameCulling()
         double tmNext=-1;
 	if (k==0){
 	  if (bSensorIMU){//restriction is only for VIO
-	    assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);
+	    assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);//bug?
 	    tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
 	    if (tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>0.5) continue;
 	    else vbEntered[vi]=true;

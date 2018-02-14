@@ -812,7 +812,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             // Local Mapping is activated. This is the normal behaviour, unless
             // you explicitly activate the "only tracking" mode.
 
-            if(mState==OK||mState==ODOMOK)
+            if(mState==OK||mState==ODOMOK)//||mState==MAP_REUSE_RELOC)
             {
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();//so use the replaced ones
@@ -959,7 +959,9 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
         }
 
         if(bOK){
-            mState = OK;
+// 	    if (mpIMUInitiator->GetVINSInited()&&mState==MAP_REUSE||mState==MAP_REUSE_RELOC) mState=MAP_REUSE_RELOC;
+// 	    else 
+	      mState=OK;
 	    // Add Frames to re-compute IMU bias after reloc
             if(mbRelocBiasPrepare){
 	       cout<<redSTR<<" Relocalization Recomputation Preparing..."<<whiteSTR<<endl;
@@ -973,6 +975,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		  mbRelocBiasPrepare=false;
 		  for (int i=0;i<mv20pFramesReloc.size();++i) delete mv20pFramesReloc[i];
 		  mv20pFramesReloc.clear();
+// 		  if (mState==MAP_REUSE_RELOC) mState=OK;
                 }
             }
 	}else{//we shouldn't make it LOST for robustness
@@ -1011,13 +1014,14 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 		cout<<greenSTR<<"IEODOM KF: "<<mCurrentFrame.mnId<<whiteSTR<<endl;
 	      }
 	    }else{
-	      if (mState==MAP_REUSE) return;//if MAP_REUSE, we keep mState until it's relocalized
-	      else mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	      // Clear Frame vectors for reloc bias computation
 	      if(mv20pFramesReloc.size()>0){
 		for (int i=0;i<mv20pFramesReloc.size();++i) delete mv20pFramesReloc[i];
 		mv20pFramesReloc.clear();
 	      }
+// 	      if (mState==MAP_REUSE_RELOC) mState=MAP_REUSE;
+	      if (mState==MAP_REUSE) return;//if MAP_REUSE, we keep mState until it's relocalized
+	      else mState=LOST;//if LOST, the system can only be recovered through relocalization module, so no need to set mbRelocBiasPrepare
 	    }
 	}
 

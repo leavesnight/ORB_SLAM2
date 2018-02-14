@@ -113,6 +113,9 @@ public:
    void SetLastKeyFrame(KeyFrame* pKF){
      mpLastKeyFrame=pKF;
    }
+   void SetReferenceKF(KeyFrame* pKF){
+     mpReferenceKF=pKF;
+   }
    
    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 //created by zzh over.
@@ -148,7 +151,8 @@ public:
         OK=2,
         LOST=3,
         ODOMOK=4,//added by zzh
-	MAP_REUSE=5//added by zzh
+	MAP_REUSE=5,//added by zzh
+	MAP_REUSE_RELOC=6//added by zzh
     };
 
     eTrackingState mState;

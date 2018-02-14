@@ -128,8 +128,6 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,KeyFrame* pPrevK
 bool KeyFrame::read(istream &is){
   //we've done ComputeBoW() in Frame!
   {//load odom lists
-    EncData::readParam(is);
-    IMUData::readParam(is);
     listeig(EncData) lenc;
     size_t NOdom;
     is.read((char*)&NOdom,sizeof(NOdom));
@@ -187,8 +185,6 @@ bool KeyFrame::write(ostream &os){
 //   for(unsigned int i=0; i<FRAME_GRID_COLS;i++) for (unsigned int j=0; j<FRAME_GRID_ROWS;j++){ size_t nSize;os.write((char*)&nSize,sizeof(nSize));writeVec(os,mGrid[i][j]);}//we can still get it from mvKeysUn
   //we add extra info for KF at the end for KeyFrame::write & Frame::read+KeyFrame::read
   {//save odom lists
-    EncData::writeParam(os);
-    IMUData::writeParam(os);
     unique_lock<mutex> lock(mMutexOdomData);
     const listeig(EncData) &lenc=mOdomPreIntEnc.getlOdom();
     size_t NOdom=lenc.size();

@@ -17,6 +17,10 @@ cv::Mat IMUInitialization::GetGravityVec(void){
   //unique_lock<mutex> lock(mMutexInitIMU);//now we don't need mutex for it 1stly calculated only in this thread and then it will be a const!
   return mGravityVec;//.clone();//avoid simultaneous operation
 }
+void IMUInitialization::SetGravityVec(const cv::Mat &mat){
+  //unique_lock<mutex> lock(mMutexInitIMU);//now we don't need mutex for it 1stly calculated only in this thread and then it will be a const!
+  mGravityVec=mat.clone();//avoid simultaneous operation
+}
 
 void IMUInitialization::Run(){
   unsigned long initedid;

@@ -86,20 +86,32 @@ void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc)
 }
 void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
   if (!bPCL){
-    cout << endl << "Loading Map: 1st step...Keyframe (F,PrevKF,BoW),NavState(Pose) from " << filename << " ..." << endl;
+    cout << endl << "Loading Map: 1st step...SensorType(static ones),Keyframe (F,PrevKF,BoW),NavState(Pose) from " << filename << " ..." << endl;
     ifstream f;f.open(filename.c_str(),ios_base::in|ios_base::binary);
     if (!f.is_open()){
       cout<<redSTR<<"Opening Map Failed!"<<whiteSTR<<endl;
       return;
     }    
-    size_t NKFs;
-    f.read((char*)&NKFs,sizeof(NKFs));
+    char sensorType=0;//0 for nothing/pure visual SLAM, 1 for encoder/VEO, 2 for IMU/VIO, 3 for encoder+IMU/VIEO
+    f.read(&sensorType,sizeof(sensorType));
     if (f.bad()){
       f.close();
       cout<<redSTR<<"Reading Map Failed!"<<whiteSTR<<endl;
       return;
     }
+    cout<<(int)sensorType<<"!Mode"<<endl;
+    if (sensorType==1||sensorType==3){
+      EncData::readParam(f);
+    }
+    if (sensorType==2||sensorType==3){
+      IMUData::readParam(f);
+      cv::Mat gravityVec(3,1,CV_32F);
+      KeyFrame::readMat(f,gravityVec);
+      mpIMUInitiator->SetGravityVec(gravityVec);
+    }
     
+    size_t NKFs;
+    f.read((char*)&NKFs,sizeof(NKFs));
     list<unsigned long> lRefKFParentId;//old parent id of mpTracker->mlpReferences
     if (!mpViewer->isFinished()&&!mpLocalMapper->isFinished()&&!mpLoopCloser->isFinished()&&!mpIMUInitiator->GetFinish()){
       mpTracker->Reset();
@@ -236,6 +248,10 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     if (iFirstBad>0){
       mpTracker->mState=Tracking::MAP_REUSE;
       mpTracker->SetLastKeyFrame(vpKFs[iFirstBad-1]);
+      mpTracker->SetReferenceKF(vpKFs[iFirstBad-1]);
+      if (sensorType>=2){
+	mpIMUInitiator->SetVINSInited(true);
+      }
     }
     
     cout<<"Over"<<endl;
@@ -245,10 +261,22 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
 }
 void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBadKF){//maybe can be rewritten in Tracking.cc
   if (!bPCL){
-    cout << endl << "Saving Map: 1st step...Keyframe NavState & matched MapPoints' old Id to " << filename << " ..." << endl;
+    cout << endl << "Saving Map: 1st step...SensorType(static ones),Keyframe NavState & matched MapPoints' old Id to " << filename << " ..." << endl;
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
     ofstream f;f.open(filename.c_str(),ios_base::out|ios_base::binary);
 
+    char sensorType=0;//0 for nothing/pure visual SLAM, 1 for encoder/VEO, 2 for IMU/VIO, 3 for encoder+IMU/VIEO
+    if (mpIMUInitiator->GetSensorEnc()) ++sensorType;
+    if (mpIMUInitiator->GetVINSInited()) sensorType+=2;
+    f.write(&sensorType,sizeof(sensorType));
+    if (sensorType==1||sensorType==3){//notice here we should always keep parameters same as before
+      EncData::writeParam(f);
+    }
+    if (sensorType==2||sensorType==3){
+      IMUData::writeParam(f);
+      KeyFrame::writeMat(f,mpIMUInitiator->GetGravityVec());
+    }
+    
     long unsigned int nlData;
     const long unsigned int* pnlData;//for id
     size_t NKFs=vpKFs.size();size_t NKFsInit=NKFs;
@@ -298,6 +326,7 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
 	f.write((char*)&nlData,sizeof(nlData));
       }
     }
+    
     cout << "2nd step...MapPoint's old Id & Position & refKFId & observations to " << filename << " ..." << endl;
     //all MPs/KFs in mpMap are not bad!
     vector<MapPoint*> vpMPs=mpMap->GetAllMapPoints();

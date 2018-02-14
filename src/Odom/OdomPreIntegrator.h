@@ -6,6 +6,8 @@
 #include "OdomData.h"
 #include "so3.h"//for IMUPreIntegratorBase::PreIntegration
 
+#include <iostream>
+
 namespace ORB_SLAM2{
 
 using namespace Eigen;
@@ -133,7 +135,7 @@ template<class IMUDataBase>
 void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,const double &timeStampj,const Vector3d &bgi_bar,const Vector3d &bai_bar,
 						       const typename listeig(IMUDataBase)::const_iterator &iterBegin,const typename listeig(IMUDataBase)::const_iterator &iterEnd){
   //TODO: refer to the code by JingWang
-  if (iterBegin!=iterEnd){//default parameter = !mlOdom.empty()
+  if (iterBegin!=iterEnd&&timeStampi<timeStampj){//default parameter = !mlOdom.empty(); timeStampi may >=timeStampj for Map Reuse
     // Reset pre-integrator first
     reset();
     // remember to consider the gap between the last KF and the first IMU
@@ -147,6 +149,7 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
       if (iterj==iterEnd) tj=timeStampj; else{ tj=iterj->mtm;assert(tj-tj_1>=0);}
       dt=tj-tj_1;
       if (dt==0) continue;//for we use [nearest imu data at timeStampi, nearest but <=timeStampj] or [/(timeStampi,timeStampj], when we concate them in KeyFrameCulling(), dt may be 0
+      if (dt>1.5){ this->mdeltatij=0;std::cout<<"CheckIMU!!!"<<std::endl;return;}//for Map Reuse, the edge between last KF of the map and 0th KF of 2nd SLAM should have no odom info (20frames,>=10Hz, 1.5s<=2s is enough for not using MAP_REUSE_RELOC)
       
       //selete/design measurement_j-1
       const IMUDataBase& imu=*iterjm1;//imuj-1 for w~j-1 & a~j-1 chooses imu(tj-1), maybe u can try (imu(tj-1)+imu(tj))/2 or other filter here
