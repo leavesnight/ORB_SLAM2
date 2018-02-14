@@ -31,7 +31,7 @@ namespace ORB_SLAM2
 LocalMapping::LocalMapping(Map *pMap, const bool bMonocular,const string &strSettingPath):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-    mnLastOdomKFId(0),mpLastCamKF(NULL)
+    mnLastOdomKFId(0),mpLastCamKF(NULL)//added by zzh
 {//zzh
   cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
   cv::FileNode fnSize=fSettings["LocalMapping.LocalWindowSize"];
@@ -90,11 +90,10 @@ void LocalMapping::Run()
             if((!CheckNewKeyFrames()) && !stopRequested())//if the newKFs list is idle and not requested stop by LoopClosing/localization mode
             {
                 // Local BA
-                if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, should add Odom condition here!
+                if(mpMap->KeyFramesInMap()>2){//at least 3 KFs in mpMap, we add Odom condition: 1+1=2 is the threshold of the left &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+1
 		  chrono::steady_clock::time_point t1=chrono::steady_clock::now();
-		  
 		  if(!mpIMUInitiator->GetVINSInited()){
-		    if (mpCurrentKeyFrame->mnId>mnLastOdomKFId+1){//1+1=2 is the threshold of the left &&mpCurrentKeyFrame->mnId>mnLastOdomKFId+1
+		    if (mpCurrentKeyFrame->mnId>mnLastOdomKFId+1){
 		      if (!mpIMUInitiator->GetSensorEnc())
 			Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA,mpMap);//local BA
 		      else
@@ -104,7 +103,6 @@ void LocalMapping::Run()
 		    Optimizer::LocalBundleAdjustmentNavStatePRV(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mpIMUInitiator->GetGravityVec());
 		    //Optimizer::LocalBAPRVIDP(mpCurrentKeyFrame,mnLocalWindowSize,&mbAbortBA, mpMap, mGravityVec);
 		  }
-		  
 		  cout<<blueSTR"Used time in localBA="<<chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now()-t1).count()<<whiteSTR<<endl;
 		}
 
@@ -894,6 +892,8 @@ void LocalMapping::ResetIfRequested()
         mlNewKeyFrames.clear();
         mlpRecentAddedMapPoints.clear();
         mbResetRequested=false;
+	
+	mnLastOdomKFId=0;mpLastCamKF=NULL;//added by zzh
     }
 }
 

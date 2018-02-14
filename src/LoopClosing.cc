@@ -321,8 +321,8 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);//how?
-	    int minInliers=mnLastOdomKFId==0?20:10;
-            pSolver->SetRansacParameters(0.99,minInliers,300);//20 is stricter than Relocalization()s, old 20 new 10
+	    int minInliers=mnLastOdomKFId==0?20:10;//20 is stricter than Relocalization()s, old 20 new 10
+            pSolver->SetRansacParameters(0.99,minInliers,300);
             vpSim3Solvers[i] = pSolver;
         }
 
@@ -705,6 +705,8 @@ void LoopClosing::ResetIfRequested()
         mlpLoopKeyFrameQueue.clear();
         mLastLoopKFid=0;
         mbResetRequested=false;
+	
+	mnLastOdomKFId=0;mnCovisibilityConsistencyTh=3;//added by zzh
     }
 }
 

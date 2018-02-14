@@ -49,7 +49,7 @@ class Optimizer
 {
 public:
   template<class KeyFrame>
-  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false);//2 frames' motion-only BA, automatically fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
+  int static PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw,const bool bComputeMarg=false,const bool bNoMPs=false);//2 frames' motion-only BA, automatically fix/unfix lastF/KF and optimize curF/curF&last, if bComputeMarg then save its Hessian
   template<class KeyFrame>
   static void PoseOptimizationAddEdge(KeyFrame* pFrame,vector<g2o::EdgeNavStatePVRPointXYZOnlyPose*> &vpEdgesMono,vector<size_t> &vnIndexEdgeMono,
 			       const Matrix3d &Rcb,const Vector3d &tcb,g2o::SparseOptimizer &optimizer,int LastKFPVRId){}//we specialize the Frame version
@@ -96,7 +96,7 @@ public:
 //created by zzh
 using namespace Eigen;
 template <class KeyFrame>
-int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg){
+int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat& gw, const bool bComputeMarg,const bool bNoMPs){
   //automatically judge if fix lastF/KF(always fixed)
   bool bFixedLast=true;
   if (pLastKF->mbPrior) bFixedLast=false;
@@ -277,7 +277,7 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
   if (!bFixedLast) PoseOptimizationAddEdge<KeyFrame>(pLastKF,vpEdgesMonoLast,vnIndexEdgeMonoLast,Rcb,tcb,optimizer,LastKFPVRId);
   }
 
-  if(nInitialCorrespondences<3)//at least P3P（well posed equation） EPnP(n>3) (overdetermined equation)
+  if(nInitialCorrespondences<3&&!bNoMPs)//at least P3P（well posed equation） EPnP(n>3) (overdetermined equation)
       return 0;
 
   // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier

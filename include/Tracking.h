@@ -59,6 +59,8 @@ class System;
 class Tracking
 {  
   //Created by zzh
+  //pure encoder edges
+  void TrackWithOnlyOdom(bool bMapUpdated);
   // Odom PreIntegration
   template<class EncData>
   inline bool iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTime,
