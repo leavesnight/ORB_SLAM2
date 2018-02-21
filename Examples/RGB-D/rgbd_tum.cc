@@ -207,7 +207,8 @@ int main(int argc, char **argv)
     ORB_SLAM2::System::eSensor sensor=ORB_SLAM2::System::RGBD;
     if (bMode!=0) sensor=ORB_SLAM2::System::MONOCULAR;
     ORB_SLAM2::System SLAM(argv[1],argv[2],sensor,true);
-    if (strMapname!="") SLAM.LoadMap(strMapname,false);//for Map Reuse
+    bool bLoaded=false;
+    if (strMapname!="") bLoaded=SLAM.LoadMap(strMapname,false);//for Map Reuse
     g_pSLAM=&SLAM;
     cin.get();
 
@@ -296,7 +297,7 @@ int main(int argc, char **argv)
     SLAM.SaveTrajectoryTUM("CameraTrajectory_NO_FULLBA.txt");
 //     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory2.txt"); 
 //     SLAM.SaveMap("MapTmp.bin",false,true,true);
-    if (!fnFBA.empty()){
+    if (!fnFBA.empty()&&!bLoaded){
       if((int)fnFBA){
 	SLAM.FinalGBA(fnFBA);
 	cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;

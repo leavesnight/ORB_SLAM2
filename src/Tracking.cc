@@ -933,17 +933,22 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
         else
         {
             // Localization Mode: Local Mapping is deactivated
-
-            if(mState==LOST)
+	    if (mState==MAP_REUSE){
+	      PreIntegration();
+	      bOK=Relocalization();
+	      cout<<greenSTR"Relocalization()"whiteSTR<<" "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mnId<<" "<<(int)bOK<<endl;
+	    }else if(mState==LOST)
             {
                 bOK = Relocalization();
+		cout<<"Lost--Local. Mode"<<endl;
             }
             else
             {
+		if (!mLastFrame.mTcw.empty()) GetVelocityByEnc();//try to utilize the Encoder's data
+		else cout<<redSTR<<"LastFrame has no Tcw!"<<whiteSTR<<endl;
                 if(!mbVO)
                 {
                     // In last frame we tracked enough MapPoints in the map
-
                     if(!mVelocity.empty())
                     {
                         bOK = TrackWithMotionModel();
@@ -995,6 +1000,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                     else if(bOKReloc)
                     {
                         mbVO = false;
+			cout<<"Reloc--Local. Mode"<<endl;
                     }
 
                     bOK = bOKReloc || bOKMM;
@@ -1123,7 +1129,10 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
             If the transition frame's tracking is unstable, we can improve it through our no Hessian matrix strategy~
         }else if (mState==ODOMOK){//if it's lost in Camera mode we use Odom mode
 	    // not necessary to update motion model for mVelocity is already got through odom data
-	    /*// Clean VO matches, related to Localization mode
+	  
+	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
+	    
+	    // Clean VO matches, related to Localization mode
             for(int i=0; i<mCurrentFrame.N; i++)
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -1133,9 +1142,8 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                         mCurrentFrame.mvbOutlier[i] = false;//though motion-only BA will initialize this, here is for new MapPoints created by CreateNewKeyFrame(), they must be inliers
                         mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
                     }
-            }*/  
-	  
-	    mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
+            }
+            
 	    if(NeedNewKeyFrame()){
               CreateNewKeyFrame(img);//only create the only CurrentFrame viewed MapPoints without inliers+outliers in mpMap, to avoid possibly replicated MapPoints
 	    }
@@ -1146,7 +1154,7 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
 	}
 
         // Reset if the camera get lost soon after initialization
-        if(mState==LOST)
+        if(!mbOnlyTracking&&mState==LOST)
         {
 	  bool autoreset=mpIMUInitiator->GetSensorIMU()&&!mpIMUInitiator->mbUsePureVision?!mpIMUInitiator->GetVINSInited():mpMap->KeyFramesInMap()<=5;
 	  if(autoreset)
@@ -1654,10 +1662,15 @@ bool Tracking::TrackLocalMap()
 
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently (recent 1s)
-    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
+    int threInlierReloc=50,threInliers=30;
+    if (mbOnlyTracking&&mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//rectified like TrackLocalMapWithIMU() for fusion reason
+      threInlierReloc=25;
+      threInliers=15;
+    }
+    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<threInlierReloc)
         return false;
 
-    if(mnMatchesInliers<30)//notice it's a class data member
+    if(mnMatchesInliers<threInliers)//notice it's a class data member
         return false;
     else
         return true;

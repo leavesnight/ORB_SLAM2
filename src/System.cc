@@ -84,20 +84,20 @@ void System::SaveKeyFrameTrajectoryNavState(const string &filename,bool bUseTbc)
     f.close();
     cout << endl << "NavState trajectory saved!" << endl;
 }
-void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
+bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
   if (!bPCL){
     cout << endl << "Loading Map: 1st step...SensorType(static ones),Keyframe (F,PrevKF,BoW),NavState(Pose) from " << filename << " ..." << endl;
     ifstream f;f.open(filename.c_str(),ios_base::in|ios_base::binary);
     if (!f.is_open()){
       cout<<redSTR<<"Opening Map Failed!"<<whiteSTR<<endl;
-      return;
+      return false;
     }    
     char sensorType=0;//0 for nothing/pure visual SLAM, 1 for encoder/VEO, 2 for IMU/VIO, 3 for encoder+IMU/VIEO
     f.read(&sensorType,sizeof(sensorType));
     if (f.bad()){
       f.close();
       cout<<redSTR<<"Reading Map Failed!"<<whiteSTR<<endl;
-      return;
+      return false;
     }
     cout<<(int)sensorType<<"!Mode"<<endl;
     if (sensorType==1||sensorType==3){
@@ -256,7 +256,7 @@ void System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     
     cout<<"Over"<<endl;
     f.close();
-    return;
+    return true;
   }
 }
 void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBadKF){//maybe can be rewritten in Tracking.cc
