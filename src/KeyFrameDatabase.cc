@@ -95,7 +95,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
                 if(pKFi->mnLoopQuery!=pKF->mnId)//initial mnLoopQuery==0, pKF->mnId!=0(LoopClosing won't use fixed KF0) -> restart count for mnLoopWords when detecting a new KF's loop candidates
                 {
                     pKFi->mnLoopWords=0;
-                    if(!spConnectedKeyFrames.count(pKFi)&&(!bVIO||bVIO&&pKF->mnId-pKFi->mnId>10))//if not in 1st layer covisibility KFs, add pKFi into lKFsSharingWords
+                    if(!spConnectedKeyFrames.count(pKFi)&&(!bVIO||bVIO&&pKF->mnId-pKFi->mnId>10))//if not in 1st layer covisibility KFs, add pKFi into lKFsSharingWords //last1stOdomKFId>0&&pKFi->mnId<last1stOdomKFId||
                     {
                         pKFi->mnLoopQuery=pKF->mnId;
                         lKFsSharingWords.push_back(pKFi);

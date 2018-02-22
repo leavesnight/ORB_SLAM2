@@ -21,7 +21,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
 //     std::cout<<timeStampi<<" "<<timeStampj<<" "<<timeStampi-iterBegin->mtm<<" "<<timeStampj-(--it)->mtm<<std::endl;
 //     assert(abs(timeStampi-iterBegin->mtm)<0.01&&abs(timeStampj-(it)->mtm)<0.01);
     
-    Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);Matrix6d eigSigmaDrop(Matrix6d::Identity());
+    Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);
     double rc(EncData::mrc);
     
     for (listeig(EncData)::const_iterator iterj=iterBegin;iterj!=iterEnd;){//start iterative method from i/iteri->tm to j/iter->tm
@@ -43,6 +43,8 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
       
       //selete/design measurement_j-1
       double vl,vr;//vlj-1,vrj-1
+      vl=iterjm1->mv[0];vr=iterjm1->mv[1];//this way seems to be more precise than the following one (arithmatical average) for Corridor004
+      /*
       if (iterj!=iterEnd){
 	vl=(iterjm1->mv[0]+iterj->mv[0])/2,vr=(iterjm1->mv[1]+iterj->mv[1])/2;
 // 	if (iterj->mtm>timeStampj){
@@ -51,7 +53,7 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
 // 	}
       }else{
 	vl=iterjm1->mv[0];vr=iterjm1->mv[1];
-      }
+      }*/
       double vf=(vl+vr)/2,w=(-vl+vr)/2/rc;//[vf;w]k=1/2*[1 1;-1/rc 1/rc]*[vl;vr]k, here k=j-1
       
       //calculate Sigmaij firstly to use deltaThetaijMz as deltaTheta~ij-1z, maybe we can use deltaP~ij-1 instead of vf/w here

@@ -146,6 +146,7 @@ bool LoopClosing::DetectLoop()
         mlpLoopKeyFrameQueue.pop_front();
         // Avoid that a keyframe can be erased while it is being process by this thread in this function
         mpCurrentKF->SetNotErase();
+	cout<<"SetNotErase"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
     }
     
     if (mpCurrentKF->getState()==Tracking::ODOMOK){
@@ -158,6 +159,7 @@ bool LoopClosing::DetectLoop()
     {
         mpKeyFrameDB->add(mpCurrentKF);//add CurrentKF into KFDataBase
         mpCurrentKF->SetErase();//allow CurrentKF to be erased
+	cout<<"Too close, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         return false;
     }
 
@@ -179,7 +181,6 @@ bool LoopClosing::DetectLoop()
         if(score<minScore)
             minScore = score;
     }
-
     // Query the database imposing the minimum score
     vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore, mbLoopMore&&mpIMUInitiator->GetVINSInited());//returned KFs cannot be in vpConnectedKeyFrames(not made from score(BowVecs))
 
@@ -247,6 +248,7 @@ bool LoopClosing::DetectLoop()
         {
             ConsistentGroup cg = make_pair(spCandidateGroup,0);
             vCurrentConsistentGroups.push_back(cg);
+// 	    if (mnCovisibilityConsistencyTh==0) mvpEnoughConsistentCandidates.push_back(pCandidateKF);
         }
     }
 
@@ -264,7 +266,7 @@ bool LoopClosing::DetectLoop()
     }
     else//if any candidate group is enough(counter >=3) consistent with any previous group
     {//first some detection()s won't go here
-        cout<<"DetectLoop!"<<endl;
+        cout<<"DetectLoop!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         return true;//keep mpCurrentKF->mbNotErase==true until ComputeSim3() or even CorrectLoop()
     }
 
