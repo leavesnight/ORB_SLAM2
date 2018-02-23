@@ -56,8 +56,8 @@ Camera.Tce:
 LocalMapping.LocalWindowSize: 20
 
 # the Error allow between "simultaneous" IMU data(Timu=Timu+delaytoimu) & Image's mTimeStamp(Timg): Timu=[Timg-err,Timg+err]; out of this range, no IMU data is used between 2KFs/Fs, max 1/fps; we suppose ErrEncImg=ErrIMUImg
-ErrIMUImg: 0.01
-#ErrIMUImg: 0.020
+#ErrIMUImg: 0.5
+ErrIMUImg: 0.020 #0.01
 
 # IMU Initialization Check starts at InitTime and ends at FinalTime, the IMU Initialization thread also sleep(SleepTime) (s)
 IMU.InitTime: 0
@@ -68,9 +68,6 @@ IMU.SleepTime: 1.0
 GBA.iterations: 10
 GBA.initIterations: 15
 GBA.finalIterations: 20
-
-# if use A looser restriction for LoopClosing(old strategy of Loop KF exludes all covisible KFs), default 0
-Loop.More: 0
 
 #--------------------------------------------------------------------------------------------
 # Camera Parameters. Adjust them!

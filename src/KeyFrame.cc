@@ -539,11 +539,11 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
     //In case no keyframe counter is over threshold add the one with maximum counter
     int nmax=0;
     KeyFrame* pKFmax=NULL;
-    int th = 15;//the least number of covisible MapPoints between two KFs to add connection
+    int th = 15;//the least number of covisible MapPoints between two KFs to add connection, old 15
 
     vector<pair<int,KeyFrame*> > vPairs;
     vPairs.reserve(KFcounter.size());
-    for(map<KeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend; mit++)
+    for(map<KeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend;++mit)//finally we keep the unidirectional edge strategy for we don't want to change the pure RGBD part!
     {
         if(mit->second>nmax)
         {
@@ -553,8 +553,12 @@ void KeyFrame::UpdateConnections(KeyFrame* pLastKF)
         if(mit->second>=th)
         {
             vPairs.push_back(make_pair(mit->second,mit->first));
-            (mit->first)->AddConnection(this,mit->second);
-        }
+            (mit->first)->AddConnection(this,mit->second);//notice here when <th but vPairs is not empty, it's only one directed edge in the covisibility graph!!! is this right? I think it's wrong, so I added a revision
+// 	    ++mit;
+        }/*else if (mit->first!=pKFmax){//we avoid one directional edge!
+	  mit=KFcounter.erase(mit);//revised by zzh, one original bug of ORBSLAM2!
+        }else ++mit;*/
+//         (mit->first)->AddConnection(this,mit->second);
     }
 
     if(vPairs.empty())

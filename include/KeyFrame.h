@@ -362,7 +362,7 @@ protected:
     // Grid over the image to speed up feature matching
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;//covisibility graph need KFs >0 covisible MapPoints 
+    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;//covisibility graph need KFs (>0 maybe unidirectional edge!maybe u can revise it~) covisible MapPoints 
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;//ordered covisibility graph/connected KFs need KFs >=15 covisible MPs or the KF with Max covisible MapPoints
     std::vector<int> mvOrderedWeights;//covisible MPs' number
 

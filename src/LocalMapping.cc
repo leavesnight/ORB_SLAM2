@@ -70,7 +70,7 @@ void LocalMapping::Run()
             // BoW conversion and insertion in Map
 	    cout<<"Processing New KF...";
             ProcessNewKeyFrame();
-	    cout<<"Over"<<endl;
+	    cout<<mpCurrentKeyFrame->mnId<<" Over"<<endl;
 	    mpIMUInitiator->SetCurrentKeyFrame(mpCurrentKeyFrame);//zzh
 
             // Check recent added MapPoints
@@ -762,7 +762,9 @@ void LocalMapping::KeyFrameCulling()
         double tmNext=-1;
 	if (k==0){
 	  if (bSensorIMU){//restriction is only for VIO
-	    assert(pKF!=NULL&&pKF->GetPrevKeyFrame()!=NULL);//bug?
+	    assert(pKF!=NULL);
+// 	    assert(pKF->GetPrevKeyFrame()!=NULL);//solved old bug: for there exists unidirectional edge in covisibility graph, so a bad KF may still exist in other's connectedKFs
+	    if (pKF->GetPrevKeyFrame()==NULL){cout<<pKF->mnId<<" "<<(int)pKF->isBad()<<endl;vbEntered[vi]=true;continue;}
 	    tmNext=pKF->GetNextKeyFrame()->mTimeStamp;
 	    if (tmNext-pKF->GetPrevKeyFrame()->mTimeStamp>0.5) continue;
 	    else vbEntered[vi]=true;
@@ -779,6 +781,7 @@ void LocalMapping::KeyFrameCulling()
 	
         //cannot erase last ODOMOK & first ODOMOK's parent!
         KeyFrame *pNextKF=pKF->GetNextKeyFrame();
+	if (pNextKF==NULL){ cout<<"NoticeNextKF==NULL: "<<pKF->mnId<<" "<<(int)pKF->isBad()<<endl;continue;}//solved old bug
 // 	if (pNextKF!=NULL){//for simple(but a bit wrong) Map Reuse, we avoid segmentation fault for the last KF of the loaded map
 	if (pNextKF->getState()==Tracking::ODOMOK){
 	  if (pKF->getState()==Tracking::ODOMOK){//2 consecutive ODOMOK KFs then delete the former one for a better quality map

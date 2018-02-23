@@ -1871,7 +1871,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 	    if (pKF->GetWeight(pParentKF)<minFeat){//pure odom edge
 	      if (pKF->getState()!=2&&pKF->GetPrevKeyFrame()==pParentKF||pParentKF->getState()!=2&&pParentKF->GetPrevKeyFrame()==pKF){//pure Odom Edge, need to decrease information matrix!
 		EncPreIntegrator encpreint;
-		if (pKF->getState()!=2){
+		if (pKF->GetPrevKeyFrame()==pParentKF){
 		  encpreint=pKF->GetEncPreInt();
 		}else{
 		  encpreint=pParentKF->GetEncPreInt();
@@ -1956,6 +1956,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             }
         }
     }
+    cout<<"Spanning tree edge end!"<<endl;
 
     // Optimize!
     optimizer.initializeOptimization();//optimize all KFs' Pose Siw by new loop edges and normal edges
@@ -2019,6 +2020,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         pMP->UpdateNormalAndDepth();//update MP's normal for its position changed
     }
     //don't call pMap->InformNewChange(); for it's done outside
+    cout<<"PoseGraph end!"<<endl;
 }
 
 int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, g2o::Sim3 &g2oS12, const float th2, const bool bFixScale)

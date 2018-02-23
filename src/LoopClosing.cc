@@ -57,13 +57,6 @@ LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, 
     mpIMUInitiator(NULL),mnLastOdomKFId(0)//zzh
 {
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
-    cv::FileNode fnLoopMore=fSettings["Loop.More"];
-    if (fnLoopMore.empty()){
-      mbLoopMore=false;
-    }else{
-      if (mbLoopMore=(int)fnLoopMore)//allow loop detection of covisible KFs with weight<10 but mnId<mCurrentFrame.mnId-10
-	cout<<yellowSTR"Use more Loop Detection!"<<whiteSTR<<endl;
-    }
     cv::FileNode fnIter[2]={fSettings["GBA.iterations"],fSettings["GBA.initIterations"]};
     if (fnIter[0].empty()||fnIter[1].empty()){
       mnInitIterations=15;//15 as the VIORBSLAM paper
@@ -145,21 +138,22 @@ bool LoopClosing::DetectLoop()
         mpCurrentKF = mlpLoopKeyFrameQueue.front();
         mlpLoopKeyFrameQueue.pop_front();
         // Avoid that a keyframe can be erased while it is being process by this thread in this function
-        mpCurrentKF->SetNotErase();
+	if (mpCurrentKF->getState()==Tracking::ODOMOK){//it's quite rare for ODOMOK to close loop, so we just jump over it
+	  mnLastOdomKFId=mpCurrentKF->mnId;
+	  mnCovisibilityConsistencyTh=1;//like Relocalization()
+	  mpKeyFrameDB->add(mpCurrentKF);
+	  return false;
+	}
 	cout<<"SetNotErase"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
-    }
-    
-    if (mpCurrentKF->getState()==Tracking::ODOMOK){
-      mnLastOdomKFId=mpCurrentKF->mnId;
-      mnCovisibilityConsistencyTh=1;//like Relocalization()
+        mpCurrentKF->SetNotErase();
     }
 
     //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection(CorrectLoop()), close in time from last loop
     if(mpCurrentKF->mnId<mLastLoopKFid+10)
     {
         mpKeyFrameDB->add(mpCurrentKF);//add CurrentKF into KFDataBase
-        mpCurrentKF->SetErase();//allow CurrentKF to be erased
 	cout<<"Too close, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        mpCurrentKF->SetErase();//allow CurrentKF to be erased
         return false;
     }
 
@@ -182,13 +176,14 @@ bool LoopClosing::DetectLoop()
             minScore = score;
     }
     // Query the database imposing the minimum score
-    vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore, mbLoopMore&&mpIMUInitiator->GetVINSInited());//returned KFs cannot be in vpConnectedKeyFrames(not made from score(BowVecs))
+    vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore);//returned KFs cannot be in vpConnectedKeyFrames(not made from score(BowVecs))
 
     // If there are no loop candidates, just add new keyframe and return false
     if(vpCandidateKFs.empty())
     {
         mpKeyFrameDB->add(mpCurrentKF);
         mvConsistentGroups.clear();//for it hasn't loop candidate KFs, it breaks the rule of "consecutive" new KFs condition for loop validation/roubst loop detection->restart mvConsistentGroups' counter
+	cout<<"Empty, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         mpCurrentKF->SetErase();
         return false;
     }
@@ -261,6 +256,7 @@ bool LoopClosing::DetectLoop()
 
     if(mvpEnoughConsistentCandidates.empty())
     {
+	cout<<"Final Empty, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         mpCurrentKF->SetErase();
         return false;
     }
@@ -402,6 +398,7 @@ bool LoopClosing::ComputeSim3()
 
     if(!bMatch)//if BA inliers validation is not passed
     {
+	cout<<"bMatch==false, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         for(int i=0; i<nInitialCandidates; i++)
              mvpEnoughConsistentCandidates[i]->SetErase();//allow loop candidate KFs && mpCurrentKF to be erased for KF.mspLoopEdges is only added in CorrectLoop()
         mpCurrentKF->SetErase();
@@ -452,6 +449,7 @@ bool LoopClosing::ComputeSim3()
     }
     else//not pass the final validation like SearchLocalPoints() in Tracking
     {//allow loop candidate KFs && mpCurrentKF to be erased for KF.mspLoopEdges is only added in CorrectLoop()
+	cout<<"nTotalMatches<40, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         for(int i=0; i<nInitialCandidates; i++)
             mvpEnoughConsistentCandidates[i]->SetErase();
         mpCurrentKF->SetErase();

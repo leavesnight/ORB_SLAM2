@@ -99,7 +99,7 @@ void Tracking::TrackWithOnlyOdom(bool bMapUpdated){
     //it's difficult to get mCurrentFrame.mvbOutlier like motion-only BA
     mState=ODOMOK;
     cout<<greenSTR<<mVelocity.at<float>(0,3)<<" "<<mVelocity.at<float>(1,3)<<" "<<mVelocity.at<float>(2,3)<<whiteSTR<<endl;
-    cout<<"ODOM KF: "<<mCurrentFrame.mnId<<endl;
+    cout<<"ODOM KF: "<<mCurrentFrame.mTimeStamp<<endl;
   }else{//VIEO, for convenience, we don't use mVelocity as EncPreIntegrator from LastFrame
     using namespace Eigen;
     //motion update/prediction by Enc motion model
@@ -143,7 +143,7 @@ void Tracking::TrackWithOnlyOdom(bool bMapUpdated){
     mLastFrame.GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
     mLastFrame.GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
     mVelocity=mCurrentFrame.mTcw*LastTwc;//Tc2c1/Tcl
-    cout<<greenSTR<<"IEODOM KF: "<<mCurrentFrame.mnId<<whiteSTR<<endl;
+    cout<<greenSTR<<"IEODOM KF: "<<mCurrentFrame.mTimeStamp<<whiteSTR<<endl;
   }
 }
 
@@ -297,10 +297,10 @@ bool Tracking::TrackWithIMU(bool bMapUpdated){
         }
     }    
 
-    if(mbOnlyTracking)
+    if(mbOnlyTracking)//we haven't designed tracking mode in VIO/VIEO, but we can just consider VIEO map as VEO then use VEO tracking mode! & VIO map as RGBD map then use RGBD tracking mode!
     {
-        mbVO = nmatchesMap<10;//change to VO mode if the inlier MapPoint is too few i.e. robot goes to the new environment outside of the given map
-        return nmatches>20;//Track ok when enough inlier matches
+        mbVO = nmatchesMap<6;//change to VO mode if the inlier MapPoint is too few i.e. robot goes to the new environment outside of the given map;old 10
+        return nmatches>12;//Track ok when enough inlier matches;old 20
     }
 
     return nmatchesMap>=6;//10;//Track ok when enough inlier MapPoints, changed by JingWang
@@ -942,8 +942,11 @@ void Tracking::Track(cv::Mat img[2])//changed a lot by zzh inspired by JingWang
                 bOK = Relocalization();
 		cout<<"Lost--Local. Mode"<<endl;
             }
-            else
-            {
+            else if (mpIMUInitiator->GetVINSInited()){//if IMU info(bgi,gw,bai) is intialized use IMU motion model
+	      // Todo: Add VIO & VIEO Tracking Mode, it's not key for our target, so we haven't finished this part
+	      cout<<redSTR<<"Entering Wrong Tracking Mode With VIO/VIEO, Please Check!"<<endl;
+	      assert(0);
+	    }else{
 		if (!mLastFrame.mTcw.empty()) GetVelocityByEnc();//try to utilize the Encoder's data
 		else cout<<redSTR<<"LastFrame has no Tcw!"<<whiteSTR<<endl;
                 if(!mbVO)
@@ -1663,7 +1666,7 @@ bool Tracking::TrackLocalMap()
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently (recent 1s)
     int threInlierReloc=50,threInliers=30;
-    if (mbOnlyTracking&&mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//rectified like TrackLocalMapWithIMU() for fusion reason
+    if (mbOnlyTracking&&mCurrentFrame.mOdomPreIntEnc.mdeltatij>0){//rectified like TrackLocalMapWithIMU() for fusion effect (it largely affects Localization Mode)
       threInlierReloc=25;
       threInliers=15;
     }
@@ -1737,7 +1740,7 @@ bool Tracking::NeedNewKeyFrame()
 
     // Thresholds
     float thRefRatio = 0.75f;
-    if(nKFs<2)//is it necessary for this stricter enough distance threshold?
+    if(nKFs<2||mState==OK&&mpLastKeyFrame->mnId<mnLastOdomKFId+2)//it's necessary for this stricter enough distance threshold! in my dataset Corridor004, like nKFs<=2!
         thRefRatio = 0.4f;
 
     if(mSensor==System::MONOCULAR)
@@ -2230,7 +2233,7 @@ bool Tracking::Relocalization()
     {
         mnLastRelocFrameId = mCurrentFrame.mnId;
 	
-	if (mpIMUInitiator->GetSensorIMU()&&!mpIMUInitiator->mbUsePureVision){
+	if (!mbOnlyTracking&&mpIMUInitiator->GetSensorIMU()&&!mpIMUInitiator->mbUsePureVision){//Tracking mode doesn't enter this part
 	  assert(mpIMUInitiator->GetVINSInited()&&"VINS not inited? why.");
 	  mbRelocBiasPrepare=true;//notice we should call RecomputeIMUBiasAndCurrentNavstate() when 20-1 frames later, see IV-E in VIORBSLAM paper
 	}
@@ -2330,6 +2333,20 @@ void Tracking::ChangeCalibration(const string &strSettingPath)
 void Tracking::InformOnlyTracking(const bool &flag)
 {
     mbOnlyTracking = flag;
+    //added by zzh
+    static bool bSwitch=false;//a switch for VIEO/VIO suitable tracking mode(VEO/RGBD) and VIEO/VIO 2nd/continuous SLAM mode
+    if (flag){
+      if (mpIMUInitiator->GetVINSInited()){
+	bSwitch=true;
+	mpIMUInitiator->SetVINSInited(false);//notice tracking mode only has RGBD/VEO, so VIEO uses VEO & VIO uses RGBD
+      }
+    }else{
+      if (bSwitch){
+	bSwitch=false;
+	mpIMUInitiator->SetVINSInited(true);//notice tracking mode only has RGBD/VEO, so VIEO uses VEO & VIO uses RGBD
+	mState=LOST;
+      }
+    }
 }
 
 

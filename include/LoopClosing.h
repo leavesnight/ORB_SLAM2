@@ -49,7 +49,6 @@ class LoopClosing
 {
 public:
   unsigned long mnLastOdomKFId;//if >0 use loose loop detection for encoder error correction
-  bool mbLoopMore;//if uses more loop closing strategy in KeyFrameDatabase::DetectLoopCandidates()
   int mnIterations,mnInitIterations;//number of Iterations in Full BA / GBA
   
 public:

@@ -73,11 +73,10 @@ void KeyFrameDatabase::clear()
 }
 
 
-vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float minScore, bool bVIO)
+vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float minScore)
 {
     set<KeyFrame*> spConnectedKeyFrames;
-    if (!bVIO) spConnectedKeyFrames=pKF->GetConnectedKeyFrames();
-    else spConnectedKeyFrames = pKF->GetConnectedKeyFramesByWeight(6);//for a more frequent LoopClosing to improve the accuracy by Pose Graph
+    spConnectedKeyFrames=pKF->GetConnectedKeyFrames();//a more frequent LoopClosing can be achieved by deleting unidirectional edge in covisibility graph!
     list<KeyFrame*> lKFsSharingWords;
 
     // Search all keyframes that share a word with current keyframes
@@ -95,7 +94,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
                 if(pKFi->mnLoopQuery!=pKF->mnId)//initial mnLoopQuery==0, pKF->mnId!=0(LoopClosing won't use fixed KF0) -> restart count for mnLoopWords when detecting a new KF's loop candidates
                 {
                     pKFi->mnLoopWords=0;
-                    if(!spConnectedKeyFrames.count(pKFi)&&(!bVIO||bVIO&&pKF->mnId-pKFi->mnId>10))//if not in 1st layer covisibility KFs, add pKFi into lKFsSharingWords //last1stOdomKFId>0&&pKFi->mnId<last1stOdomKFId||
+                    if(!spConnectedKeyFrames.count(pKFi))//if not in 1st layer covisibility KFs, add pKFi into lKFsSharingWords
                     {
                         pKFi->mnLoopQuery=pKF->mnId;
                         lKFsSharingWords.push_back(pKFi);

@@ -250,6 +250,7 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       mpTracker->SetLastKeyFrame(vpKFs[iFirstBad-1]);
       mpTracker->SetReferenceKF(vpKFs[iFirstBad-1]);
       if (sensorType>=2){
+	mpIMUInitiator->SetFinishRequest(true);//we don't need to init when loading a VIEO/VIO map
 	mpIMUInitiator->SetVINSInited(true);
       }
     }
