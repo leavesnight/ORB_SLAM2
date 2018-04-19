@@ -51,6 +51,8 @@ public:
   unsigned long mnLastOdomKFId;//if >0 use loose loop detection for encoder error correction
   int mnIterations,mnInitIterations;//number of Iterations in Full BA / GBA
   
+  bool mbLoopDetected;//for ros_mono_pub.cc
+  
 public:
   void CreateGBA();
   

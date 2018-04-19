@@ -110,16 +110,22 @@ class Tracking
 
 public:
   //Add Odom(Enc/IMU) data to cache queue
-   cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
+  cv::Mat CacheOdom(const double &timestamp, const double* odomdata, const char mode);
    
-   void SetLastKeyFrame(KeyFrame* pKF){
-     mpLastKeyFrame=pKF;
-   }
-   void SetReferenceKF(KeyFrame* pKF){
-     mpReferenceKF=pKF;
-   }
+  void SetLastKeyFrame(KeyFrame* pKF){
+    mpLastKeyFrame=pKF;
+  }
+  void SetReferenceKF(KeyFrame* pKF){
+    mpReferenceKF=pKF;
+  }
+     
+   //for ros_mono_pub.cc
+  bool mbKeyFrameCreated;
+  cv::Mat GetKeyFramePose(){
+    return mpReferenceKF->GetPose();
+  }
    
-   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 //created by zzh over.
   
 public:

@@ -530,7 +530,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(false), mbVO(false), mpORBVocabulary(pVoc),
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0),
-    mbRelocBiasPrepare(false),mnLastOdomKFId(0)//zzh
+    mbRelocBiasPrepare(false),mnLastOdomKFId(0),mbKeyFrameCreated(false)//zzh
 {   
     // Load camera parameters from settings file
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
@@ -1871,6 +1871,8 @@ void Tracking::CreateNewKeyFrame(cv::Mat img[2])
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
+    
+    mbKeyFrameCreated=true;//for ros_mono_pub.cc
 }
 
 void Tracking::SearchLocalPoints()

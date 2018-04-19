@@ -79,6 +79,13 @@ public:
   bool LoadMap(const string &filename,bool bPCL=true,bool bReadBadKF=false);//if read bad KFs, we correct mpTracker->mlpReferences
   void SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthmap,double tm_stamp);
   int mkdir_p(string foldername,int mode);
+  //for ros_mono_pub.cc
+  bool GetLoopDetected();
+  bool SetLoopDetected(bool loopDeteced);
+  std::vector<KeyFrame*> GetAllKeyFrames();
+  bool GetKeyFrameCreated();
+  bool SetKeyFrameCreated(bool bTmp);
+  cv::Mat GetKeyFramePose();
   
 //created by zzh over.
   

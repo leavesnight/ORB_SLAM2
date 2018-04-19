@@ -41,6 +41,25 @@
 
 namespace ORB_SLAM2
 {
+bool System::GetLoopDetected(){
+  return mpLoopCloser->mbLoopDetected;
+}
+bool System::SetLoopDetected(bool loopDeteced){
+  mpLoopCloser->mbLoopDetected=loopDeteced;
+}
+std::vector<KeyFrame*> System::GetAllKeyFrames(){
+  return mpMap->GetAllKeyFrames();
+}
+bool System::GetKeyFrameCreated(){
+  return mpTracker->mbKeyFrameCreated;
+}
+bool System::SetKeyFrameCreated(bool bTmp){
+  mpTracker->mbKeyFrameCreated=bTmp;
+}
+cv::Mat System::GetKeyFramePose(){
+  return mpTracker->GetKeyFramePose();
+}
+//for ros_mono_pub.cc
 cv::Mat System::TrackOdom(const double &timestamp, const double* odomdata, const char mode){
   cv::Mat Tcw=mpTracker->CacheOdom(timestamp,odomdata,mode);
   

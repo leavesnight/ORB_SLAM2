@@ -54,7 +54,7 @@ LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, 
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), //mbFinishedGBA(true),
     mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0),
-    mpIMUInitiator(NULL),mnLastOdomKFId(0)//zzh
+    mpIMUInitiator(NULL),mnLastOdomKFId(0),mbLoopDetected(false)//zzh
 {
     cv::FileStorage fSettings(strSettingPath,cv::FileStorage::READ);
     cv::FileNode fnIter[2]={fSettings["GBA.iterations"],fSettings["GBA.initIterations"]};
@@ -849,6 +849,9 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
 
         //mbFinishedGBA = true;
         mbRunningGBA = false;
+	
+	//for ros_mono_pub.cc
+	mbLoopDetected=true;
     }
 }
 

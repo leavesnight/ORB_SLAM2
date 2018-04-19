@@ -41,11 +41,18 @@ endif()
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 
+find_package(PCL 1.7 REQUIRED)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/../../../
 ${PROJECT_SOURCE_DIR}/../../../include
 ${Pangolin_INCLUDE_DIRS}
+
+${PROJECT_SOURCE_DIR}/../../../src/Odom
 )
 
 set(LIBS 
@@ -55,6 +62,7 @@ ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/../../../Thirdparty/g2o/lib/libg2o.so
 ${PROJECT_SOURCE_DIR}/../../../lib/libORB_SLAM2.so
+-lboost_system#work for problem '_ZN5boost6system15system_categoryEv': https://github.com/raulmur/ORB_SLAM2/issues/494
 )
 
 # Node for monocular camera
@@ -63,6 +71,19 @@ src/ros_mono.cc
 )
 
 target_link_libraries(Mono
+${LIBS}
+)
+
+rosbuild_add_executable(Monopub
+src/ros_mono_pub.cc
+)
+target_link_libraries(Monopub
+${LIBS}
+)
+rosbuild_add_executable(Monosub
+src/ros_mono_sub.cc
+)
+target_link_libraries(Monosub
 ${LIBS}
 )
 
@@ -95,3 +116,9 @@ target_link_libraries(RGBD
 ${LIBS}
 )
 
+rosbuild_add_executable(RGBDpub
+src/ros_rgbd_pub.cc
+)
+target_link_libraries(RGBDpub
+${LIBS}
+)

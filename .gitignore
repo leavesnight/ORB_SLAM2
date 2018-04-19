@@ -32,3 +32,7 @@ debug.txt
 *.kdev4
 kinect2_s*.yaml
 *.save*
+*.jpg
+*.pgm
+Examples/ROS/ORB_SLAM2/*ub
+
