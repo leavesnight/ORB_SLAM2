@@ -567,7 +567,7 @@ vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>&
     for(size_t i=0;i<vToDistributeKeys.size();i++)
     {
         const cv::KeyPoint &kp = vToDistributeKeys[i];
-        vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);//no offset problem for the reason pt.x/y starts from minX/Y;maybe discard the vec.end() node to solve the border limit problem
+        vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);//no offset problem for the reason pt.x/y starts from minX/Y;won't discard the vec.end() node for float hX
     }
 
     list<ExtractorNode>::iterator lit = lNodes.begin();
