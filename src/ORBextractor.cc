@@ -118,7 +118,7 @@ static void computeOrbDescriptor(const KeyPoint& kpt,
     #define GET_VALUE(idx) \
         center[cvRound(pattern[idx].x*b + pattern[idx].y*a)*step + \
                cvRound(pattern[idx].x*a - pattern[idx].y*b)]
-    //notice this is the rotation matrix from frame IC to frame fixed,or the -theta of coordinate rotation matrix;Rfix_IC=[[cos(-th) sin(-th)][-sin(-th) cos(-th)]]
+    //notice this is the rotation matrix from frame fixed to frame IC,Rfix_IC=[cos(th) -sin(th);sin(th) cos(th)] where z is pointing inside/clockwise following +z th>0
 
     for (int i = 0; i < 32; ++i, pattern += 16)//calculate the 256bit descriptor desc
     {
