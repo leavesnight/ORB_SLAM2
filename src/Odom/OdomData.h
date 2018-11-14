@@ -118,7 +118,7 @@ public:
   }
   //need to overlap the default version to realize deep copy
   EncData(const EncData& encdata):mv{encdata.mv[0],encdata.mv[1]},mtm(encdata.mtm){}
-  EncData& operator=(const EncData& encdata){mv[0]=encdata.mv[0];mv[1]=encdata.mv[1];mtm=encdata.mtm;return *this;}
+  EncData& operator=(const EncData& encdata){mv[0]=encdata.mv[0];mv[1]=encdata.mv[1];mtm=encdata.mtm;return *this;}//useless for array name is rvalue, always be deep copied!
   
   //for Load/SaveMap()
   bool read(std::istream &is){
