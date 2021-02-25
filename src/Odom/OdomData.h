@@ -70,6 +70,7 @@ public:
     is.read((char*)mSigmabg.data(),mSigmabg.size()*sizeof(Vector3d::Scalar));
     is.read((char*)mSigmaba.data(),mSigmaba.size()*sizeof(Vector3d::Scalar));
     mInvSigmabg2=1./mSigmabg(0,0);mInvSigmaba2=1./mSigmaba(0,0);
+    return is.good();
   }
   static bool writeParam(std::ostream &os){
     os.write((char*)&mdMultiplyG,sizeof(mdMultiplyG));os.write((char*)&mdRefG,sizeof(mdRefG));
@@ -77,6 +78,7 @@ public:
     os.write((char*)mSigmaad.data(),mSigmaad.size()*sizeof(Vector3d::Scalar));
     os.write((char*)mSigmabg.data(),mSigmabg.size()*sizeof(Vector3d::Scalar));
     os.write((char*)mSigmaba.data(),mSigmaba.size()*sizeof(Vector3d::Scalar));
+    return os.good();
   }
 };
 class IMUDataDerived:public IMUDataBase
@@ -136,12 +138,14 @@ public:
     is.read((char*)&mrc,sizeof(mrc));
     is.read((char*)mSigmad.data(),mSigmad.size()*sizeof(Vector3d::Scalar));
     is.read((char*)mSigmamd.data(),mSigmamd.size()*sizeof(Vector3d::Scalar));
+    return is.good();
   }
   static bool writeParam(std::ostream &os){
     os.write((char*)&mvscale,sizeof(mvscale));
     os.write((char*)&mrc,sizeof(mrc));
     os.write((char*)mSigmad.data(),mSigmad.size()*sizeof(Vector3d::Scalar));
     os.write((char*)mSigmamd.data(),mSigmamd.size()*sizeof(Vector3d::Scalar));
+    return os.good();
   }
 };
 

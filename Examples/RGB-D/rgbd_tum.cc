@@ -136,51 +136,51 @@ int main(int argc, char **argv)
     string strMapname="";
   
     switch (argc){
-      case 5:
-	break;
-      case 10:
-	//Map Reuse RGBD
-	strMapname=argv[9];
-      case 9:
-	{
-	  finEncdata.open(argv[8]);
-	  string strTmp;
-	  getline(finEncdata,strTmp);getline(finEncdata,strTmp);getline(finEncdata,strTmp);
-	}
-      case 8:
-	bMode=atoi(argv[7]);if (bMode==2) break;
-      case 7:
-	totalNum=atoi(argv[6]);
-      case 6:
-	{
-	finOdomdata.open(argv[5]);
-	if (!finOdomdata.is_open()){
-	  cerr<< redSTR"Please check the last path_to_odometryData"<<endl;
-	  return -1;
-	}
+    case 5:
+        break;
+    case 10:
+        //Map Reuse RGBD
+        strMapname=argv[9];
+    case 9:
+    {
+        finEncdata.open(argv[8]);
         string strTmp;
-	getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);//odom.txt should have 3 unused lines
-	if (totalNum==2)
-	  pOdomThread=new thread(&odomEncRun,ref(finOdomdata));//must use ref()
-	else{
-	  pOdomThread=new thread(&odomIMURun,ref(finOdomdata),totalNum);//must use ref()
-	  if (finEncdata.is_open()) pEncThread=new thread(&odomEncRun,ref(finEncdata));
-	}
-	}
-	break;
-      default:
+        getline(finEncdata,strTmp);getline(finEncdata,strTmp);getline(finEncdata,strTmp);
+    }
+    case 8:
+        bMode=atoi(argv[7]);if (bMode==2) break;
+    case 7:
+        totalNum=atoi(argv[6]);
+    case 6:
+    {
+        finOdomdata.open(argv[5]);
+        if (!finOdomdata.is_open()){
+            cerr<< redSTR"Please check the last path_to_odometryData"<<endl;
+            return -1;
+        }
+        string strTmp;
+        getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);getline(finOdomdata,strTmp);//odom.txt should have 3 unused lines
+        if (totalNum==2)
+            pOdomThread=new thread(&odomEncRun,ref(finOdomdata));//must use ref()
+        else{
+            pOdomThread=new thread(&odomIMURun,ref(finOdomdata),totalNum);//must use ref()
+            if (finEncdata.is_open()) pEncThread=new thread(&odomEncRun,ref(finEncdata));
+        }
+    }
+        break;
+    default:
         cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
-	cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData"
-	" (number of odometryData) (Mode) (path_to_EncData)"" (path_to_Map)"<<endl;
+        cerr << redSTR"Or: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_odometryData"
+        " (number of odometryData) (Mode) (path_to_EncData)"" (path_to_Map)"<<endl;
         return 1;
     }
     
     cv::FileStorage fSettings(argv[2], cv::FileStorage::READ);//already checked in System() creator
     cv::FileNode fnDelay=fSettings["Camera.delayForPolling"];
     if (fnDelay.empty()){
-      gDelayCache=0;
+        gDelayCache=0;
     }else{
-      gDelayCache=(double)fnDelay;
+        gDelayCache=(double)fnDelay;
     }
 
     // Retrieve paths to images
@@ -228,15 +228,15 @@ int main(int argc, char **argv)
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
-	{//zzh
-	unique_lock<mutex> lock(g_mutex);
-	g_simulateTimestamp=tframe;//update g_simulateTimestamp
-	}
+        {//zzh
+            unique_lock<mutex> lock(g_mutex);
+            g_simulateTimestamp=tframe;//update g_simulateTimestamp
+        }
 
         if(imRGB.empty())
         {
             cerr << endl << "Failed to load image at: "
-                 << string(argv[3]) << "/" << vstrImageFilenamesRGB[ni] << endl;
+                    << string(argv[3]) << "/" << vstrImageFilenamesRGB[ni] << endl;
             return 1;
         }
 
@@ -247,13 +247,13 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-	if (bMode==0)
-        SLAM.TrackRGBD(imRGB,imD,tframe);
-	else
-	SLAM.TrackMonocular(imRGB,tframe);
+        if (bMode==0)
+            SLAM.TrackRGBD(imRGB,imD,tframe);
+        else
+            SLAM.TrackMonocular(imRGB,tframe);
 
-	//double data[9]={0.5,0.4};
-	//SLAM.SaveFrame("./test_save/",imRGB,imD,tframe);
+        //double data[9]={0.5,0.4};
+        //SLAM.SaveFrame("./test_save/",imRGB,imD,tframe);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -278,12 +278,12 @@ int main(int argc, char **argv)
     
     //zzh
     {
-    unique_lock<mutex> lock(g_mutex);
-    g_brgbdFinished=true;
+        unique_lock<mutex> lock(g_mutex);
+        g_brgbdFinished=true;
     }
     if (SLAM.MapChanged()){
-      cout<<"Map is changing!Please enter s to stop!"<<endl;
-      while (cin.get()!='s') {sleep(1);}
+        cout<<"Map is changing!Please enter s to stop!"<<endl;
+        while (cin.get()!='s') {sleep(1);}
     }
     //zzh over
 
@@ -299,11 +299,11 @@ int main(int argc, char **argv)
 //     SLAM.SaveMap("MapTmp.bin",false,true,true);
     if (!fnFBA.empty()&&!bLoaded){
       if((int)fnFBA){
-	SLAM.FinalGBA(fnFBA);
-	cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
+        SLAM.FinalGBA(fnFBA);
+        cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
       }
     }else{
-      cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
+        cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;
     }/*
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory1.txt"); 
     SLAM.SaveTrajectoryTUM("CameraTrajectory1.txt");
@@ -368,9 +368,9 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
             ss >> t2;
             ss >> sD;
             vstrImageFilenamesD.push_back(sD);
-	    /*char ch[30];//at least 22+6=28
-	    sprintf(ch,"depth/%.6f.png",t);
-	    vstrImageFilenamesD.push_back(ch);*/
+            /*char ch[30];//at least 22+6=28
+            sprintf(ch,"depth/%.6f.png",t);
+            vstrImageFilenamesD.push_back(ch);*/
         }
     }
 }

@@ -62,7 +62,7 @@ public:
 
     typedef pair<set<KeyFrame*>,int> ConsistentGroup;//pair<loop candidate KF's group,this group's consistency counter(has consecutive new KFs condition)>
     typedef map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,
-        Eigen::aligned_allocator<std::pair<const KeyFrame*, g2o::Sim3> > > KeyFrameAndPose;//use Eigen::aligned_allocator<> when STL container's element uses Eigen::class for memory alignment
+        Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3> > > KeyFrameAndPose;//use Eigen::aligned_allocator<> when STL container's element uses Eigen::class for memory alignment
     //Eigen::class should in fact be the fixed-size vectorizable Eigen Objects see http://eigen.tuxfamily.org/dox-devel/group__TopicFixedSizeVectorizable.html
     //here Eigen::Quaterniond(in g2o::Sim3) is the reason why we use Eigen::aligned_allocator
 
@@ -174,7 +174,7 @@ protected:
     bool mbFixScale;//true in RGBD
 
 
-    bool mnFullBAIdx;//char/int may be better
+    char mnFullBAIdx;//char/int may be better
 };
 
 } //namespace ORB_SLAM

@@ -27,6 +27,8 @@
 // #include "Map.h"
 #include "LocalMapping.h"
 
+#include <unistd.h>
+
 namespace ORB_SLAM2{
 
 class KeyFrame;

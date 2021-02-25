@@ -55,10 +55,12 @@ bool MapPoint::read(istream &is){
     mWorldPos.create(3,1,CV_32F);//allocate if needed
     is.read((char*)mWorldPos.data,sizeof(float)*3);//float xyz
   }
+  return is.good();
 }
 bool MapPoint::write(ostream &os){
   //we save mnId,refKF's old id in SaveMap()
   os.write((char*)(GetWorldPos().data),sizeof(float)*3);//float xyz
+  return os.good();
 }
 
 //added by zzh

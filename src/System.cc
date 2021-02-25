@@ -136,10 +136,10 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       mpTracker->Reset();
     }else{
       if (bReadBadKF){//before clear KFs, we save the old id of mpTracker->mlpReferences
-	list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
-	for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter){
-	  lRefKFParentId.push_back((*iter)->mnId);
-	}
+        list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
+        for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter){
+        lRefKFParentId.push_back((*iter)->mnId);
+        }
       }
       
       mpKeyFrameDatabase->clear();
@@ -154,11 +154,11 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       cv::Mat Tcp(4,4,CV_32F);
       char bBad;
       if (bReadBadKF){
-	f.read(&bBad,sizeof(char));
-	if (bBad){
-	  KeyFrame::readMat(f,Tcp);
-	  if (iFirstBad==NKFs) iFirstBad=i;
-	}
+        f.read(&bBad,sizeof(char));
+        if (bBad){
+        KeyFrame::readMat(f,Tcp);
+        if (iFirstBad==NKFs) iFirstBad=i;
+        }
       }
       
       long unsigned int oldId;
@@ -177,13 +177,13 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       f.read((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
       vpKFMPIdMatches[i].resize(NMPMatches);
       for (int j=0;j<NMPMatches;++j){
-	f.read((char*)&vpKFMPIdMatches[i][j],sizeof(vpKFMPIdMatches[i][j]));//MP's (old) id(if ULONG_MAX meaning unmatched)
+        f.read((char*)&vpKFMPIdMatches[i][j],sizeof(vpKFMPIdMatches[i][j]));//MP's (old) id(if ULONG_MAX meaning unmatched)
       }
       
       mpMap->AddKeyFrame(pKF);// Insert KeyFrame in the map
       if (i==0){//ORB_SLAM2 just uses 0th KF/F as the KFOrigins
-	assert(pKF->mnId==0&&oldId==0);
-	mpMap->mvpKeyFrameOrigins.push_back(pKF);
+        assert(pKF->mnId==0&&oldId==0);
+        mpMap->mvpKeyFrameOrigins.push_back(pKF);
       }
     }
     
@@ -203,10 +203,10 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       f.read((char*)&Nobs,sizeof(Nobs));//size of observations/MPs
       for(int j=0;j<Nobs;++j){
         f.read((char*)&nlData,sizeof(nlData));//obs: KFj's id (old)
-	assert(mapIdpKF.count(nlData)==1);
-	size_t idKeyPoint;
-	f.read((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id/order of this MP
-	pMP->AddObservation(mapIdpKF[nlData],idKeyPoint);
+        assert(mapIdpKF.count(nlData)==1);
+        size_t idKeyPoint;
+        f.read((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id/order of this MP
+        pMP->AddObservation(mapIdpKF[nlData],idKeyPoint);
       }
       pMP->ComputeDistinctiveDescriptors();
       pMP->UpdateNormalAndDepth();
@@ -220,28 +220,28 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     for (int i=0;i<NKFs;++i){//or vpKFMPIdMatches.size()
       KeyFrame* pKF = vpKFs[i];
       for (int j=0;j<vpKFMPIdMatches[i].size();++j){
-	if (vpKFMPIdMatches[i][j]==ULONG_MAX){//unmatched
-	  pKF->EraseMapPointMatch(j);
-	}else{
-	  assert(mapIdpMP.count(vpKFMPIdMatches[i][j])==1);
-	  pKF->AddMapPoint(mapIdpMP[vpKFMPIdMatches[i][j]],j);
-	}
+        if (vpKFMPIdMatches[i][j]==ULONG_MAX){//unmatched
+        pKF->EraseMapPointMatch(j);
+        }else{
+        assert(mapIdpMP.count(vpKFMPIdMatches[i][j])==1);
+        pKF->AddMapPoint(mapIdpMP[vpKFMPIdMatches[i][j]],j);
+        }
       }
       //Update Spanning Tree, must be after when mapIdpKF is made
       long unsigned int parentId,loopId;
       f.read((char*)&parentId,sizeof(parentId));//old parent KF's Id 
       if (i>0) assert(parentId!=ULONG_MAX);
       if (parentId!=ULONG_MAX){
-	assert(mapIdpKF.count(parentId)==1);
-	pKF->ChangeParent(mapIdpKF[parentId]);
+        assert(mapIdpKF.count(parentId)==1);
+        pKF->ChangeParent(mapIdpKF[parentId]);
       }
       //Add LoopEdges
       size_t nLoops;
       f.read((char*)&nLoops,sizeof(nLoops));//pKF->mspLoopEdges.size()
       for (int j=0;j<nLoops;++j){
-	f.read((char*)&loopId,sizeof(loopId));//old loop KF's Id
-	assert(mapIdpKF.count(loopId)==1);
-	pKF->AddLoopEdge(mapIdpKF[loopId]);
+        f.read((char*)&loopId,sizeof(loopId));//old loop KF's Id
+        assert(mapIdpKF.count(loopId)==1);
+        pKF->AddLoopEdge(mapIdpKF[loopId]);
       }
       mpKeyFrameDatabase->add(pKF);
     }
@@ -254,13 +254,13 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
     
     if (bReadBadKF){//we delete bad KFs and correct mpTracker->mlpReferences
       for (int i=iFirstBad;i<NKFs;++i){
-	vpKFs[i]->SetBadFlag(true);//i>= NKFsInit; we need keep bad KFs' parent & Tcp unchanged for SaveTrajectoryTUM()!!!
+        vpKFs[i]->SetBadFlag(true);//i>= NKFsInit; we need keep bad KFs' parent & Tcp unchanged for SaveTrajectoryTUM()!!!
       }
       list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
       list<unsigned long>::iterator iterID=lRefKFParentId.begin();
       for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter,++iterID){
-	assert(mapIdpKF.count(*iterID)==1);
-	*iter=mapIdpKF[*iterID];//old KF's id to its new corresponding KF*
+        assert(mapIdpKF.count(*iterID)==1);
+        *iter=mapIdpKF[*iterID];//old KF's id to its new corresponding KF*
       }
     }
     
@@ -269,8 +269,8 @@ bool System::LoadMap(const string &filename,bool bPCL,bool bReadBadKF){
       mpTracker->SetLastKeyFrame(vpKFs[iFirstBad-1]);
       mpTracker->SetReferenceKF(vpKFs[iFirstBad-1]);
       if (sensorType>=2){
-	mpIMUInitiator->SetFinishRequest(true);//we don't need to init when loading a VIEO/VIO map
-	mpIMUInitiator->SetVINSInited(true);
+        mpIMUInitiator->SetFinishRequest(true);//we don't need to init when loading a VIEO/VIO map
+        mpIMUInitiator->SetVINSInited(true);
       }
     }
     
@@ -304,14 +304,14 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       set<KeyFrame*> spKFs;
       list<KeyFrame*> &lRefKF=mpTracker->mlpReferences;
       for (list<KeyFrame*>::iterator iter=lRefKF.begin(),iterEnd=lRefKF.end();iter!=iterEnd;++iter){
-	KeyFrame* pKF=*iter;
-	while (pKF->isBad()){//here we save all bad but useful KFs
-	  if (spKFs.count(pKF)==0) spKFs.insert(pKF);
-	  pKF=pKF->GetParent();
-	}
+        KeyFrame* pKF=*iter;
+        while (pKF->isBad()){//here we save all bad but useful KFs
+        if (spKFs.count(pKF)==0) spKFs.insert(pKF);
+        pKF=pKF->GetParent();
+        }
       }
       for (set<KeyFrame*>::iterator iter=spKFs.begin(),iterEnd=spKFs.end();iter!=iterEnd;++iter){
-	vpKFs.push_back(*iter);
+        vpKFs.push_back(*iter);
       }
       NKFs=vpKFs.size();
     }
@@ -319,14 +319,14 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
     for(size_t i=0; i<NKFs; ++i){
       KeyFrame* pKF = vpKFs[i];
       if (bSaveBadKF){
-	char bBad=0;
-	if (pKF->isBad()){ 
-	  bBad=1;
-	  f.write(&bBad,sizeof(bBad));
-	  KeyFrame::writeMat(f,pKF->mTcp);
-	  assert(i>=NKFsInit);
-// 	  cout<<i<<" "<<pKF->mnId<<" "<<pKF->GetParent()->mnId<<endl;
-	}else f.write(&bBad,sizeof(bBad));
+        char bBad=0;
+        if (pKF->isBad()){ 
+        bBad=1;
+        f.write(&bBad,sizeof(bBad));
+        KeyFrame::writeMat(f,pKF->mTcp);
+        assert(i>=NKFsInit);
+//        cout<<i<<" "<<pKF->mnId<<" "<<pKF->GetParent()->mnId<<endl;
+        }else f.write(&bBad,sizeof(bBad));
       }else if(pKF->isBad()) continue;
 
       pnlData=&pKF->mnId;f.write((char*)pnlData,sizeof(*pnlData));//save old Id of KF
@@ -341,9 +341,9 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       size_t NMPMatches=vpMPMatches.size();
       f.write((char*)&NMPMatches,sizeof(NMPMatches));//size of KeyPoints
       for (int j=0;j<NMPMatches;++j){
-	if (vpMPMatches[j]==NULL||vpMPMatches[j]->isBad()) nlData=ULONG_MAX;//unmatched MPs' id
-	else nlData=vpMPMatches[j]->mnId;//matched MPs' id (old)
-	f.write((char*)&nlData,sizeof(nlData));
+        if (vpMPMatches[j]==NULL||vpMPMatches[j]->isBad()) nlData=ULONG_MAX;//unmatched MPs' id
+        else nlData=vpMPMatches[j]->mnId;//matched MPs' id (old)
+        f.write((char*)&nlData,sizeof(nlData));
       }
     }
     
@@ -364,9 +364,9 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       size_t Nobs=observations.size();
       f.write((char*)&Nobs,sizeof(Nobs));//size of observations
       for(map<KeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; ++mit){
-	assert(!(mit->first->isBad()));
+        assert(!(mit->first->isBad()));
         pnlData=&mit->first->mnId;f.write((char*)pnlData,sizeof(*pnlData));//obs: KFj's id (old)
-	size_t idKeyPoint=mit->second;f.write((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
+        size_t idKeyPoint=mit->second;f.write((char*)&idKeyPoint,sizeof(idKeyPoint));//obs: KFj's corresponding KeyPoint's id of this MP
       }
     }
     
@@ -381,7 +381,7 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       set<KeyFrame*> spLoopEdges=pKF->GetLoopEdges();
       size_t nLoops=spLoopEdges.size();f.write((char*)&nLoops,sizeof(nLoops));//pKF->mspLoopEdges.size()
       for (set<KeyFrame*>::const_iterator iter=spLoopEdges.begin();iter!=spLoopEdges.end();++iter){
-	pnlData=&(*iter)->mnId;f.write((const char*)pnlData,sizeof(*pnlData));//old loop KF's Id
+        pnlData=&(*iter)->mnId;f.write((const char*)pnlData,sizeof(*pnlData));//old loop KF's Id
       }
     }
     
@@ -412,13 +412,13 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       KeyFrame* pKF = vpKFs[i];
       // pKF->SetPose(pKF->GetPose()*Two);
       if(pKF->isBad())
-	  continue;
+        continue;
 
       //cv::Mat R = pKF->GetRotation().t();
       //vector<float> q = Converter::toQuaternion(R);
       //cv::Mat t = pKF->GetCameraCenter();
       //f << setprecision(6) << pKF->mTimeStamp << setprecision(7) << " " << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2)
-	//<< " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+      //<< " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
       cv::Mat cvTwc=pKF->GetPoseInverse();
       Eigen::Matrix3d r;
       cv::cv2eigen(cvTwc.colRange(0,3).rowRange(0,3),r);
@@ -431,22 +431,22 @@ void System::SaveMap(const string &filename,bool bPCL,bool bUseTbc,bool bSaveBad
       cv::Mat depth=pKF->Img[1];
       Eigen::Isometry3d T=*(Twc);
       for (int v=0;v<color.rows;++v)
-	for (int u=0;u<color.cols;++u){
-	  unsigned int d=depth.ptr<unsigned short>(v)[u];
-	  if (d==0||d>7000) continue;
-	  Eigen::Vector3d point;
-	  point[2]=d*1.0/depthScale;
-	  point[0]=(u-cx)*point[2]/fx;
-	  point[1]=(v-cy)*point[2]/fy;
-	  Eigen::Vector3d pointWorld=T*point;
-	  
-	  PointT p;
-	  p.x=pointWorld[0];p.y=pointWorld[1];p.z=pointWorld[2];
-	  p.b=color.data[v*color.step+u*color.channels()];
-	  p.g=color.data[v*color.step+u*color.channels()+1];
-	  p.r=color.data[v*color.step+u*color.channels()+2];
-	  current->points.push_back(p);
-	}
+        for (int u=0;u<color.cols;++u){
+            unsigned int d=depth.ptr<unsigned short>(v)[u];
+            if (d==0||d>7000) continue;
+            Eigen::Vector3d point;
+            point[2]=d*1.0/depthScale;
+            point[0]=(u-cx)*point[2]/fx;
+            point[1]=(v-cy)*point[2]/fy;
+            Eigen::Vector3d pointWorld=T*point;
+
+            PointT p;
+            p.x=pointWorld[0];p.y=pointWorld[1];p.z=pointWorld[2];
+            p.b=color.data[v*color.step+u*color.channels()];
+            p.g=color.data[v*color.step+u*color.channels()+1];
+            p.r=color.data[v*color.step+u*color.channels()+2];
+            current->points.push_back(p);
+        }
       //depth filter and statistical removal
       /*PointCloud::Ptr pTmp(new PointCloud);
       pcl::StatisticalOutlierRemoval<PointT> statis_filter;//this one costs lots of time!!!
@@ -487,22 +487,22 @@ void System::SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthm
   string rgbname=foldername+"rgb/",depthname=foldername+"depth/";
   static bool bInit=false;
   if (!bInit){
-	if (access(depthname.c_str(),0)==-1){
-	  cout<<depthname<<" not exists!"<<endl;
-	  if (mkdir_p(depthname,0777)==-1) cout<<"depth mkdir error"<<endl;
-	}
-	if (access(rgbname.c_str(),0)==-1){
-	  cout<<rgbname<<" not exists!"<<endl;
-	  if (mkdir_p(rgbname,0777)==-1) cout<<"rgb mkdir error"<<endl;
-	}else if (access(depthname.c_str(),0)==0){
-	  ofstream fout(foldername+"odometrysensor.txt");
-	  fout<<"# odometry data\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp vl vr qx qy qz qw"<<endl;
-	  fout.close();
-	  fout.open(foldername+"groundtruth.txt");
-	  fout<<"# ground truth trajectory\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp tx ty tz qx qy qz qw"<<endl;
-	  fout.close();
-	  bInit=true;
-	}
+    if (access(depthname.c_str(),0)==-1){
+    cout<<depthname<<" not exists!"<<endl;
+    if (mkdir_p(depthname,0777)==-1) cout<<"depth mkdir error"<<endl;
+    }
+    if (access(rgbname.c_str(),0)==-1){
+    cout<<rgbname<<" not exists!"<<endl;
+    if (mkdir_p(rgbname,0777)==-1) cout<<"rgb mkdir error"<<endl;
+    }else if (access(depthname.c_str(),0)==0){
+    ofstream fout(foldername+"odometrysensor.txt");
+    fout<<"# odometry data\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp vl vr qx qy qz qw"<<endl;
+    fout.close();
+    fout.open(foldername+"groundtruth.txt");
+    fout<<"# ground truth trajectory\n# file: 'rgbd_dataset_zzh.bag'\n# timestamp tx ty tz qx qy qz qw"<<endl;
+    fout.close();
+    bInit=true;
+    }
   }
   char ch[25];//at least 10+1+6+4+1=22
   sprintf(ch,"%.6f.",tm_stamp);//mpTracker->mCurrentFrame.mTimeStamp);
@@ -531,10 +531,10 @@ void System::SaveFrame(string foldername,const cv::Mat& im,const cv::Mat& depthm
 int System::mkdir_p(string foldername,int mode){
   if (foldername.empty()) return -1;
   if (mkdir(foldername.c_str(),mode)==-1){
-	int pos=string::npos;
-	if (foldername[foldername.length()-1]=='/') pos=foldername.length()-2;
-	if (mkdir_p(foldername.substr(0,foldername.rfind('/',pos)),mode)==-1) return -1;
-	else return mkdir(foldername.c_str(),mode);
+    int pos=string::npos;
+    if (foldername[foldername.length()-1]=='/') pos=foldername.length()-2;
+    if (mkdir_p(foldername.substr(0,foldername.rfind('/',pos)),mode)==-1) return -1;
+    else return mkdir(foldername.c_str(),mode);
   }else return 0;
 }
 
@@ -725,12 +725,12 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
 
     // Check reset
     {
-    unique_lock<mutex> lock(mMutexReset);
-    if(mbReset)
-    {
-        mpTracker->Reset();
-        mbReset = false;
-    }
+        unique_lock<mutex> lock(mMutexReset);
+        if(mbReset)
+        {
+            mpTracker->Reset();
+            mbReset = false;
+        }
     }
     
     //important tracking function!
@@ -883,7 +883,7 @@ void System::SaveTrajectoryTUM(const string &filename)
             continue;
 
         KeyFrame* pKF = *lRit;
-// 	if (pKF->isBad()) continue;
+//        if (pKF->isBad()) continue;
 
         cv::Mat Trw = cv::Mat::eye(4,4,CV_32F);
 
