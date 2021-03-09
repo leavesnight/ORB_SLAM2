@@ -23,6 +23,7 @@ cd ~/zzh/ORB_SLAM2/Examples/RGB-D
 
 CAMTYPE=RGBD
 
-#VIEO,VIO
+#VIEO,VIO,VO
 #./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/IMUSensor.txt 9 0 $OURFILE/EncSensor.txt
 #./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/IMUSensor.txt 9
+#./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt

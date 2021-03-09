@@ -91,21 +91,21 @@ void LoopClosing::Run()
         // Check if there are keyframes in the queue
         if(CheckNewKeyFrames())
         {
-	  // Detect loop candidates and check covisibility consistency
-	  if(DetectLoop()){//else no gw to calculate GBA //(mpIMUInitiator->GetVINSInited())&&
-	    // Compute similarity transformation [sR|t] 
-	    // In the stereo/RGBD case s=1
-	    unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
-	    if(ComputeSim3()){
-	      // Perform loop fusion and pose graph optimization
-	      CorrectLoop();
-	    }
-	  }
+            // Detect loop candidates and check covisibility consistency
+            if(DetectLoop()){//else no gw to calculate GBA //(mpIMUInitiator->GetVINSInited())&&
+                // Compute similarity transformation [sR|t] 
+                // In the stereo/RGBD case s=1
+                unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
+                if(ComputeSim3()){
+                // Perform loop fusion and pose graph optimization
+                CorrectLoop();
+                }
+            }
         }
         //for full BA just after IMU Initialized, zzh
         if (mpIMUInitiator&&mpIMUInitiator->GetInitGBA()){
-	  CreateGBA();
-	}
+            CreateGBA();
+        }
 
         ResetIfRequested();
 
@@ -138,13 +138,13 @@ bool LoopClosing::DetectLoop()
         mpCurrentKF = mlpLoopKeyFrameQueue.front();
         mlpLoopKeyFrameQueue.pop_front();
         // Avoid that a keyframe can be erased while it is being process by this thread in this function
-	if (mpCurrentKF->getState()==Tracking::ODOMOK){//it's quite rare for ODOMOK to close loop, so we just jump over it
-	  mnLastOdomKFId=mpCurrentKF->mnId;
-	  mnCovisibilityConsistencyTh=1;//like Relocalization()
-	  mpKeyFrameDB->add(mpCurrentKF);
-	  return false;
-	}
-	cout<<"SetNotErase"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        if (mpCurrentKF->getState()==Tracking::ODOMOK){//it's quite rare for ODOMOK to close loop, so we just jump over it
+            mnLastOdomKFId=mpCurrentKF->mnId;
+            mnCovisibilityConsistencyTh=1;//like Relocalization()
+            mpKeyFrameDB->add(mpCurrentKF);
+            return false;
+        }
+        cout<<"SetNotErase"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         mpCurrentKF->SetNotErase();
     }
 
@@ -152,7 +152,7 @@ bool LoopClosing::DetectLoop()
     if(mpCurrentKF->mnId<mLastLoopKFid+10)
     {
         mpKeyFrameDB->add(mpCurrentKF);//add CurrentKF into KFDataBase
-	cout<<"Too close, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        cout<<"Too close, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         mpCurrentKF->SetErase();//allow CurrentKF to be erased
         return false;
     }
@@ -256,7 +256,7 @@ bool LoopClosing::DetectLoop()
 
     if(mvpEnoughConsistentCandidates.empty())
     {
-	cout<<"Final Empty, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        cout<<"Final Empty, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         mpCurrentKF->SetErase();
         return false;
     }
@@ -307,10 +307,10 @@ bool LoopClosing::ComputeSim3()
         }
 
         int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);//rectify vpMatches12 by using pKF->mFeatVec to quickly match, \
-	corresponding to pKF1/mpCurrentKF in LoopClosing
+        corresponding to pKF1/mpCurrentKF in LoopClosing
 
-	cout<<redSTR<<i<<": "<<nmatches<<endl;
-	int thresholdMatches=mnLastOdomKFId==0?20:15;
+        cout<<redSTR<<i<<": "<<nmatches<<endl;
+        int thresholdMatches=mnLastOdomKFId==0?20:15;
         if(nmatches<thresholdMatches)//20)//same threshold in TrackWithMotionModel(), new 10
         {
             vbDiscarded[i] = true;
@@ -319,7 +319,7 @@ bool LoopClosing::ComputeSim3()
         else
         {
             Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);//how?
-	    int minInliers=mnLastOdomKFId==0?20:10;//20 is stricter than Relocalization()s, old 20 new 10
+            int minInliers=mnLastOdomKFId==0?20:10;//20 is stricter than Relocalization()s, old 20 new 10
             pSolver->SetRansacParameters(0.99,minInliers,300);
             vpSim3Solvers[i] = pSolver;
         }
@@ -352,7 +352,7 @@ bool LoopClosing::ComputeSim3()
             // If Ransac reachs max. iterations discard keyframe
             if(bNoMore)
             {
-	        cout<<redSTR<<"NoMore"<<whiteSTR<<endl;
+                cout<<redSTR<<"NoMore"<<whiteSTR<<endl;
                 vbDiscarded[i]=true;
                 nCandidates--;
             }
@@ -365,7 +365,7 @@ bool LoopClosing::ComputeSim3()
                 {
                     if(vbInliers[j])
                        vpMapPointMatches[j]=vvpMapPointMatches[i][j];
-		    //notice if outliers vvpMapPointMatches[i][j] may exists by SBBoW
+                    //notice if outliers vvpMapPointMatches[i][j] may exists by SBBoW
                 }
 
                 cv::Mat R = pSolver->GetEstimatedRotation();//R12
@@ -377,7 +377,7 @@ bool LoopClosing::ComputeSim3()
 
                 g2o::Sim3 gScm(Converter::toMatrix3d(R),Converter::toVector3d(t),s);//g2o: S12
                 const int nInliers = Optimizer::OptimizeSim3(mpCurrentKF, pKF, vpMapPointMatches, gScm, 10, mbFixScale);//Sim3Motion-only BA, gScm/S12 is optimized, \
-		BA outliers in vpMapPointMatches are erased
+                BA outliers in vpMapPointMatches are erased
 
                 // If optimization is succesful stop ransacs and continue
                 cout<<redSTR<<nInliers<<whiteSTR<<endl;
@@ -398,7 +398,7 @@ bool LoopClosing::ComputeSim3()
 
     if(!bMatch)//if BA inliers validation is not passed
     {
-	cout<<"bMatch==false, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        cout<<"bMatch==false, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         for(int i=0; i<nInitialCandidates; i++)
              mvpEnoughConsistentCandidates[i]->SetErase();//allow loop candidate KFs && mpCurrentKF to be erased for KF.mspLoopEdges is only added in CorrectLoop()
         mpCurrentKF->SetErase();
@@ -449,7 +449,7 @@ bool LoopClosing::ComputeSim3()
     }
     else//not pass the final validation like SearchLocalPoints() in Tracking
     {//allow loop candidate KFs && mpCurrentKF to be erased for KF.mspLoopEdges is only added in CorrectLoop()
-	cout<<"nTotalMatches<40, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
+        cout<<"nTotalMatches<40, discard loop detection!"<<mpCurrentKF->mnId<<" "<<mpCurrentKF->mTimeStamp<<endl;
         for(int i=0; i<nInitialCandidates; i++)
             mvpEnoughConsistentCandidates[i]->SetErase();
         mpCurrentKF->SetErase();
@@ -474,8 +474,8 @@ void LoopClosing::CorrectLoop()
     // If a Global Bundle Adjustment is running, abort it
     if(isRunningGBA())
     {
-	cout<<"Abort last global BA...";//for debug
-	
+        cout<<"Abort last global BA...";//for debug
+
         unique_lock<mutex> lock(mMutexGBA);
         mbStopGBA = true;//like mbAbortBA in LocalMapping?
 
@@ -599,7 +599,7 @@ void LoopClosing::CorrectLoop()
                 }
             }
         }
-	mpMap->InformNewChange();//improved by zzh
+        mpMap->InformNewChange();//improved by zzh
     }
 
     // Project MapPoints observed in the neighborhood of the loop keyframe
@@ -777,25 +777,25 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
                         pChild->mnBAGlobalForKF=nLoopKF;//so now its child KF' Pose can seem to be corrected by GBA
 
                         if (bUseGBAPRV){
-			  // Set NavStateGBA and correct the PR&V
-			  pChild->mNavStateGBA = pChild->GetNavState();//Tb_old_w
-			  Matrix3d Rw1 = pChild->mNavStateGBA.getRwb();Vector3d Vw1 = pChild->mNavStateGBA.mvwb;//Rwb_old&wVwb_old
-			  cv::Mat TwbGBA = Converter::toCvMatInverse(Frame::mTbc*pChild->mTcwGBA);//TbwGBA.t()
-			  Matrix3d RwbGBA=Converter::toMatrix3d(TwbGBA.rowRange(0,3).colRange(0,3));
-			  pChild->mNavStateGBA.setRwb(RwbGBA);
-			  pChild->mNavStateGBA.mpwb=Converter::toVector3d(TwbGBA.rowRange(0,3).col(3));
-			  pChild->mNavStateGBA.mvwb=RwbGBA*Rw1.transpose()*Vw1;//Vwb_new=wVwb_new=Rwb_new*bVwb=Rwb_new*Rb_old_w*wVwb_old=Rwb2*Rwb1.t()*wV1
-			}
+                            // Set NavStateGBA and correct the PR&V
+                            pChild->mNavStateGBA = pChild->GetNavState();//Tb_old_w
+                            Matrix3d Rw1 = pChild->mNavStateGBA.getRwb();Vector3d Vw1 = pChild->mNavStateGBA.mvwb;//Rwb_old&wVwb_old
+                            cv::Mat TwbGBA = Converter::toCvMatInverse(Frame::mTbc*pChild->mTcwGBA);//TbwGBA.t()
+                            Matrix3d RwbGBA=Converter::toMatrix3d(TwbGBA.rowRange(0,3).colRange(0,3));
+                            pChild->mNavStateGBA.setRwb(RwbGBA);
+                            pChild->mNavStateGBA.mpwb=Converter::toVector3d(TwbGBA.rowRange(0,3).col(3));
+                            pChild->mNavStateGBA.mvwb=RwbGBA*Rw1.transpose()*Vw1;//Vwb_new=wVwb_new=Rwb_new*bVwb=Rwb_new*Rb_old_w*wVwb_old=Rwb2*Rwb1.t()*wV1
+                        }
                     }//now the child is optimized by GBA
                     lpKFtoCheck.push_back(pChild);
                 }
 //                 cout<<endl;
 
                 pKF->mTcwBefGBA = pKF->GetPose();//record the old Tcw
-		if (bUseGBAPRV)
-		  pKF->SetNavState(pKF->mNavStateGBA);//update all KFs' Pose to GBA optimized Tbw&Tcw, including UpdatePoseFromNS()&&SetPose(pKF->mTcwGBA), not necessary to update mNavStateBefGBA for unused in MapPoints' correction
-		else
-		  pKF->SetPose(pKF->mTcwGBA);
+                if (bUseGBAPRV)
+                    pKF->SetNavState(pKF->mNavStateGBA);//update all KFs' Pose to GBA optimized Tbw&Tcw, including UpdatePoseFromNS()&&SetPose(pKF->mTcwGBA), not necessary to update mNavStateBefGBA for unused in MapPoints' correction
+                else
+                    pKF->SetPose(pKF->mTcwGBA);
                 lpKFtoCheck.pop_front();
             }
 
@@ -849,9 +849,9 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
 
         //mbFinishedGBA = true;
         mbRunningGBA = false;
-	
-	//for ros_mono_pub.cc
-	mbLoopDetected=true;
+
+        //for ros_mono_pub.cc
+        mbLoopDetected=true;
     }
 }
 

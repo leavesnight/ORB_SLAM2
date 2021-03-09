@@ -24,6 +24,10 @@ lib/
 
 #added by zzh
 build2/
+build_kdevelop/
+cmake-build-debug/
+cmake-build-release/
+.idea/
 #Vocabulary/ORBvoc.bin
 *.bin
 CameraTrajectory*.txt
@@ -35,4 +39,3 @@ kinect2_s*.yaml
 *.jpg
 *.pgm
 Examples/ROS/ORB_SLAM2/*ub
-

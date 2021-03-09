@@ -122,9 +122,9 @@ namespace g2o {
       VertexSim3Expmap* v1 = static_cast<VertexSim3Expmap*>(_vertices[0]);//_vertices 0/1 VertexSim3Expmap
       VertexSim3Expmap* v2 = static_cast<VertexSim3Expmap*>(_vertices[1]);
       if (from.count(v1) > 0)
-	v2->setEstimate(measurement()*v1->estimate());//if Siw exists then set Sjw=Sji*Siw
+        v2->setEstimate(measurement()*v1->estimate());//if Siw exists then set Sjw=Sji*Siw
       else
-	v1->setEstimate(measurement().inverse()*v2->estimate());//if Siw not exists(indicating Sjw should exist) then set Siw=Sij*Sjw
+        v1->setEstimate(measurement().inverse()*v2->estimate());//if Siw not exists(indicating Sjw should exist) then set Siw=Sij*Sjw
     }
     //use numerical Jacobian(here _jacobianOplusXi,_jacobianOplusXj)
   };

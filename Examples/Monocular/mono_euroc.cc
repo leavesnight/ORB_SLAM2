@@ -221,8 +221,8 @@ int main(int argc, char **argv)
 //     SLAM.SaveMap("KeyFrameTrajectoryMap.bin",false);
     if (!fnFBA.empty()){
       if((int)fnFBA){
-	SLAM.FinalGBA(fnFBA);
-	cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
+        SLAM.FinalGBA(fnFBA);
+        cout<<azureSTR"Execute FullBA at the end!"<<whiteSTR<<endl;
       }
     }else{
       cout<<redSTR"No FullBA at the end!"<<whiteSTR<<endl;

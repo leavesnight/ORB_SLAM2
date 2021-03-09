@@ -234,17 +234,16 @@ namespace g2o {
 
         Matrix3d R;
         Matrix3d V;
+        Matrix3d Omega2 = Omega*Omega;
         if (theta<0.00001)
         {
           //TODO: CHECK WHETHER THIS IS CORRECT!!!
-          R = (Matrix3d::Identity() + Omega + Omega*Omega/2);//R=I+(1-cos(theta))*a^a^+sin(theta)*a^~=(omit theta^3&&less)=I+theta^2/2*a^a^+theta*a^, /2 rectified by zzh
+          R = (Matrix3d::Identity() + Omega + Omega2 / 2);//R=I+(1-cos(theta))*a^a^+sin(theta)*a^~=(omit theta^3&&less)=I+theta^2/2*a^a^+theta*a^, /2 rectified by zzh
 
-          V = R;
+          V = (Matrix3d::Identity() + 0.5 * Omega + Omega2/ 6.);
         }
         else
         {
-          Matrix3d Omega2 = Omega*Omega;
-
 	  ////R=exp(phi^)=I+(1-cos(theta))*a^a^+sin(theta)*a^
           R = (Matrix3d::Identity()
               + sin(theta)/theta *Omega

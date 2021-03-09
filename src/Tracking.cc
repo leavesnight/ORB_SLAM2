@@ -579,11 +579,11 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
       Eigen::Matrix2d eig2Rtmp;Eigen::Matrix<double,6,6> eig6Rtmp;
       eig2Rtmp<<fnEnc[2][0],0,0,fnEnc[2][1];
       eig6Rtmp<<fnEnc[2][2],0,0,0,0,0,
-		0,fnEnc[2][3],0,0,0,0,
-		0,0,fnEnc[2][4],0,0,0,
-		0,0,0,fnEnc[2][5],0,0,
-		0,0,0,0,fnEnc[2][6],0,
-		0,0,0,0,0,fnEnc[2][7];
+        0,fnEnc[2][3],0,0,0,0,
+        0,0,fnEnc[2][4],0,0,0,
+        0,0,0,fnEnc[2][5],0,0,
+        0,0,0,0,fnEnc[2][6],0,
+        0,0,0,0,0,fnEnc[2][7];
       EncData::SetParam(fnEnc[0],fnEnc[1],eig2Rtmp,eig6Rtmp);
     }
     //load delay
