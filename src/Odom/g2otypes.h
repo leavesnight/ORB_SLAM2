@@ -623,7 +623,7 @@ public:
 //       _jacobianOplusXi=-Jrinv*IMUPreintegrator::Expmap(-_error)*//right is Exp(rdeltaRij).t(), same as Sophus::SO3::exp(rPhiij).inverse().matrix()
 //       Sophus::SO3::JacobianR(JgRij*bg)*JgRij;//J_rRij_ddbgi(3*3), notice Jr_b=Jr(Jg_deltaR*dbgi), here dbgi=bgi or bg
       
-      Sophus::SO3 errR(deltaRij.transpose()*Rwbi.transpose()*Rwbj);//deltaRij^T * Riw * Rwj, omit the dRbg/bg?
+      Sophus::SO3 errR(deltaRij.transpose()*Rwbi.transpose()*Rwbj);//JW: deltaRij^T * Riw * Rwj, omit the dRbg/bg?
       Matrix3d Jlinv = Sophus::SO3::JacobianLInv(errR.log());
       _jacobianOplusXi =-Jlinv*JgRij;
     }

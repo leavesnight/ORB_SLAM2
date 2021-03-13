@@ -494,9 +494,9 @@ Vector3d Optimizer::OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> 
       eBiasg->Rwbi=Converter::toMatrix3d(vpKFInit[i-1]->mTcw.rowRange(0,3).colRange(0,3).t())*Rcb;//Rwbi=Rwci*Rcb
       eBiasg->Rwbj=Converter::toMatrix3d(vpKFInit[i]->mTcw.rowRange(0,3).colRange(0,3).t())*Rcb;//Rwbj/Rwbi+1=Rwcj/Rwci+1 * Rcb
       if (bInfo)
-	eBiasg->setInformation(imupreint.mSigmaijPRV.block<3,3>(3,3).inverse());
+	    eBiasg->setInformation(imupreint.mSigmaijPRV.block<3,3>(3,3).inverse());
       else
-	eBiasg->setInformation(Matrix3d::Identity());//JingWang uses it in vector<Frame>
+	    eBiasg->setInformation(Matrix3d::Identity());//JingWang uses it in vector<Frame>
       optimizer.addEdge(eBiasg);
   }
 

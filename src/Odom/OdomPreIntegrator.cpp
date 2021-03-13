@@ -21,7 +21,8 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
 //     std::cout<<timeStampi<<" "<<timeStampj<<" "<<timeStampi-iterBegin->mtm<<" "<<timeStampj-(--it)->mtm<<std::endl;
 //     assert(abs(timeStampi-iterBegin->mtm)<0.01&&abs(timeStampj-(it)->mtm)<0.01);
     
-    Matrix2d eigSigmaetad(EncData::mSigmad);Matrix6d eigSigmaetamd(EncData::mSigmamd);
+    Matrix2d eigSigmaeta(EncData::mSigma);
+    Matrix6d eigSigmaetam(EncData::mSigmam);
     double rc(EncData::mrc);
     
     for (listeig(EncData)::const_iterator iterj=iterBegin;iterj!=iterEnd;){//start iterative method from i/iteri->tm to j/iter->tm
@@ -91,7 +92,12 @@ void EncPreIntegrator::PreIntegration(const double &timeStampi,const double &tim
 	     0,0,deltat,C0,C1,0;
       B.block<3,2>(3,0)=Rij_1*Bj_11;
       C.block<3,6>(3,0)=Rij_1*Cj_11;
-      mSigmaEij=A*mSigmaEij*A.transpose()+B*(eigSigmaetad*0.1/deltat)*B.transpose()+C*(eigSigmaetamd*deltat/0.1)*C.transpose();//
+      if (EncData::mdt_cov_noise_fixed)//eta->etad
+          mSigmaEij=A*mSigmaEij*A.transpose()+B*eigSigmaeta*B.transpose()+C*eigSigmaetam*deltat*C.transpose();
+      else if (!EncData::mFreqRef || deltat < 1.5 / EncData::mFreqRef)
+          mSigmaEij=A*mSigmaEij*A.transpose()+B*(eigSigmaeta/deltat)*B.transpose()+C*(eigSigmaetam*deltat)*C.transpose();
+      else
+          mSigmaEij=A*mSigmaEij*A.transpose()+B*(eigSigmaeta*EncData::mFreqRef)*B.transpose()+C*(eigSigmaetam*deltat)*C.transpose();
       
       //update deltaPijM before update deltaThetaijM to use deltaThetaijMz as deltaTheta~ij-1z
       double thetaij=deltaThetaijMz+thetaj_1j;//Theta~eiej

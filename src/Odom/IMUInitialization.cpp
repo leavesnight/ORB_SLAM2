@@ -31,10 +31,10 @@ void IMUInitialization::Run(){
       KeyFrame* pCurKF=GetCurrentKeyFrame();
       if (mdStartTime==-1){ initedid=0;mdStartTime=-2;}
       if(mdStartTime<0||mdStartTime>=0&&pCurKF->mTimeStamp-mdStartTime>=mdInitTime)
-	if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
-	  initedid = pCurKF->mnId;
-	  if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
-	}
+        if(!GetVINSInited() && pCurKF!=NULL && pCurKF->mnId > initedid){
+          initedid = pCurKF->mnId;
+          if (TryInitVIO()) break;//if succeed in IMU Initialization, this thread will finish, when u want the users' pushing reset button be effective, delete break!
+        }
     }
     
     ResetIfRequested();
@@ -62,10 +62,10 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     fcondnum.open(mTmpfilepath+"condnum.txt");//for optimized x is 6*1 vector, see (19) in VOIRBSLAM paper, here just show these 6*1 raw data
     if(fbiasg.is_open()&& fgw.is_open() && (fscale.is_open()) && //!mbMonocular||
       fbiasa.is_open()&&fcondnum.is_open())
-	fopened = true;
+        fopened = true;
     else{
-	cerr<<"file open error in TryInitVIO"<<endl;
-	fopened = false;
+        cerr<<"file open error in TryInitVIO"<<endl;
+        fopened = false;
     }
     fbiasg<<std::fixed<<std::setprecision(6);
     fgw<<std::fixed<<std::setprecision(6);
@@ -130,7 +130,6 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     double dt12 = pKF2->mOdomPreIntIMU.mdeltatij;//deltat12
     double dt23 = pKF3->mOdomPreIntIMU.mdeltatij;
     if (dt12==0||dt23==0){ cout<<redSTR<<"Tm="<<pKF2->mTimeStamp<<" lack IMU data!"<<whiteSTR<<endl;continue;}
-    assert(dt12>0&&dt23>0);//now let them not be 0
     ++numEquations;
     // Pre-integrated measurements
     cv::Mat dp12=Converter::toCvMat(pKF2->mOdomPreIntIMU.mpij);//deltap12
@@ -144,15 +143,18 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     cv::Mat Twc1=vKFInit[i]->mTwc;//Twci for pwci&Rwci, not necessary for clone()
     cv::Mat Twc2=pKF2->mTwc;cv::Mat Twc3=pKF3->mTwc;
     cv::Mat pc1=Twc1.rowRange(0,3).col(3);//pwci
-    cv::Mat pc2=Twc2.rowRange(0,3).col(3);cv::Mat pc3=Twc3.rowRange(0,3).col(3);
+    cv::Mat pc2=Twc2.rowRange(0,3).col(3);
+    cv::Mat pc3=Twc3.rowRange(0,3).col(3);
     cv::Mat Rc1=Twc1.rowRange(0,3).colRange(0,3);//Rwci
-    cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
+    cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);
+    cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
 
     // fill A/B matrix: lambda*s + beta*g = gamma(3*1), Ai(3*4)=[lambda beta], (13) in the paper
     cv::Mat lambda=(pc2-pc1)*dt23+(pc2-pc3)*dt12;
     cv::Mat beta=(dt12*dt12*dt23+dt12*dt23*dt23)/2*I3;
     cv::Mat gamma=(Rc1-Rc2)*pcb*dt23+(Rc3-Rc2)*pcb*dt12-Rc2*Rcb*dp23*dt12-Rc1*Rcb*dv12*dt12*dt23+Rc1*Rcb*dp12*dt23;
-    lambda.copyTo(A.rowRange(3*i+0,3*i+3).col(0));beta.copyTo(A.rowRange(3*i+0,3*i+3).colRange(1,4));//Ai
+    lambda.copyTo(A.rowRange(3*i+0,3*i+3).col(0));
+    beta.copyTo(A.rowRange(3*i+0,3*i+3).colRange(1,4));//Ai
     gamma.copyTo(B.rowRange(3*i+0,3*i+3));//gamma/B(i), but called gamma(i) in the paper
     // JingWang tested the formulation in paper, -gamma. Then the scale and gravity vector is -xx, or we can say the papaer missed a minus before γ(i)
   }
@@ -168,7 +170,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
   cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A);// A is changed in SVDecomp()(just calling the SVD::compute) with cv::SVD::MODIFY_A for speed
   cv::Mat winv=cv::Mat::eye(4,4,CV_32F);
   for(int i=0;i<4;++i){
-    if(fabs(w.at<float>(i))<1e-10){//too small in sufficient w meaning the linear dependent equations causing the solution is not unique?
+    if(fabs(w.at<float>(i))<1e-10){//too small in sufficient w meaning the linear dependent equations causing the solution is not unique(or A.inv() not exist)
       w.at<float>(i) += 1e-10;
       cerr<<"w(i) < 1e-10, w="<<endl<<w<<endl;
     }
@@ -197,7 +199,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 //     }
     
     cv::Mat gwn=gwstar/cv::norm(gwstar);//^gw=gw*/||gw*|| / Normalized approx. gravity vecotr in world frame
-    cv::Mat gInxgwn=gIn.cross(gwn);double normgInxgwn=cv::norm(gInxgwn);
+    cv::Mat gInxgwn=gIn.cross(gwn);
+    double normgInxgwn=cv::norm(gInxgwn);
     cv::Mat vhat=gInxgwn/normgInxgwn;//RwI=Exp(theta*^v), or we can call it vn=(gI x gw)/||gI x gw||
     double theta=std::atan2(normgInxgwn,gIn.dot(gwn));//notice theta*^v belongs to [-Pi,Pi]*|^v| though theta belongs to [0,Pi]
     Matrix3d RWIeig=IMUPreintegrator::Expmap(Converter::toVector3d(vhat)*theta);Rwi=Converter::toCvMat(RWIeig);//RwI
@@ -209,17 +212,24 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       IMUKeyFrameInit *pKF2=vKFInit[i+1],*pKF3 = vKFInit[i+2];
       const IMUPreintegrator &imupreint12=pKF2->mOdomPreIntIMU,&imupreint23=pKF3->mOdomPreIntIMU;
       //d means delta
-      double dt12=imupreint12.mdeltatij;double dt23=imupreint23.mdeltatij;
+      double dt12=imupreint12.mdeltatij;
+      double dt23=imupreint23.mdeltatij;
       if (dt12==0||dt23==0) continue;
-      cv::Mat dp12=Converter::toCvMat(imupreint12.mpij);cv::Mat dp23=Converter::toCvMat(imupreint23.mpij);
-      cv::Mat dv12=Converter::toCvMat(imupreint12.mvij);cv::Mat Jav12=Converter::toCvMat(imupreint12.mJavij);
-      cv::Mat Jap12 = Converter::toCvMat(imupreint12.mJapij);cv::Mat Jap23=Converter::toCvMat(imupreint23.mJapij);
+      cv::Mat dp12=Converter::toCvMat(imupreint12.mpij);
+      cv::Mat dp23=Converter::toCvMat(imupreint23.mpij);
+      cv::Mat dv12=Converter::toCvMat(imupreint12.mvij);
+      cv::Mat Jav12=Converter::toCvMat(imupreint12.mJavij);
+      cv::Mat Jap12 = Converter::toCvMat(imupreint12.mJapij);
+      cv::Mat Jap23=Converter::toCvMat(imupreint23.mJapij);
       cv::Mat Twc1=vKFInit[i]->mTwc;//Twci for pwci&Rwci, not necessary for clone()
-      cv::Mat Twc2=pKF2->mTwc;cv::Mat Twc3=pKF3->mTwc;
+      cv::Mat Twc2=pKF2->mTwc;
+      cv::Mat Twc3=pKF3->mTwc;
       cv::Mat pc1=Twc1.rowRange(0,3).col(3);//pwci
-      cv::Mat pc2=Twc2.rowRange(0,3).col(3);cv::Mat pc3=Twc3.rowRange(0,3).col(3);
+      cv::Mat pc2=Twc2.rowRange(0,3).col(3);
+      cv::Mat pc3=Twc3.rowRange(0,3).col(3);
       cv::Mat Rc1=Twc1.rowRange(0,3).colRange(0,3);//Rwci
-      cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
+      cv::Mat Rc2=Twc2.rowRange(0,3).colRange(0,3);
+      cv::Mat Rc3=Twc3.rowRange(0,3).colRange(0,3);
       // Stack to C/D matrix; lambda*s + phi(:,0:1)*dthetaxy + zeta*ba = psi, Ci(3*6),Di/psi(3*1)
       cv::Mat lambda=(pc2-pc1)*dt23+(pc2-pc3)*dt12;//3*1
       cv::Mat phi=-(dt12*dt12*dt23+dt12*dt23*dt23)/2*Rwi*SkewSymmetricMatrix(GI);//3*3 note: this has a '-', different to paper
@@ -236,8 +246,8 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
     cv::Mat w2inv=cv::Mat::eye(6,6,CV_32F);
     for(int i=0;i<6;++i){
       if(fabs(w2.at<float>(i))<1e-10){
-	w2.at<float>(i) += 1e-10;
-	cerr<<"w2(i) < 1e-10, w="<<endl<<w2<<endl;
+        w2.at<float>(i) += 1e-10;
+        cerr<<"w2(i) < 1e-10, w="<<endl<<w2<<endl;
       }
       w2inv.at<float>(i,i)=1./w2.at<float>(i);
     }
@@ -298,7 +308,7 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
       mpLocalMapper->RequestStop();//same as CorrectLoop(), suspend/stop/freeze LocalMapping thread
       // Wait until Local Mapping has effectively stopped
       while(!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished()){//if LocalMapping is killed by System::Shutdown(), don't wait any more
-	usleep(1000);
+        usleep(1000);
       }
 
       unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!

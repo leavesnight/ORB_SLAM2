@@ -563,28 +563,32 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     Frame::mTbc=mTbc.clone();cv::Mat Tcb=Converter::toCvMatInverse(mTbc);
     Frame::meigRcb=Converter::toMatrix3d(Tcb.rowRange(0,3).colRange(0,3));Frame::meigtcb=Converter::toVector3d(Tcb.rowRange(0,3).col(3));
     //load Sigma etad & etawi & gd,ad,bgd,bad & if accelerate needs to *9.81
-    cv::FileNode fnSig[3]={fSettings["IMU.SigmaI"],fSettings["IMU.sigma2"],fSettings["IMU.dMultiplyG"]};
+    cv::FileNode fnSig[3]={fSettings["IMU.SigmaI"],fSettings["IMU.sigma"],fSettings["IMU.dMultiplyG"]};
     if (fnSig[0].empty()||fnSig[1].empty()||fnSig[2].empty())
-      cout<<redSTR"No IMU.SigmaI or IMU.sigma2 or IMU.dMultiplyG!"<<whiteSTR<<endl;
+      cout<<redSTR"No IMU.sigma or IMU.dMultiplyG!"<<whiteSTR<<endl;
     else{
       for (int i=0;i<3;++i) for (int j=0;j<3;++j) eigRtmp(i,j)=fnSig[0][i*3+j];
       double sigma2tmp[4]={fnSig[1][0],fnSig[1][1],fnSig[1][2],fnSig[1][3]};
-      IMUDataDerived::SetParam(eigRtmp,sigma2tmp,fnSig[2]);
+      for (int i = 0; i < 4; ++i)
+          sigma2tmp[i] *= sigma2tmp[i];
+      IMUDataDerived::SetParam(eigRtmp,sigma2tmp,fnSig[2],
+                               fSettings["IMU.dt_cov_noise_fix"].empty() ? 0 : fSettings["IMU.dt_cov_noise_fix"],
+                               fSettings["IMU.freq_hz"].empty() ? 0 : fSettings["IMU.freq_hz"]);
     }
     //load rc,vscale,Sigma etad
-    cv::FileNode fnEnc[3]={fSettings["Encoder.scale"],fSettings["Encoder.rc"],fSettings["Encoder.sigmad2"]};
+    cv::FileNode fnEnc[4]={fSettings["Encoder.scale"],fSettings["Encoder.rc"],fSettings["Encoder.sigma"]};
     if (fnEnc[0].empty()||fnEnc[1].empty()||fnEnc[2].empty())
-      cout<<redSTR"No Encoder.SimgaI or Encoder.scale or Encoder.rc!"<<whiteSTR<<endl;
+      cout<<redSTR"No Encoder.simga or Encoder.scale or Encoder.rc!"<<whiteSTR<<endl;
     else{
-      Eigen::Matrix2d eig2Rtmp;Eigen::Matrix<double,6,6> eig6Rtmp;
-      eig2Rtmp<<fnEnc[2][0],0,0,fnEnc[2][1];
-      eig6Rtmp<<fnEnc[2][2],0,0,0,0,0,
-        0,fnEnc[2][3],0,0,0,0,
-        0,0,fnEnc[2][4],0,0,0,
-        0,0,0,fnEnc[2][5],0,0,
-        0,0,0,0,fnEnc[2][6],0,
-        0,0,0,0,0,fnEnc[2][7];
-      EncData::SetParam(fnEnc[0],fnEnc[1],eig2Rtmp,eig6Rtmp);
+        Eigen::Vector2d eig2tmp;
+        eig2tmp << fnEnc[2][0], fnEnc[2][1];
+        Eigen::DiagonalMatrix<double, 2, 2> Sigma_2tmp(eig2tmp.cwiseProduct(eig2tmp));
+        Eigen::Matrix<double,6,1> eig6tmp;
+        eig6tmp << fnEnc[2][2], fnEnc[2][3], fnEnc[2][4], fnEnc[2][5], fnEnc[2][6], fnEnc[2][7];
+        Eigen::DiagonalMatrix<double, 6, 6> Sigma_6tmp(eig6tmp.cwiseProduct(eig6tmp));
+        EncData::SetParam(fnEnc[0],fnEnc[1],Sigma_2tmp,Sigma_6tmp,
+                          fSettings["Encoder.dt_cov_noise_fix"].empty() ? 0 : fSettings["Encoder.dt_cov_noise_fix"],
+                          fSettings["Encoder.freq_hz"].empty() ? 0 : fSettings["Encoder.freq_hz"]);
     }
     //load delay
     cv::FileNode fnDelay[3]={fSettings["Camera.delaytoimu"],fSettings["Camera.delaytoenc"],fSettings["Camera.delayForPolling"]};

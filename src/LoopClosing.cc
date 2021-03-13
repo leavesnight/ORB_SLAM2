@@ -720,11 +720,11 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)//nLoopKF here
     unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateGBA);//notice we cannot update scale during LoopClosing or LocalBA! 
     if (mpIMUInitiator->GetVINSInited()){
       if (!mpIMUInitiator->GetInitGBAOver()){//if it's 1st Full BA just after IMU Initialized(the before ones may be cancelled)
-	cout<<redSTR"Full BA just after IMU Initializated!"<<whiteSTR<<endl;
-	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
-// 	mbFixScale=true;//not good for V203 when used
-      }else
-	Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);
+        cout<<redSTR"Full BA just after IMU Initializated!"<<whiteSTR<<endl;
+        Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnInitIterations,&mbStopGBA,nLoopKF,false);//15 written in V-B of VIORBSLAM paper
+//        mbFixScale=true;//not good for V203 when used
+        }else
+        Optimizer::GlobalBundleAdjustmentNavStatePRV(mpMap,mpIMUInitiator->GetGravityVec(),mnIterations,&mbStopGBA,nLoopKF,false);
       bUseGBAPRV=true;
     }else{
       cout<<redSTR"pure-vision GBA!"<<whiteSTR<<endl;

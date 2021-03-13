@@ -6,10 +6,12 @@ namespace ORB_SLAM2{
 using namespace Eigen;
 
 double IMUDataBase::mdMultiplyG=1.0,IMUDataBase::mdRefG=9.810;//u can change refG here
-Matrix3d IMUDataBase::mSigmagd=Matrix3d::Identity(),IMUDataBase::mSigmaad=Matrix3d::Identity();
+Matrix3d IMUDataBase::mSigmag=Matrix3d::Identity(),IMUDataBase::mSigmaa=Matrix3d::Identity();
 Matrix3d IMUDataBase::mSigmabg=Matrix3d::Identity(),IMUDataBase::mSigmaba=Matrix3d::Identity();
 double IMUDataBase::mInvSigmabg2=1.,IMUDataBase::mInvSigmaba2=1.;
 Matrix3d IMUDataDerived::mSigmaI(Matrix3d::Identity());
+int IMUDataBase::mdt_cov_noise_fixed = 0;
+double IMUDataBase::mFreqRef = 0;
 
 Matrix3d IMUDataDerived::skew(const Vector3d&v)
 {
@@ -34,8 +36,10 @@ Matrix3d IMUDataDerived::getJacoright(){
 }
 
 double EncData::mvscale=1,EncData::mrc=1;
-Matrix2d EncData::mSigmad=Matrix2d::Identity();
-Matrix6d EncData::mSigmamd=Matrix6d::Identity();
+Matrix2d EncData::mSigma=Matrix2d::Identity();
+Matrix6d EncData::mSigmam=Matrix6d::Identity();
+int EncData::mdt_cov_noise_fixed = 0;
+double EncData::mFreqRef = 0;
 EncData::EncData(const double* v,const double &tm):mtm(tm){
   mv[0]=v[0]*mvscale;mv[1]=v[1]*mvscale;
 }

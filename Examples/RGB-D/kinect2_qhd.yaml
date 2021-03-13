@@ -15,10 +15,11 @@ Encoder.rc: 0.280
 # encoder coefficient to m/s : vscaleforhall=2.0/ppr*M_PI*wheelradius/datatime=2.0/400*M_PI*0.105/10
 Encoder.scale: 1.649336143e-4
 
-# sigmad2[8]: eld,erd,emd[6](vx,vy,vz,wx,wy,wz) of Encoder
-Encoder.sigmad2:
- [0.0025, 0.0025, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4]
-# [0.001, 0.001, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4]
+# encoder_sigma[8]: el,er,em[6](vx,vy,vz,wx,wy,wz) [m/s/sqrt(Hz),model: m/s^2/sqrt(Hz)]
+Encoder.sigma:
+ [1.58e-2, 1.58e-2, 3.16e-2, 3.16e-2, 3.16e-2, 3.16e-2, 3.16e-2, 3.16e-2]
+
+Encoder.dt_cov_noise_fix: 0
 
 # Sigma etawi of IMU
 IMU.SigmaI:
@@ -28,12 +29,12 @@ IMU.SigmaI:
 
 # sigma[4]: g(gyroscope_noise_density) a(accelerometer_noise_density) bg(gyroscope_random_walk) ba(accelerometer_random_walk)
 IMU.sigma:
- [1.0181e-3, 3.9240e-3, 3.4907e-4, 1.9620e-3]
+# [1.0181e-3, 3.9240e-3, 1.8333e-4, 8.1e-4]
+# [8.8034e-5, 2.1494e-2, 3.4928e-4, 3.9242e-2]
+ [1.0181e-3, 3.9e-2, 1.8333e-4, 8.e-3]
 
-# sigma2[4]: gd ad bg ba/gyro_d acc_d Bias_g Bias_a; here Sigma_gd=sigma_g^2/dt Sigma_ad=(sigma_a*10)^2/dt Sigma_bg=sigma_bg^2 Sigma_ba=sigma_ba^2, Cov_bg/ad=Cov_bg/a*deltat [5.78e-6, 8e-2, 4e-10, 2.5e-5](JW);I use 20*sigma_a/ba
-IMU.sigma2:
-# [5.76e-6, 32.e-2, 3.76e-10, 36.e-4]
- [1.55e-6, 9.24e-2, 1.22e-7, 1.54e-3]
+IMU.freq_hz: 200.0
+IMU.dt_cov_noise_fix: 1
 
 # acc=acc*IMU.dMultiplyG, if below is 9.80665 meaning acc=acc*9.80665, but internal referenced G used for prior is still 9.810
 IMU.dMultiplyG: 9.81
