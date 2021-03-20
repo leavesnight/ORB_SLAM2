@@ -97,8 +97,8 @@ void LoopClosing::Run()
                 // In the stereo/RGBD case s=1
                 unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
                 if(ComputeSim3()){
-                // Perform loop fusion and pose graph optimization
-                CorrectLoop();
+                    // Perform loop fusion and pose graph optimization
+                    CorrectLoop();
                 }
             }
         }

@@ -47,18 +47,18 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
   switch (mode){
     case System::ENCODER://only encoder
       if (mlOdomEnc.empty()){
-	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));//notice Timg=Todom+delay
-	miterLastEnc=mlOdomEnc.begin();
+        mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));//notice Timg=Todom+delay
+        miterLastEnc=mlOdomEnc.begin();
       }else
-	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
+	    mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
       mpIMUInitiator->SetSensorEnc(true);
       break;
     case System::IMU://only q/awIMU
       if (mlOdomIMU.empty()){
-	mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
-	miterLastIMU=mlOdomIMU.begin();
+	    mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
+	    miterLastIMU=mlOdomIMU.begin();
       }else
-	mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
+	    mlOdomIMU.push_back(IMUData(odomdata,timestamp+mDelayToIMU));
 #ifndef TRACK_WITH_IMU
       ;//mbSensorIMU=false;
 #else
@@ -67,15 +67,15 @@ cv::Mat Tracking::CacheOdom(const double &timestamp, const double* odomdata, con
       break;
     case System::BOTH://both encoder & q/awIMU
       if (mlOdomEnc.empty()){
-	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
-	miterLastEnc=mlOdomEnc.begin();
+        mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
+        miterLastEnc=mlOdomEnc.begin();
       }else
-	mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
+	    mlOdomEnc.push_back(EncData(odomdata,timestamp+mDelayToEnc));
       if (mlOdomIMU.empty()){
-	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
-	miterLastIMU=mlOdomIMU.begin();
+	    mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
+	    miterLastIMU=mlOdomIMU.begin();
       }else
-	mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
+	    mlOdomIMU.push_back(IMUData(odomdata+2,timestamp+mDelayToIMU));
       mpIMUInitiator->SetSensorEnc(true);
 #ifndef TRACK_WITH_IMU
       ;//mbSensorIMU=false;

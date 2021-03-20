@@ -617,15 +617,15 @@ public:
       Sophus::SO3 errR((deltaRij*dRbg).transpose()*Rwbi.transpose()*Rwbj);//deltaRij^T * Riw * Rwj
       _error=errR.log();//eR=Log((deltaRij*Exp(Jg_deltaR*dbgi)).t()*Rbiw*Rwbj), _error.segment<3>(0) is _error itself
     }
-    virtual void linearizeOplus(){//I think JingWang may be wrong here?
-//       const VertexGyrBias* v=static_cast<const VertexGyrBias*>(_vertices[0]);Vector3d bg=v->estimate();
-//       Matrix3d Jrinv=Sophus::SO3::JacobianRInv(_error);//JrInv_rPhi/Jrinv_rdeltaRij/Jrinv_eR
-//       _jacobianOplusXi=-Jrinv*IMUPreintegrator::Expmap(-_error)*//right is Exp(rdeltaRij).t(), same as Sophus::SO3::exp(rPhiij).inverse().matrix()
-//       Sophus::SO3::JacobianR(JgRij*bg)*JgRij;//J_rRij_ddbgi(3*3), notice Jr_b=Jr(Jg_deltaR*dbgi), here dbgi=bgi or bg
+    virtual void linearizeOplus(){//I think JingWang may be wrong here?both not best, JW avoids large bg's influence but lose variance on Jac(could be used in low freq/cov IMU)
+       const VertexGyrBias* v=static_cast<const VertexGyrBias*>(_vertices[0]);Vector3d bg=v->estimate();
+       Matrix3d Jrinv=Sophus::SO3::JacobianRInv(_error);//JrInv_rPhi/Jrinv_rdeltaRij/Jrinv_eR
+       _jacobianOplusXi=-Jrinv*IMUPreintegrator::Expmap(-_error)*//right is Exp(rdeltaRij).t(), same as Sophus::SO3::exp(rPhiij).inverse().matrix()
+       Sophus::SO3::JacobianR(JgRij*bg)*JgRij;//J_rRij_ddbgi(3*3), notice Jr_b=Jr(Jg_deltaR*dbgi), here dbgi=bgi or bg
       
-      Sophus::SO3 errR(deltaRij.transpose()*Rwbi.transpose()*Rwbj);//JW: deltaRij^T * Riw * Rwj, omit the dRbg/bg?
-      Matrix3d Jlinv = Sophus::SO3::JacobianLInv(errR.log());
-      _jacobianOplusXi =-Jlinv*JgRij;
+//      Sophus::SO3 errR(deltaRij.transpose()*Rwbi.transpose()*Rwbj);//JW: deltaRij^T * Riw * Rwj, omit the dRbg/bg?
+//      Matrix3d Jlinv = Sophus::SO3::JacobianLInv(errR.log());
+//      _jacobianOplusXi =-Jlinv*JgRij;
     }
 };
 

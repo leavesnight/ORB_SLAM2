@@ -41,88 +41,88 @@ mutex g_mutex;
 
 //a new thread simulating the odom serial threads
 void odomIMURun(ifstream &finOdomdata,int totalNum){//must use &
-  //read until reading over
-  int nTotalNum=2+4+3*3;
-  if (totalNum!=0) nTotalNum=totalNum;
-  double* odomdata=new double[nTotalNum];
-  double timestamp,tmstpLast=-1;
-  
-  while (!g_pSLAM){//if it's NULL
-    usleep(1e5);//wait 0.1s
-  }
-  while (!finOdomdata.eof()){
-    finOdomdata>>timestamp;
-    if (finOdomdata.eof())
-      break;
-    while (1){//until the image reading time is reached
-      {
-      unique_lock<mutex> lock(g_mutex);
-      if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
-	break;
-      }
-      usleep(1.5e4);//allow 15ms delay
+    //read until reading over
+    int nTotalNum=2+4+3*3;
+    if (totalNum!=0) nTotalNum=totalNum;
+    double* odomdata=new double[nTotalNum];
+    double timestamp,tmstpLast=-1;
+
+    while (!g_pSLAM){//if it's NULL
+        usleep(1e5);//wait 0.1s
     }
-    for (int i=0;i<nTotalNum;++i){
-      finOdomdata>>odomdata[i];
-    }
-    if (timestamp>tmstpLast){//avoid == condition
-//       if (nTotalNum>=9&&(odomdata[nTotalNum-5]>-0.5||odomdata[nTotalNum-5]<-1.5)){//ay:2+4+3+2 -1
-// 	cout<<redSTR"Wrong imu data! t: "<<timestamp<<whiteSTR<<endl;
-// 	continue;
-//       }
+    while (!finOdomdata.eof()){
+        finOdomdata>>timestamp;
+        if (finOdomdata.eof())
+            break;
+        while (1){//until the image reading time is reached
+            {
+              unique_lock<mutex> lock(g_mutex);
+              if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
+                  break;
+            }
+            usleep(1.5e4);//allow 15ms delay
+        }
+        for (int i=0;i<nTotalNum;++i){
+            finOdomdata>>odomdata[i];
+        }
+        if (timestamp>tmstpLast){//avoid == condition
+        //       if (nTotalNum>=9&&(odomdata[nTotalNum-5]>-0.5||odomdata[nTotalNum-5]<-1.5)){//ay:2+4+3+2 -1
+        // 	cout<<redSTR"Wrong imu data! t: "<<timestamp<<whiteSTR<<endl;
+        // 	continue;
+        //       }
 #ifndef TRACK_WITH_IMU
-      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
+            g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
 #else
-      g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
-      //g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
+            g_pSLAM->TrackOdom(timestamp,odomdata+(nTotalNum-6),(char)ORB_SLAM2::System::IMU);//jump vl,vr,quat[4],magnetic data[3] then it's axyz,wxyz for default 15, please ensure the last 6 data is axyz,wxyz
+            //g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
 #endif
+        }
+        //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
+        tmstpLast=timestamp;
     }
-    //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
-    tmstpLast=timestamp;
-  }
-  delete []odomdata;
-  finOdomdata.close();
-  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
+    delete []odomdata;
+    finOdomdata.close();
+    cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
 }
 void odomEncRun(ifstream &finOdomdata){//must use &
-  //read until reading over
-  int nTotalNum=2;
-  double* odomdata=new double[nTotalNum];
-  double timestamp,tmstpLast=-1;
-  string strTmp;
-  
-  while (!g_pSLAM){//if it's NULL
-    usleep(1e5);//wait 0.1s
-  }
-  while (!finOdomdata.eof()){
-    finOdomdata>>timestamp;
-    if (finOdomdata.eof())
-      break;
-    while (1){//until the image reading time is reached
-      {
-      unique_lock<mutex> lock(g_mutex);
-      if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
-	break;
-      }
-      usleep(1.5e4);//allow 15ms delay
+    //read until reading over
+    int nTotalNum=2;
+    double* odomdata=new double[nTotalNum];
+    double timestamp,tmstpLast=-1;
+    string strTmp;
+
+    while (!g_pSLAM){//if it's NULL
+        usleep(1e5);//wait 0.1s
     }
-    for (int i=0;i<nTotalNum;++i){
-      finOdomdata>>odomdata[i];
-    }
-    getline(finOdomdata,strTmp);
-    if (timestamp>tmstpLast){//avoid == condition
+    while (!finOdomdata.eof()){
+        finOdomdata>>timestamp;
+        if (finOdomdata.eof())
+            break;
+        while (1){//until the image reading time is reached
+            {
+                unique_lock<mutex> lock(g_mutex);
+                if (timestamp<=g_simulateTimestamp+gDelayCache||g_brgbdFinished)
+                    break;
+            }
+            usleep(1.5e4);//allow 15ms delay
+        }
+        for (int i=0;i<nTotalNum;++i){
+            finOdomdata>>odomdata[i];
+        }
+        getline(finOdomdata,strTmp);
+        if (timestamp>tmstpLast){//avoid == condition
 #ifndef TRACK_WITH_IMU
-      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
+            g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);
 #else
-      g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
+            g_pSLAM->TrackOdom(timestamp,odomdata,(char)ORB_SLAM2::System::ENCODER);//nTotalNum=2
 #endif
+        }
+        //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
+        tmstpLast=timestamp;
     }
-    //cout<<greenSTR<<timestamp<<whiteSTR<<endl;
-    tmstpLast=timestamp;
-  }
-  delete []odomdata;
-  finOdomdata.close();
-  cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
+    delete []odomdata;
+    finOdomdata.close();
+    cout<<greenSTR"Simulation of Odom Data Reading is over."<<whiteSTR<<endl;
 }
 //zzh over
 

@@ -312,14 +312,14 @@ bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTim
     //Notice mlOdomEnc.empty()==false!
 //     if (iter!=mlOdomEnc.end()){//find a nearest iter to curTime
       if (curTime>iter->mtm){//iter==begin may still have iter->mtm>curTime
-	minErr=curTime-iter->mtm;
-	iter1=iter;++iter1;//iter+1
-	if (iter1!=mlOdomEnc.end()&&(iter1->mtm-curTime<minErr)){
-	  iter=iter1;
-	  minErr=iter1->mtm-curTime;
-	}
+        minErr=curTime-iter->mtm;
+        iter1=iter;++iter1;//iter+1
+        if (iter1!=mlOdomEnc.end()&&(iter1->mtm-curTime<minErr)){
+          iter=iter1;
+          minErr=iter1->mtm-curTime;
+        }
       }else{//we don't need to compare anything when iter->mtm>=curTime
-	minErr=iter->mtm-curTime;
+	    minErr=iter->mtm-curTime;
       }
 //     }//==mlOdomEnc.end(), we cannot test ++iter
   }else{//should==mlOdomEnc.begin()
@@ -330,11 +330,11 @@ bool Tracking::iterijFind(const listeig(EncData) &mlOdomEnc,const double &curTim
     if (iter!=mlOdomEnc.end()){
       minErr=iter->mtm-curTime;
       if (iter!=mlOdomEnc.begin()){
-	iter1=iter;--iter1;//iter-1
-	if (curTime-iter1->mtm<minErr){
-	  iter=iter1;
-	  minErr=curTime-iter1->mtm;
-	}
+        iter1=iter;--iter1;//iter-1
+        if (curTime-iter1->mtm<minErr){
+          iter=iter1;
+          minErr=curTime-iter1->mtm;
+        }
       }
     }else{//==mlOdomEnc.end(), but we can test --iter
       //Notice mlOdomEnc.empty()==false!
@@ -353,65 +353,65 @@ void Tracking::PreIntegration(const char type,listeig(EncData) &mlOdomEnc,
   switch (type){//0/2 will cull 2 Odom lists,1 will shift the pointer
     case 0://for 0th keyframe/frame: erase all the data whose tm<=mCurrentFrame.mTimeStamp but keep the last one, like list.clear()
       if (!mlOdomEnc.empty()){
-	double curTime=mCurrentFrame.mTimeStamp;
-	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
-	iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg);//we just find the nearest iteri(for next time) to curTime, don't need to judge if it's true
-	cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
-	
-	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
-	miterLastEnc=mlOdomEnc.begin();//nearest iterj to curTime(next time it may not be the nearest iteri to lastKFTime when mlOdom.back().mtm<curTime); maybe end() but we handle it in the CacheOdom()
+        double curTime=mCurrentFrame.mTimeStamp;
+        typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
+        iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg);//we just find the nearest iteri(for next time) to curTime, don't need to judge if it's true
+        cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; curDiff:"<<iter->mtm-curTime<<whiteSTR<<endl;
+
+        mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
+        miterLastEnc=mlOdomEnc.begin();//nearest iterj to curTime(next time it may not be the nearest iteri to lastKFTime when mlOdom.back().mtm<curTime); maybe end() but we handle it in the CacheOdom()
       }
       break;
     case 1:
       //PreIntegration between 2 frames, use pLastF & pCurF to be compatible with RecomputeIMUBiasAndCurrentNavstate()
       if (!mlOdomEnc.empty()){
-	if (pLastF==NULL) pLastF=&mLastFrame;if (pCurF==NULL) pCurF=&mCurrentFrame;
-	double curFTime=pCurF->mTimeStamp,lastFTime=pLastF->mTimeStamp;
-	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
-	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastFTime,miterLastEnc,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
-// 	  assert((miterLastEnc->mtm-lastFTime)==0&&(iter->mtm-curFTime)==0);
-// 	  cout<<redSTR"ID="<<pCurF->mnId<<"; LastDiff:"<<miterLastEnc->mtm-lastFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
-	  pCurF->PreIntegration<EncData>(pLastF,miterLastEnc,iter);//it is optimized without copy
-	}
-	
-	if (iter!=mlOdomEnc.end())
-	  miterLastEnc=iter;//update miterLastEnc pointing to the nearest(now,not next time) one of this frame / begin for next frame
-	else
-	  miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX, it cannot be --begin() for !mlOdomEnc.empty()
+        if (pLastF==NULL) pLastF=&mLastFrame;if (pCurF==NULL) pCurF=&mCurrentFrame;
+        double curFTime=pCurF->mTimeStamp,lastFTime=pLastF->mTimeStamp;
+        typename listeig(EncData)::const_iterator iter=mlOdomEnc.end();
+        if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastFTime,miterLastEnc,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+    // 	  assert((miterLastEnc->mtm-lastFTime)==0&&(iter->mtm-curFTime)==0);
+    // 	  cout<<redSTR"ID="<<pCurF->mnId<<"; LastDiff:"<<miterLastEnc->mtm-lastFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
+          pCurF->PreIntegration<EncData>(pLastF,miterLastEnc,iter);//it is optimized without copy
+        }
+
+        if (iter!=mlOdomEnc.end())
+          miterLastEnc=iter;//update miterLastEnc pointing to the nearest(now,not next time) one of this frame / begin for next frame
+        else
+          miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX, it cannot be --begin() for !mlOdomEnc.empty()
       }
       break;
     case 2:
       //PreIntegration between 2 KFs & cull 2 odom lists: erase all the data whose tm<=mpReferenceKF(curKF)->mTimeStamp but keep the last one
       if (!mlOdomEnc.empty()){
-	double curTime=mpReferenceKF->mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
-	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();//iterj, iteri
-	if (iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
-// 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curTime)==0);
-// 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curTime<<whiteSTR<<" LastTime="<<fixed<<setprecision(9)<<lastKFTime<<"; cur="<<mCurrentFrame.mTimeStamp<<endl;
-	  mpReferenceKF->SetPreIntegrationList<EncData>(iteri,iter);//save odom data list in curKF for KeyFrameCulling()
-	}
+        double curTime=mpReferenceKF->mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
+        typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();//iterj, iteri
+        if (iterijFind<EncData>(mlOdomEnc,curTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+    // 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curTime)==0);
+    // 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curTime<<whiteSTR<<" LastTime="<<fixed<<setprecision(9)<<lastKFTime<<"; cur="<<mCurrentFrame.mTimeStamp<<endl;
+          mpReferenceKF->SetPreIntegrationList<EncData>(iteri,iter);//save odom data list in curKF for KeyFrameCulling()
+	    }
 	
-	mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
-	miterLastEnc=mlOdomEnc.begin();//nearest iterj to curTime(next time it may not be the nearest iteri to lastKFTime when mlOdom.back().mtm<curTime); maybe end() but we handle it in the CacheOdom()
-	
-	mpReferenceKF->PreIntegration<EncData>(mpLastKeyFrame);//mpLastKeyFrame cannot be bad here for mpReferenceKF hasn't been inserted (SetBadFlag only for before KFs)
+        mlOdomEnc.erase(mlOdomEnc.begin(),iter);//retain the nearest allowed EncData / iteri used to calculate the Enc PreIntegration
+        miterLastEnc=mlOdomEnc.begin();//nearest iterj to curTime(next time it may not be the nearest iteri to lastKFTime when mlOdom.back().mtm<curTime); maybe end() but we handle it in the CacheOdom()
+
+        mpReferenceKF->PreIntegration<EncData>(mpLastKeyFrame);//mpLastKeyFrame cannot be bad here for mpReferenceKF hasn't been inserted (SetBadFlag only for before KFs)
       }
       break;
     case 3:
       //PreIntegration between lastKF & curF
       if (!mlOdomEnc.empty()){
-	double curFTime=mCurrentFrame.mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
-	typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();
-	if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
-// 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curFTime)==0);
-// 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
-	  mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame,iteri,iter);//it is optimized without copy, Notice here should start from last KF!
-	}
-	
-	if (iter!=mlOdomEnc.end())
-	  miterLastEnc=iter;//update miterLastEnc pointing to the nearest(now,not next time) one of this frame / begin for next frame
-	else
-	  miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX, it cannot be --begin() for !mlOdomEnc.empty()
+        double curFTime=mCurrentFrame.mTimeStamp,lastKFTime=mpLastKeyFrame->mTimeStamp;
+        typename listeig(EncData)::const_iterator iter=mlOdomEnc.end(),iteri=mlOdomEnc.begin();
+        if (iterijFind<EncData>(mlOdomEnc,curFTime,iter,mdErrIMUImg)&&iterijFind<EncData>(mlOdomEnc,lastKFTime,iteri,mdErrIMUImg,false)){//iterj&iteri both found then calculate delta~xij(phi,p)
+    // 	  assert((iteri->mtm-lastKFTime)==0&&(iter->mtm-curFTime)==0);
+    // 	  cout<<redSTR"ID="<<mCurrentFrame.mnId<<"; LastDiff:"<<iteri->mtm-lastKFTime<<", curDiff:"<<iter->mtm-curFTime<<whiteSTR<<endl;
+          mCurrentFrame.PreIntegration<EncData>(mpLastKeyFrame,iteri,iter);//it is optimized without copy, Notice here should start from last KF!
+        }
+
+        if (iter!=mlOdomEnc.end())
+          miterLastEnc=iter;//update miterLastEnc pointing to the nearest(now,not next time) one of this frame / begin for next frame
+        else
+          miterLastEnc=--iter;//if not exist please don't point to the end()! so we have to check the full restriction of miterLastX, it cannot be --begin() for !mlOdomEnc.empty()
       }
       break;
   }
