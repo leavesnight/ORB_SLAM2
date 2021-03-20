@@ -26,10 +26,14 @@ fi
 if [[ $2 != "" ]]; then
     OURFILE=$2
 fi
+echo "OURFILE=$OURFILE"
+
 OFFSET=0.1
 if [[ $3 != "" ]]; then
     OFFSET=$3
 fi
+echo "OFFSET=$OFFSET"
+
 SUBFILE=$SLAMTYPE"_tmp"
 if [[ $4 != "" ]]; then
     slam_path=`dirname $4``basename $4`
@@ -44,23 +48,24 @@ kwSLAM=( "VEO" "VEOLowFps" "VIEO" "VIO" "VO" )
 lenkwSLAM=( ${#kwSLAM[0]} ${#kwSLAM[1]} ${#kwSLAM[2]} ${#kwSLAM[3]} ${#kwSLAM[4]} )
 echo "keywords = ${SLAMTYPE:0-lenkws:lenkws}  ${SLAMTYPE:0:4} "
 if [[ $keywords == ${SLAMTYPE:0-lenkws:lenkws} ]]; then
-    if [[ ${kwSLAM[0]} == ${SLAMTYPE:0:${lenkwSLAM[0]}} ]]; then
+    echo $keywords
+    if [[ ${kwSLAM[1]} == ${SLAMTYPE:0:${lenkwSLAM[1]}} ]]; then
+    echo "VEOLowFps"
+    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/odometrysensor.txt 2 0 $OURFILE/EncSensor.txt ./Map.bin
+    elif [[ ${kwSLAM[0]} == ${SLAMTYPE:0:${lenkwSLAM[0]}} ]]; then
     echo "VEO"
     ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/EncSensor.txt 2 0 $OURFILE/EncSensor.txt ./Map.bin
-    elif [[ ${kwSLAM[1]} == ${SLAMTYPE:0:${lenkwSLAM[1]}} ]]; then
-    echo "VEO"
-    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/odometrysensor.txt 2 0 $OURFILE/EncSensor.txt ./Map.bin
     elif [[ ${kwSLAM[2]} == ${SLAMTYPE:0:${lenkwSLAM[2]}} ]]; then
     echo "VIEO"
     ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/IMUSensor.txt 9 0 $OURFILE/EncSensor.txt ./Map.bin
     fi
 else
-    if [[ ${kwSLAM[0]} == ${SLAMTYPE:0:${lenkwSLAM[0]}} ]]; then
+    if [[ ${kwSLAM[1]} == ${SLAMTYPE:0:${lenkwSLAM[1]}} ]]; then
+    echo "VEOLowFps"
+    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/odometrysensor.txt
+    elif [[ ${kwSLAM[0]} == ${SLAMTYPE:0:${lenkwSLAM[0]}} ]]; then
     echo "VEO"
     ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/EncSensor.txt
-    elif [[ ${kwSLAM[1]} == ${SLAMTYPE:0:${lenkwSLAM[1]}} ]]; then
-    echo "VEO"
-    ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/odometrysensor.txt
     elif [[ ${kwSLAM[2]} == ${SLAMTYPE:0:${lenkwSLAM[2]}} ]]; then
     echo "VIEO"
     ./rgbd_tum ../../Vocabulary/ORBvoc.bin ./kinect2_qhd.yaml $OURFILE $OURFILE/associate.txt $OURFILE/IMUSensor.txt 9 0 $OURFILE/EncSensor.txt
