@@ -33,9 +33,12 @@ Matrix3d SO3::JacobianR(const Vector3d& w)
 {
     Matrix3d Jr = Matrix3d::Identity();
     double theta = w.norm();
-    if(theta<0.00001)
+    if(theta < 1e-5)
     {
-        return Jr;// = Matrix3d::Identity(); omit 1st order eps & more
+        Matrix3d Omega = SO3::hat(w);
+        Matrix3d Omega2 = Omega*Omega;
+        // omit 3rd order eps & more for 1e-5 (accuracy:e-10), similar to omit >=1st order (Jl=I/R) for 1e-10
+        return Jr - 0.5 * Omega + Omega2/ 6.;
     }
     else
     {
@@ -51,18 +54,20 @@ Matrix3d SO3::JacobianRInv(const Vector3d& w)
 {
     Matrix3d Jrinv = Matrix3d::Identity();
     double theta = w.norm();
+    Matrix3d Omega = SO3::hat(w);
 
     // very small angle
-    if(theta < 0.00001)
+    if(theta < 1e-5)
     {
-        return Jrinv;
+        //limit(theta->0)((1-theta/(2*tan(theta/2)))/theta^2)~=(omit theta^5&&less)=1/12
+        return Jrinv + 0.5 * Omega + (1./12.)*(Omega*Omega);
     }
     else
     {
         Vector3d k = w.normalized();  // k - unit direction vector of w
         Matrix3d K = SO3::hat(k);
         Jrinv = Matrix3d::Identity()
-                + 0.5*SO3::hat(w)
+                + 0.5 * Omega
                 + ( 1.0 - (1.0+cos(theta))*theta / (2.0*sin(theta)) ) *K*K;
     }
 
@@ -265,7 +270,7 @@ SO3 SO3
   {
     double theta_sq = (*theta)*(*theta);
     double theta_po4 = theta_sq*theta_sq;
-    imag_factor = 0.5-0.0208333*theta_sq+0.000260417*theta_po4;//Taylor expansion of sin(x/2)/x
+    imag_factor = 0.5-theta_sq/48.+theta_po4/3840.0;//Taylor expansion of sin(x/2)/x
   }
   else
   {
