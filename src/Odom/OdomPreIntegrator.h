@@ -94,10 +94,6 @@ public:
   Matrix3d mJgRij;	// rotation / gyro
   //Vector3d mbgij,mbaij;//bg(ti)=b_bar_gi+db_gi, bg~ij not exists, neither do ba~ij
   //Matrix3d mSigmabgd,mSigmabad;//should be deltatij*Cov(eta_bg),deltatij*Cov(eta_ba)
-  //for yvr handle test
-    Matrix3d mRij_hf;//deltaR~ij(bgi_bar) by awIMU, 3*3*float/delta~Rbibj
-    Vector3d mvij_hf,mpij_hf;//deltav~ij,deltap~ij(bi_bar)
-    double mdt_hf, mdt_hf_ref;
   
   IMUPreIntegratorBase():mRij(Matrix3d::Identity()),mvij(0,0,0),mpij(0,0,0),mSigmaijPRV(Matrix9d::Zero()),mSigmaij(Matrix9d::Zero()){
     mJgpij.setZero();mJapij.setZero();mJgvij.setZero();mJavij.setZero();mJgRij.setZero();
@@ -121,16 +117,12 @@ public:
   }//rewrite
   // incrementally update 1)delta measurements, 2)jacobians, 3)covariance matrix
   void update(const Vector3d& omega, const Vector3d& acc, const double& dt);//don't allow dt<0!
-  void update_highfreq(const Vector3d& omega, const Vector3d& acc, const double& dt);//don't allow dt<0!
   
   // reset to initial state
   void reset(){
-    mRij.setIdentity();mvij.setZero();mpij.setZero();mSigmaijPRV.setZero();mSigmaij.setZero();
-    mJgpij.setZero();mJapij.setZero();mJgvij.setZero();mJavij.setZero();mJgRij.setZero();
-    this->mdeltatij=0;//very important!
-      mRij_hf.setIdentity();mvij_hf.setZero();mpij_hf.setZero();
-      mdt_hf = 0;
-      mdt_hf_ref = 1. / 105;//60;//
+      mRij.setIdentity();mvij.setZero();mpij.setZero();mSigmaijPRV.setZero();mSigmaij.setZero();
+      mJgpij.setZero();mJapij.setZero();mJgvij.setZero();mJavij.setZero();mJgRij.setZero();
+      this->mdeltatij=0;//very important!
   }
   
   // exponential map from vec3 to mat3x3 (Rodrigues formula)
@@ -167,23 +159,6 @@ void IMUPreIntegratorBase<IMUDataBase>::PreIntegration(const double &timeStampi,
       
       //selete/design measurement_j-1
       const IMUDataBase& imu=*iterjm1;//imuj-1 for w~j-1 & a~j-1 chooses imu(tj-1), maybe u can try (imu(tj-1)+imu(tj))/2 or other filter here
-
-      const bool test_handle_yvr = false;//true;
-      if (test_handle_yvr) {
-          mdt_hf += dt;
-          update_highfreq(imu.mw - bgi_bar, imu.ma - bai_bar, dt);
-          if (mdt_hf >= mdt_hf_ref || iterj == iterEnd) {
-              if (iterj == iterEnd)
-                std::cout<<mdt_hf<<std::endl;
-              IMUDataBase imu_fake;
-              imu_fake.mw = Sophus::SO3(mRij_hf).log() / mdt_hf;
-              imu_fake.ma = mvij_hf / mdt_hf;
-              update(imu_fake.mw, imu_fake.ma, mdt_hf);
-              mRij_hf.setIdentity();mvij_hf.setZero();mpij_hf.setZero();
-              mdt_hf = 0;
-          }
-          continue;
-      }
       
       // update pre-integrator
       update(imu.mw-bgi_bar,imu.ma-bai_bar,dt);
@@ -253,20 +228,6 @@ void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vect
   
   this->mdeltatij+=dt;
 }
-
-    template<class IMUDataBase>
-    void IMUPreIntegratorBase<IMUDataBase>::update_highfreq(const Vector3d& omega, const Vector3d& acc, const double& dt){
-        using namespace Sophus;
-        using namespace Eigen;
-        double dt2div2=dt*dt/2;
-        Matrix3d dR=Expmap(omega*dt);//Exp((w~j-1 - bgi_bar)*dtj-1j)=delta~Rj-1j
-
-        //see paper On-Manifold Preintegration (35~37)
-        mpij_hf+=mvij_hf*dt+mRij_hf*(acc*dt2div2);//delta~pij=delta~pij-1 + delta~vij-1*dtj-1j + 1/2*delta~Rij-1*(~aj-1 - bai_bar)*dtj-1j^2
-        mvij_hf+=mRij_hf*(acc*dt);//here mRij=mRij-1, delta~vij=delta~vij-1 + delta~Rij-1 * (~aj-1 - bai_bar)*dtj-1j
-        // normalize rotation, in case of numerical error accumulation
-        mRij_hf=this->normalizeRotationM(mRij_hf*dR);//here omega=(w~k-bgi_bar)(k=j-1), deltaR~ij(bgi_bar)=deltaRij-1(bgi_bar) * Exp((w~j-1 - bgi_bar)*dtj-1j)
-    }
 
 class IMUPreIntegratorDerived:public IMUPreIntegratorBase<IMUDataDerived>{
 public:
