@@ -500,7 +500,7 @@ Vector3d Optimizer::OptimizeInitialGyroBias(const std::vector<IMUKeyFrameInit*> 
       optimizer.addEdge(eBiasg);
   }
 
-  // It's actualy a linear estimator, so 1 iteration is enough.
+  // It's approximately a linear estimator, so 1 iteration is enough. for dbg=bg << 1 and here uses GN not LM
   optimizer.initializeOptimization();
   optimizer.optimize(1);
 //   optimizer.setVerbose(true);

@@ -90,7 +90,7 @@ cd $transform_path
 
 cd $evaluate_path
 
-python ./evaluate_ate.py $OURFILE/groundtruth.txt $OURFILE/orbslam2/CrystalTrajectory.txt --verbose --offset $OFFSET --plot PLOT.png > result_ate.txt
+python2 ./evaluate_ate.py $OURFILE/groundtruth.txt $OURFILE/orbslam2/CrystalTrajectory.txt --verbose --offset $OFFSET --plot PLOT.png > result_ate.txt
 
 cp $OURFILE/orbslam2/CrystalTrajectory.txt ./result_ate.txt ./PLOT.png $OURFILE/orbslam2/$SUBFILE/
 

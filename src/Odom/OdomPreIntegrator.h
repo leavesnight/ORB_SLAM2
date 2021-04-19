@@ -130,7 +130,7 @@ public:
     this->mdeltatij=0;//very important!
       mRij_hf.setIdentity();mvij_hf.setZero();mpij_hf.setZero();
       mdt_hf = 0;
-      mdt_hf_ref = 1. / 63;//1. / 105;
+      mdt_hf_ref = 1. / 105;//60;//
   }
   
   // exponential map from vec3 to mat3x3 (Rodrigues formula)
@@ -260,8 +260,6 @@ void IMUPreIntegratorBase<IMUDataBase>::update(const Vector3d& omega, const Vect
         using namespace Eigen;
         double dt2div2=dt*dt/2;
         Matrix3d dR=Expmap(omega*dt);//Exp((w~j-1 - bgi_bar)*dtj-1j)=delta~Rj-1j
-        Matrix3d Jr=SO3::JacobianR(omega*dt);//Jrj-1=Jr(dtj-1j*(w~j-1 - bgi_bar))
-        Matrix3d skewa=SO3::hat(acc);//(~aj-1 - bai_bar)^
 
         //see paper On-Manifold Preintegration (35~37)
         mpij_hf+=mvij_hf*dt+mRij_hf*(acc*dt2div2);//delta~pij=delta~pij-1 + delta~vij-1*dtj-1j + 1/2*delta~Rij-1*(~aj-1 - bai_bar)*dtj-1j^2
