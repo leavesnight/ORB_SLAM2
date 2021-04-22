@@ -1707,7 +1707,9 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
     g2o::BlockSolver_7_3 * solver_ptr= new g2o::BlockSolver_7_3(linearSolver);//7 is sim3's dimension, 3 is position's dimension(unused here)
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);//LM descending method
 
-    solver->setUserLambdaInit(1e-16);//solver->_userLambdaInit->_value=0 at initial, here use 1e-16 for initial fast descending(near Steepest Descent instead of Gauss-Newton)
+    //solver->_userLambdaInit->_value=0 at initial, which means 1e-5*max(H(j,j)) used in g2o
+    // here use 1e-16 for initial faster Gauss-Newton (instead of Steepest Descent)
+    solver->setUserLambdaInit(1e-16);
     optimizer.setAlgorithm(solver);
 
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
@@ -1819,8 +1821,11 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             if (dEncBase[0]>dTmp){//phi
                 dEncBase[0]=dTmp;
             }
-            dTmp=sqrt(encpreint.mSigmaEij(3,3)*encpreint.mSigmaEij(3,3)+encpreint.mSigmaEij(4,4)*encpreint.mSigmaEij(4,4));
-            if (dEncBase[1]>dTmp){//intuitively we choose sqrt(sigma2x^2+sigma2y^2) or p
+            //intuitively we choose sqrt(sigma2x^2+sigma2y^2) or p, makes (Sigma_p,0) to be (1,0) but (Sigma_p/2,
+            // Sigma_p/2) to be near (1, 1)
+            dTmp=sqrt(encpreint.mSigmaEij(3,3)*encpreint.mSigmaEij(3,3)+
+                    encpreint.mSigmaEij(4,4)*encpreint.mSigmaEij(4,4));
+            if (dEncBase[1]>dTmp){
                 dEncBase[1]=dTmp;
             }
         }

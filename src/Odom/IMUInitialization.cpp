@@ -313,7 +313,14 @@ bool IMUInitialization::TryInitVIO(void){//now it's the version cannot allow the
 
       unique_lock<mutex> lockScale(mpMap->mMutexScaleUpdateLoopClosing);//notice we cannot update scale during LoopClosing or LocalBA!
       unique_lock<mutex> lockScale2(mpMap->mMutexScaleUpdateGBA);
-      unique_lock<mutex> lock(mpMap->mMutexMapUpdate);// Get Map Mutex
+        unique_lock<mutex> lock(mpMap->mMutexMapUpdate, std::defer_lock);  // Get Map Mutex
+        while (!lock.try_lock()) {
+            if (GetReset()) {
+                mpLocalMapper->Release();  // recover LocalMapping thread, same as CorrectLoop()
+                return false;
+            }
+            usleep(3000);
+        }
       //Update KFs' PRVB
       //update the vScaleGravityKF to the current size, and pNewestKF is mpCurrentKeyFrame during the LocalMapping thread is stopped
       vScaleGravityKF=mpMap->GetAllKeyFrames();
