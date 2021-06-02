@@ -429,12 +429,14 @@ int Optimizer::PoseOptimization(Frame *pFrame, KeyFrame* pLastKF, const cv::Mat&
     margVertices.push_back(optimizer.vertex(FramePVRId));
     margVertices.push_back(optimizer.vertex(FrameBiasId));
 
-      //TODO: get the joint marginalized covariance of PVR&Bias, here it's already marginalized for SigmaI ind.
-      // with SigmaB then H(0,1)=0,H(1,0)=0) or we use computeMarginals and divide PVRBias to 2 kinds of vertices
+    // get the joint marginalized covariance of PVR&Bias(cur), we use
+    // computeMarginals where margVertices only push back curF's vertices
     g2o::SparseBlockMatrixXd spinv;
     optimizer.computeMarginals(spinv, margVertices);//marginalized by cholmod linearsolver
     // spinv include 2 blocks, 9x9-(0,0) for PVR, 6x6-(1,1) for Bias
     if (bFixedLast){
+      //here it's already marginalized for lastKF is fixed and SigmaI ind. with
+      // SigmaB then H(0,1)=0,H(1,0)=0
       Matrix<double,15,15> margCovInv = Matrix<double,15,15>::Zero();
       margCovInv.topLeftCorner(9,9) = spinv.block(0,0)->inverse();//0 corresponding to the FramePVRId & fixed LastKFPVRId's hessianidx=-1
       margCovInv.bottomRightCorner(6,6) = spinv.block(1,1)->inverse();//1 corresponding to the FrameBiasId
