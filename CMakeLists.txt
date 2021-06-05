@@ -43,7 +43,9 @@ find_package(Cholmod REQUIRED)#added for cholmod linear solver
 
 find_package(PCL REQUIRED COMPONENT common io filters)
 
-message(STATUS "OpenCV_INCLUDE_DIRS=${OpenCV_INCLUDE_DIRS}; LIBS=${OpenCV_LIBS}!")
+message(STATUS "OpenCV_INCLUDE_DIRS=${OpenCV_INCLUDE_DIRS}; LIBS=${OpenCV_LIBS};${OpenCV_VERSION}")
+message(STATUS "EIGEN3_INCLUDE_DIRS=${EIGEN3_INCLUDE_DIR}; LIBS=${EIGEN3_LIBS}; ${EIGEN3_VERSION}")
+
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/include

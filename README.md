@@ -1,5 +1,5 @@
 # VIEORB-SLAM2
-Now this project is improved by zzh
+Now this project is improved by zzh, the later version which is not related to the paper XXX won't be updated in this repository. Please see our VIEO_SLAM repository for our newest version.
 
 1.Some annotations and elimination are done
 

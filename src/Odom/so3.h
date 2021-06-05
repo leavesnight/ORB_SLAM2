@@ -32,7 +32,7 @@ namespace Sophus
 {
 using namespace Eigen;
 
-const double SMALL_EPS = 1e-10;
+const double SMALL_EPS = 1e-5;
 
 class SO3
 {

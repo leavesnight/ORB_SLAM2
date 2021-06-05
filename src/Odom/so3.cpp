@@ -33,12 +33,12 @@ Matrix3d SO3::JacobianR(const Vector3d& w)
 {
     Matrix3d Jr = Matrix3d::Identity();
     double theta = w.norm();
-    if(theta < 1e-5)
+    if(theta < SMALL_EPS)
     {
         Matrix3d Omega = SO3::hat(w);
-        Matrix3d Omega2 = Omega*Omega;
+        Matrix3d Omega2 = Omega * Omega;
         // omit 3rd order eps & more for 1e-5 (accuracy:e-10), similar to omit >=1st order (Jl=I/R) for 1e-10
-        return Jr - 0.5 * Omega + Omega2/ 6.;
+        return Jr - 0.5 * Omega + Omega2/ 6.;//the one more order term is theta*theta*Omega/24. < 2^(-52), where 1 + it is useless
     }
     else
     {
@@ -57,7 +57,7 @@ Matrix3d SO3::JacobianRInv(const Vector3d& w)
     Matrix3d Omega = SO3::hat(w);
 
     // very small angle
-    if(theta < 1e-5)
+    if(theta < SMALL_EPS)
     {
         //limit(theta->0)((1-theta/(2*tan(theta/2)))/theta^2)~=(omit theta^5&&less)=1/12
         return Jrinv + 0.5 * Omega + (1./12.)*(Omega*Omega);
@@ -207,11 +207,12 @@ Vector3d SO3
   return logAndTheta(other, &theta);
 }
 
+//range[-pi,pi) is mainly designed for residual error
 Vector3d SO3
 ::logAndTheta(const SO3 & other, double * theta)
 {
 
-    double n = other.unit_quaternion_.vec().norm();//sin(theta/2)
+    double n = other.unit_quaternion_.vec().norm();//|sin(theta/2)|
     double w = other.unit_quaternion_.w();//cos(theta/2)
     double squared_w = w*w;
 
@@ -223,26 +224,31 @@ Vector3d SO3
     // Representation through Encapsulation of Manifolds"
     // Information Fusion, 2011
 
+    // small variable approximation is used for speed but keep the max or reasonable accuracy
+    // (so3.cpp here choose the max or double(1) + double(2^(-52)))
     if (n < SMALL_EPS)
     {
       // If quaternion is normalized and n=1, then w should be 1;
       // w=0 should never happen here!
       assert(fabs(w)>SMALL_EPS);
 
-      two_atan_nbyw_by_n = 2./w - 2.*(n*n)/(w*squared_w);
+      two_atan_nbyw_by_n = 2./w - 2./3*(n*n)/(w*squared_w);
     }
     else
     {
       if (fabs(w)<SMALL_EPS)
-      {
+      {//notice atan(x) = pi/2 - atan(1/x)
         if (w>0)
-        {
+        {//notice for range[-pi,pi), atan(x) = pi/2 - atan(1/x) for x>0
           two_atan_nbyw_by_n = M_PI/n;
         }
         else//w=0 corresponds to theta= Pi or -Pi, here choose -Pi
-        {
+        {//notice for range[-pi,pi), atan(x) = -pi/2 - atan(1/x) for x<=0
           two_atan_nbyw_by_n = -M_PI/n;//theta belongs to [-Pi,Pi)=>theta/2 in [-Pi/2,Pi/2)
         }
+        double n_pow2 = n * n;
+        double n_pow4 = n_pow2 * n_pow2;
+        two_atan_nbyw_by_n -= 2 * w / n_pow2 - 2. / 3 * (w * squared_w) / n_pow4;
       }else
 	two_atan_nbyw_by_n = 2*atan(n/w)/n;//theta/sin(theta/2)
     }
@@ -265,17 +271,20 @@ SO3 SO3
   double half_theta = 0.5*(*theta);
 
   double imag_factor;
-  double real_factor = cos(half_theta);
-  if((*theta)<SMALL_EPS)
+  double real_factor;
+  if((*theta) < SMALL_EPS)
   {
     double theta_sq = (*theta)*(*theta);
-    double theta_po4 = theta_sq*theta_sq;
-    imag_factor = 0.5-theta_sq/48.+theta_po4/3840.0;//Taylor expansion of sin(x/2)/x
+//    double theta_po4 = theta_sq*theta_sq;
+    imag_factor = 0.5 - theta_sq / 48.;// + theta_po4 / 3840.;//Taylor expansion of sin(x/2)/x
+    real_factor = 1.0 - theta_sq / 8.;// + theta_po4 / 384.;
+    //real_factor = cos(half_theta);
   }
   else
   {
     double sin_half_theta = sin(half_theta);
     imag_factor = sin_half_theta/(*theta);
+    real_factor = cos(half_theta);
   }
 
   return SO3(Quaterniond(real_factor,
